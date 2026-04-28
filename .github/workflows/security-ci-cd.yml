@@ -430,4 +430,4 @@ jobs:
           persist-credentials: false
 
       - name: Lint GitHub Actions workflows
-        uses: devops-actions/actionlint@e7ee33fbf5aa8c9f9ee1145137f3e52e25d6a35b # pinned
+        uses: devops-actions/actionlint@469810fd82c015d3c43815cd2b0e4d02eecc4819 # pinned
