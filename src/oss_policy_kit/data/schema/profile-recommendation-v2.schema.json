@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/schema/profile-recommendation-v2.schema.json",
+  "title": "OSS Policy Kit profile recommendation (v2)",
+  "type": "object",
+  "required": ["schema_version", "signals_detected", "suggestions", "notes"],
+  "properties": {
+    "schema_version": {
+      "const": "oss-policy-kit/profile-recommendation/v2"
+    },
+    "signals_detected": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "detail"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Signal identifier. Includes CI/evidence ids (for example github_actions_workflows) and tech-stack ids (node_js, python_pyproject, container_docker, node_lockfile, go_module, java_maven, dotnet_csproj, ...)."
+          },
+          "detail": { "type": "string" }
+        }
+      }
+    },
+    "suggestions": { "type": "array" },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

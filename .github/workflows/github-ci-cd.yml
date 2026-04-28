@@ -1,0 +1,121 @@
+# Product CI for the Python package at repository root. Does not run npm at repo root.
+# SBOM generation in the package job aligns with SBOM quality / provenance expectations (see BUILD-SBOM-QUAL-003 and release docs).
+
+name: GitHub CI/CD
+
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+    paths-ignore:
+      - "gitpage/**"
+  push:
+    branches:
+      - main
+      - master
+      - develop
+    paths-ignore:
+      - "gitpage/**"
+  workflow_dispatch:
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: project-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  quality:
+    name: Quality (lint, types, tests, self-check)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install project (dev)
+        run: |
+          python -m pip install -U pip
+          python -m pip install -e ".[dev]"
+
+      - name: Ruff check
+        run: python -m ruff check .
+
+      - name: Ruff format
+        run: python -m ruff format --check .
+
+      - name: Mypy
+        run: python -m mypy src
+
+      - name: Pytest
+        run: python -m pytest
+
+      - name: CLI help smoke
+        run: |
+          python -m oss_policy_kit --help
+          python -m oss_policy_kit evaluate --help
+
+      - name: Evaluate hardened example
+        run: |
+          python -m oss_policy_kit evaluate --target ./examples/hardened-repo --profile github-level-1 --output-dir ./out/ci-hardened-example
+
+      - name: Self-check (github-level-1)
+        run: |
+          python -m oss_policy_kit --target . --profile github-level-1 --output-dir ./out/selfcheck-ci --fail-on fail
+
+  package:
+    name: Package (build, twine, SBOM)
+    runs-on: ubuntu-latest
+    needs: quality
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install build tools
+        run: |
+          python -m pip install -U pip build twine cyclonedx-bom
+          python -m pip install -e ".[dev]"
+
+      - name: Clean artifact directories
+        run: |
+          rm -rf dist build src/*.egg-info
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: Twine check
+        run: python scripts/twine_check_dist.py
+
+      - name: Generate CycloneDX SBOM
+        run: python -m cyclonedx_py environment --output-format JSON --output-file dist/sbom.cyclonedx.json
+
+      - name: Smoke install wheel
+        run: |
+          shopt -s nullglob
+          wheels=(dist/*.whl)
+          if [[ ${#wheels[@]} -eq 0 ]]; then
+            echo "No wheel found under dist/" >&2
+            exit 1
+          fi
+          python -m pip install "${wheels[0]}"
+          python -m oss_policy_kit --help
+          python -m oss_policy_kit evaluate --help

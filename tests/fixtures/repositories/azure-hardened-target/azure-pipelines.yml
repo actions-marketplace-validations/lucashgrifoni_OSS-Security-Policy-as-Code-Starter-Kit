@@ -1,0 +1,36 @@
+name: hardened
+trigger:
+  branches:
+    include:
+      - main
+pr:
+  branches:
+    include:
+      - main
+extends:
+  template: templates/secure-template.yml
+pool:
+  vmImage: ubuntu-latest
+stages:
+  - stage: Build
+    jobs:
+      - job: Verify
+        steps:
+          - checkout: self
+            clean: true
+            persistCredentials: false
+          - script: |
+              pip install pip-audit cyclonedx-bom
+              pip-audit
+          - script: python -m cyclonedx_py environment --output-format JSON --output-file sbom.cdx.json
+          - script: echo "MicrosoftSecurityDevOps scan"
+      - job: Deploy
+        steps:
+          - task: AzureCLI@2
+            inputs:
+              azureSubscription: prod-wif
+              addSpnToEnvironment: false
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                echo "WorkloadIdentityFederation deployment"

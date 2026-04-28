@@ -1,0 +1,6 @@
+# Versioned waiver registry (GOV-WAIV-014).
+# Copy to your repository as waivers/waivers.yaml and add entries only when needed.
+# An empty `waivers` list is valid and documents that exceptions are tracked in-repo.
+
+version: 1
+waivers: []

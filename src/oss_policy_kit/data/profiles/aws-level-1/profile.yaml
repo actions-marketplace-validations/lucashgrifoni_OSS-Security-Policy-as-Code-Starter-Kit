@@ -1,0 +1,22 @@
+id: aws-level-1
+title: AWS — starter (level 1)
+description: >
+  **Starter** profile: clone-visible governance plus CodeBuild buildspec checks.
+  Scanner and SBOM signals (AWS-SEC/SBOM/SCA) are **signal** controls — useful for daily hygiene,
+  not cryptographic or API-backed proof of production posture.
+  **Natural next step:** `aws-level-2` for committed CodePipeline export discipline, or
+  `aws-release-hardening-1` when you need minimal CodeBuild/CodePipeline JSON evidence.
+audience: Teams starting with AWS CodeBuild who want honest local checks without evidence files.
+controls:
+  - GOV-SEC-001
+  - GOV-CON-002
+  - GOV-COWN-003
+  - GOV-LIC-004
+  - REL-CHANGE-012
+  - GOV-DISC-013
+  - GOV-WAIV-014
+  - AWS-CI-037
+  - AWS-SECRET-038
+  - AWS-SEC-039
+  - AWS-SCA-040
+  - AWS-SBOM-041

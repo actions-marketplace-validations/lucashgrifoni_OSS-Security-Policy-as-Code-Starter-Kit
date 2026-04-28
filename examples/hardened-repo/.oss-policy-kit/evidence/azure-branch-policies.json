@@ -1,0 +1,17 @@
+{
+  "schema_version": "azure-branch-policies/v1",
+  "attested_at": "2026-04-21",
+  "attested_by": "example-maintainer",
+  "project": "example-project",
+  "repository": "example-repo",
+  "branch": "main",
+  "posture": {
+    "minimum_reviewers_enabled": true,
+    "build_validation_enabled": true,
+    "comment_resolution_required": true,
+    "reset_votes_on_push": true,
+    "block_last_pusher_approval": true,
+    "bypass_policy_restricted": true
+  },
+  "notes": "Synthetic Azure Repos branch policy attestation for fixture evaluation."
+}

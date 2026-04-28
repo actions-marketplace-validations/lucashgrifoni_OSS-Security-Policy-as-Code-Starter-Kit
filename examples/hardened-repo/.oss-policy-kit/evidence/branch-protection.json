@@ -1,0 +1,14 @@
+{
+  "schema_version": "branch-protection/v1",
+  "attested_at": "2026-04-21",
+  "attested_by": "example-maintainer",
+  "branch": "main",
+  "protections": {
+    "require_pull_request_reviews": true,
+    "dismiss_stale_reviews": true,
+    "require_status_checks": true,
+    "enforce_admins": true,
+    "restrict_force_push": true
+  },
+  "notes": "Synthetic branch protection attestation for the hardened-repo fixture."
+}

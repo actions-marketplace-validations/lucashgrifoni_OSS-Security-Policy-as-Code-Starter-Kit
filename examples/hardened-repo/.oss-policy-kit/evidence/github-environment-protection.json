@@ -1,0 +1,14 @@
+{
+  "schema_version": "github-environment-protection/v1",
+  "attested_at": "2026-04-21",
+  "attested_by": "example-maintainer",
+  "environments": [
+    {
+      "name": "production",
+      "requires_reviewers": true,
+      "prevent_self_review": true,
+      "wait_timer_minutes": 5
+    }
+  ],
+  "notes": "Synthetic environment protection attestation for the hardened-repo fixture."
+}

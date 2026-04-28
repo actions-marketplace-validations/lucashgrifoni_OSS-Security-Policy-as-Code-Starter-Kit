@@ -1,0 +1,47 @@
+# Documentation Index
+
+Use this page as the documentation entry point for the OSS Security Policy as Code Starter Kit.
+
+Public project site:
+
+- [GitHub Pages site](https://lucashgrifoni.github.io/OSS-Security-Policy-as-Code-Starter-Kit/)
+
+Repository entry points:
+
+- [README.md](../README.md) - product overview, install paths, CLI contract, result interpretation
+- [CHANGELOG.md](../CHANGELOG.md) - released changes by version
+- [ROADMAP.md](../ROADMAP.md) - public roadmap and post-publication maintenance governance
+
+## For Users
+
+- [adoption-guide.md](adoption-guide.md) - choose a baseline and understand expected outcomes
+- [recommended-adoption-playbook.md](recommended-adoption-playbook.md) - copy/paste adoption path for a standard Python repository
+- [profiles/overview.md](profiles/overview.md) - bundled profiles matrix, assurance mix, daily/extreme/advisory usage classes, and **zero `fail`** vs **all-pass**
+- [profiles/github.md](profiles/github.md) / [profiles/aws.md](profiles/aws.md) / [profiles/azure.md](profiles/azure.md) - operator guides by platform family
+- [release-playbook-hardgate.md](release-playbook-hardgate.md) - evaluate a release hard-gate with real CLI commands
+- [profiles/deferred-followups.md](profiles/deferred-followups.md) - items intentionally left out of this phase (flags, schema, new controls)
+- [packaging-and-release.md](packaging-and-release.md) - supported distribution channels and local install/build commands
+- [scorecard-mapping.md](scorecard-mapping.md) - how Scorecard fits as supplemental evidence
+- [osps-mapping.md](osps-mapping.md) - mapping notes between this kit and OSS baseline concepts
+
+## For Maintainers
+
+- [release-readiness.md](release-readiness.md) - release gate, public launch checks, patch release routine, and repository operations
+- [public-release-readiness.md](public-release-readiness.md) - hard gate for the first public repository launch
+- [publication-traceability-matrix.md](publication-traceability-matrix.md) - promise-to-evidence matrix for release candidates
+
+## Reference
+
+- [architecture.md](architecture.md) - package structure, trust model, and evidence boundaries
+- [policy-data-lifecycle.md](policy-data-lifecycle.md) - lifecycle states for controls and profiles
+
+## Scope Reminder
+
+This repository intentionally keeps public docs focused on:
+
+- how to use the kit
+- how to adopt the templates
+- how to validate and release the package
+- how to operate the repository responsibly
+
+Historical planning notes and internal working prompts are not part of the public documentation set.

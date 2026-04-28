@@ -1,0 +1,28 @@
+{
+  "name": "example-require-codeowners",
+  "target": "branch",
+  "source": "example",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "include": ["refs/heads/main"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    {
+      "type": "code_scanning",
+      "parameters": {
+        "code_scanning_tools": [
+          {
+            "tool": "CodeQL",
+            "security_alerts_threshold": {
+              "level": "high"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "_comment": "Illustrative fragment only - adapt to your org's rulesets JSON format and GitHub Enterprise/Cloud capabilities."
+}

@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security policy
+    url: https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/security/policy
+    about: Use the repository security policy and private vulnerability reporting for undisclosed security issues.

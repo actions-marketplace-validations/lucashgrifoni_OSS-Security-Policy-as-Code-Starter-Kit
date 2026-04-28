@@ -1,0 +1,22 @@
+id: azure-level-1
+title: Azure — starter (level 1)
+description: >
+  **Starter** profile: clone-visible governance plus Azure Pipelines presence and basic hygiene
+  signals. Scanner/SBOM/SCA controls are **signal** only (low-confidence PASS is directional).
+  **Natural next step:** `azure-level-2` for template and identity YAML discipline, or
+  `azure-release-hardening-1` when you need governance JSON alongside the starter scope.
+audience: Teams starting with Azure DevOps who want honest local-only checks.
+controls:
+  - GOV-SEC-001
+  - GOV-CON-002
+  - GOV-COWN-003
+  - GOV-LIC-004
+  - REL-CHANGE-012
+  - GOV-DISC-013
+  - GOV-WAIV-014
+  - AZ-PIPE-027
+  - AZ-PIPE-028
+  - AZ-PIPE-029
+  - AZ-SEC-031
+  - AZ-SCA-032
+  - AZ-SBOM-033

@@ -1,0 +1,52 @@
+{
+  "metadata": {},
+  "pipeline": {
+    "name": "example-pipeline",
+    "roleArn": "arn:aws:iam::123456789012:role/service-role/AWSCodePipelineServiceRole",
+    "artifactStore": {
+      "type": "S3",
+      "location": "example-artifacts-bucket",
+      "encryptionKey": {
+        "id": "arn:aws:kms:us-east-1:123456789012:key/12345678-1234-1234-1234-123456789012",
+        "type": "KMS"
+      }
+    },
+    "stages": [
+      {
+        "name": "Source",
+        "actions": [
+          {
+            "name": "Source",
+            "actionTypeId": {
+              "category": "Source",
+              "owner": "AWS",
+              "provider": "S3",
+              "version": "1"
+            },
+            "configuration": {
+              "S3Bucket": "example-src",
+              "S3ObjectKey": "source.zip"
+            }
+          }
+        ]
+      },
+      {
+        "name": "Build",
+        "actions": [
+          {
+            "name": "Build",
+            "actionTypeId": {
+              "category": "Build",
+              "owner": "AWS",
+              "provider": "CodeBuild",
+              "version": "1"
+            },
+            "configuration": {
+              "ProjectName": "example-build"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

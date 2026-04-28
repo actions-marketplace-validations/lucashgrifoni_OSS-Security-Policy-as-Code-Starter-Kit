@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/schema/evidence-azure-branch-policies.schema.json",
+  "title": "Azure Repos branch policies evidence",
+  "type": "object",
+  "required": ["schema_version", "attested_at", "attested_by", "project", "repository", "branch", "posture"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "azure-branch-policies/v1" },
+    "attested_at": { "type": "string", "format": "date" },
+    "attested_by": { "type": "string" },
+    "project": { "type": "string" },
+    "repository": { "type": "string" },
+    "branch": { "type": "string" },
+    "posture": {
+      "type": "object",
+      "required": [
+        "minimum_reviewers_enabled",
+        "build_validation_enabled",
+        "comment_resolution_required",
+        "reset_votes_on_push",
+        "block_last_pusher_approval",
+        "bypass_policy_restricted"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "minimum_reviewers_enabled": { "type": "boolean" },
+        "build_validation_enabled": { "type": "boolean" },
+        "comment_resolution_required": { "type": "boolean" },
+        "reset_votes_on_push": { "type": "boolean" },
+        "block_last_pusher_approval": { "type": "boolean" },
+        "bypass_policy_restricted": { "type": "boolean" }
+      }
+    },
+    "posture_support": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policies_api_reachable"],
+      "properties": {
+        "policies_api_reachable": { "type": "boolean" }
+      }
+    },
+    "collection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_collection_method", "collected_at", "source_url"],
+      "properties": {
+        "evidence_collection_method": { "type": "string", "enum": ["live", "manual"] },
+        "collected_at": { "type": "string" },
+        "source_url": { "type": "string" },
+        "mode": { "type": "string", "enum": ["api"] }
+      }
+    },
+    "notes": { "type": "string" }
+  }
+}

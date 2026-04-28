@@ -1,0 +1,24 @@
+id: github-level-1
+title: GitHub OSS starter baseline (level 1)
+description: >
+  **Starter** profile for public GitHub repositories: governance files, safe workflow
+  defaults, and clone-verifiable controls (deterministic + selected signal-grade checks).
+  Deprecated YAML-only audit/SBOM heuristics are intentionally excluded from active gating.
+  **Natural next step:** `github-level-2` for stricter workflow signals, or `github-release-hardening-1`
+  when you need branch-protection evidence alongside the same baseline width.
+audience: Maintainers adopting a minimal, honest OSS security baseline.
+controls:
+  - GOV-SEC-001
+  - GOV-CON-002
+  - GOV-COWN-003
+  - GOV-LIC-004
+  - CI-WF-005
+  - CI-PERM-006
+  - CI-DANGER-007
+  - CI-PIN-008
+  - CI-LEAST-009
+  - SEC-CODEQL-010
+  - SEC-DEPREV-011
+  - REL-CHANGE-012
+  - GOV-DISC-013
+  - GOV-WAIV-014

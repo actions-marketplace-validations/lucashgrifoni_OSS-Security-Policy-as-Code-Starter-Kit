@@ -1,0 +1,16 @@
+# Synthetic release-style workflow for GH-REL-021 (concurrency) in hardened-repo fixture.
+name: release-example
+permissions:
+  contents: read
+on:
+  workflow_dispatch:
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  noop:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - run: echo "Fixture-only release workflow; no artifacts are published."

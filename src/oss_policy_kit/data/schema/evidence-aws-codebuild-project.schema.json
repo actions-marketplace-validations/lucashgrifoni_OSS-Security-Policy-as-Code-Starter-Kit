@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/schema/evidence-aws-codebuild-project.schema.json",
+  "title": "AWS CodeBuild project posture evidence",
+  "type": "object",
+  "required": ["schema_version", "attested_at", "attested_by", "project", "posture"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "aws-codebuild-project/v1" },
+    "attested_at": { "type": "string", "format": "date" },
+    "attested_by": { "type": "string" },
+    "project": { "type": "string" },
+    "posture": {
+      "type": "object",
+      "required": ["privileged_mode_disabled", "no_plaintext_credentials_in_project_config"],
+      "additionalProperties": false,
+      "properties": {
+        "privileged_mode_disabled": { "type": "boolean" },
+        "no_plaintext_credentials_in_project_config": { "type": "boolean" },
+        "codebuild_service_role_configured": {
+          "type": "boolean",
+          "description": "True when BatchGetProjects returns a non-empty IAM serviceRole ARN for the project."
+        }
+      }
+    },
+    "collection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_collection_method", "collected_at", "source_url"],
+      "properties": {
+        "evidence_collection_method": { "type": "string", "enum": ["live", "manual"] },
+        "collected_at": { "type": "string" },
+        "source_url": { "type": "string" },
+        "mode": { "type": "string", "enum": ["api"] }
+      }
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["service_role_arn_present", "no_plaintext_environment_credentials"],
+      "properties": {
+        "service_role_arn_present": { "type": "boolean" },
+        "no_plaintext_environment_credentials": { "type": "boolean" }
+      }
+    },
+    "notes": { "type": "string" }
+  }
+}

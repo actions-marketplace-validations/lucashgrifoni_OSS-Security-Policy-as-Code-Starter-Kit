@@ -1,0 +1,14 @@
+{
+  "schema_version": "branch-protection/v1",
+  "attested_at": "2026-01-15",
+  "attested_by": "fixture-maintainer",
+  "branch": "main",
+  "protections": {
+    "require_pull_request_reviews": true,
+    "dismiss_stale_reviews": true,
+    "require_status_checks": true,
+    "enforce_admins": true,
+    "restrict_force_push": true
+  },
+  "notes": "Fixture self-attested evidence for CLI and schema validation tests."
+}

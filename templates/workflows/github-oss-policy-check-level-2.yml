@@ -1,0 +1,50 @@
+# OSS Security Policy as Code Starter Kit — stricter GitHub Level 2 baseline
+# Use this template when your team already has mature GitHub Actions workflows and wants
+# stricter clone-visible checks than github-level-1 (reusable workflow hygiene, runner trust, etc.).
+# Prefer github-level-1 for greenfield repos; graduate to level-2 when workflows are stable.
+name: OSS Policy Check (GitHub Level 2)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  oss-policy-check:
+    name: Evaluate OSS policy (github-level-2)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install oss-policy-kit
+        run: pip install oss-policy-kit
+
+      - name: Evaluate OSS policy baseline (level 2)
+        run: |
+          python -m oss_policy_kit evaluate \
+            --target . \
+            --profile github-level-2 \
+            --fail-on fail \
+            --output-dir ./oss-policy-reports
+
+      - name: Upload policy reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oss-policy-reports
+          path: ./oss-policy-reports/
+          retention-days: 30

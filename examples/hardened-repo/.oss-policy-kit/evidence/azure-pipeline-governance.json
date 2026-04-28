@@ -1,0 +1,22 @@
+{
+  "schema_version": "azure-pipeline-governance/v1",
+  "attested_at": "2026-04-21",
+  "attested_by": "example-maintainer",
+  "project": "example-project",
+  "posture": {
+    "approvals_required": true,
+    "environment_checks_enabled": true,
+    "service_connection_restricted": true,
+    "federated_identity_preferred": true
+  },
+  "service_connections": [
+    {
+      "name": "example-federated-connection",
+      "authentication": "workload_identity_federation",
+      "federation_subject": "repo:example-org/example-repo:ref:refs/heads/main",
+      "issuer_url": "https://token.actions.githubusercontent.com",
+      "audience": "api://AzureADTokenExchange"
+    }
+  ],
+  "notes": "Synthetic pipeline governance inventory for fixture evaluation."
+}

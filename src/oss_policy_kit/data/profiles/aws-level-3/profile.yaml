@@ -1,0 +1,43 @@
+id: aws-level-3
+title: AWS — hard-gate (level 3)
+description: >
+  **Hard-gate** profile: governance, deterministic buildspec/pipeline checks, evidence-backed
+  CodePipeline/CodeBuild posture, IAM and identity boundaries, artifact-bound SBOM/provenance JSON,
+  evidence freshness, dependency auto-update detection, container image security posture (digest
+  pinning, non-root user, image scanning), org-level MFA enforcement evidence, and SBOM quality
+  signals. Does **not** treat buildspec text signals (AWS-SEC/SBOM/SCA/PROV) as hard proof —
+  those stay in advisory profiles. Prefer `collect-evidence` so API-backed outcomes can reach
+  PASS with live collection metadata.
+  Maturity note: this is the strictest bundled AWS gate, but it still depends more on evidence
+  discipline than the GitHub hard-gate family. Treat `github-level-3` / `github-release-hardening-3`
+  as the most mature reference inside this kit until AWS evidence collection reaches parity.
+  Optional `AWS-CC-046` (CodeCommit review posture) is intentionally **not** bundled here; add it
+  only when CodeCommit is your SCM.
+  **Natural next step:** `aws-release-hardening-3` when release-time signal visibility should sit on top of this hard-gate.
+audience: Security-focused AWS maintainers who need defensible gates beyond clone-only heuristics.
+controls:
+  - GOV-SEC-001
+  - GOV-CON-002
+  - GOV-COWN-003
+  - GOV-LIC-004
+  - REL-CHANGE-012
+  - GOV-DISC-013
+  - GOV-WAIV-014
+  - GOV-EVIDFRESH-054
+  - SEC-GITIGNORE-051
+  - SEC-PINLOCK-052
+  - AWS-CI-037
+  - AWS-SECRET-038
+  - AWS-PIPE-042
+  - AWS-PIPEIAM-056
+  - AWS-CP-044
+  - AWS-CB-045
+  - AWS-CBIDENT-057
+  - AWS-SBOMART-058
+  - AWS-PROVART-059
+  - DEP-UPDATE-001
+  - CONT-IMAGE-001
+  - CONT-IMAGE-002
+  - CONT-IMAGE-003
+  - ORG-MFA-001
+  - BUILD-SBOM-QUAL-003

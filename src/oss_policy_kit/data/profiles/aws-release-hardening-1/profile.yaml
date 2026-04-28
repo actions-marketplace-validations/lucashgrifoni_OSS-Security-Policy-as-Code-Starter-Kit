@@ -1,0 +1,24 @@
+id: aws-release-hardening-1
+title: AWS release hardening — starter + evidence (level 1)
+description: >
+  **Starter + evidence:** extends **aws-level-1** with self-attested CodePipeline promotion and CodeBuild project
+  JSON. Use when you need release documentation gates without level-2 pipeline export discipline.
+  **Natural next step:** `aws-release-hardening-2` or `aws-level-2` for export validation before the level-3 hard-gate.
+audience: Teams preparing AWS releases with minimal evidence scaffolding.
+controls:
+  - GOV-SEC-001
+  - GOV-CON-002
+  - GOV-COWN-003
+  - GOV-LIC-004
+  - REL-CHANGE-012
+  - GOV-DISC-013
+  - GOV-WAIV-014
+  - SEC-GITIGNORE-051
+  - SEC-PINLOCK-052
+  - AWS-CI-037
+  - AWS-SECRET-038
+  - AWS-SEC-039
+  - AWS-SCA-040
+  - AWS-SBOM-041
+  - AWS-CP-044
+  - AWS-CB-045

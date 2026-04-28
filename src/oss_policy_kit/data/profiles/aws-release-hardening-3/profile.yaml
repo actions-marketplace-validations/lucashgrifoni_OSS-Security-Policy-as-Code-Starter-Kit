@@ -1,0 +1,46 @@
+id: aws-release-hardening-3
+title: AWS release hardening — hard-gate + release signals (level 3)
+description: >
+  Strictest bundled AWS release profile: **aws-level-3** hard-gate core (deterministic + evidence-backed
+  controls, IAM/identity, artifact-bound SBOM/provenance, evidence freshness) **plus** the same
+  buildspec **signal** bundle as level 2 for release hygiene visibility. Adds GOV-EVIDFRESH-054,
+  AWS-PIPEIAM-056, AWS-CBIDENT-057, AWS-SBOMART-058, and AWS-PROVART-059 over level 2. Also includes
+  dependency auto-update detection, container image security posture (digest pinning, non-root user,
+  image scanning), org-level MFA enforcement evidence, and SBOM quality signals. Optional CodeCommit
+  evidence (`AWS-CC-046`) is intentionally omitted so the gate does not depend on CodeCommit.
+  Maturity note: this is the strictest bundled AWS release gate, but the buildspec **signal** bundle
+  stays `assurance: signal` — treat their PASS as directional release-time visibility, not proof.
+  Inside this kit GitHub remains the most mature path; use `github-release-hardening-3` as the
+  extreme reference until AWS evidence collection reaches parity.
+  **Natural next step:** keep evidence live via `collect-evidence --platform aws` and explicit waivers — this is the ceiling of the bundled AWS release profile set.
+audience: High-assurance AWS teams combining API-collectable evidence with release-time supply-chain signals.
+controls:
+  - GOV-SEC-001
+  - GOV-CON-002
+  - GOV-COWN-003
+  - GOV-LIC-004
+  - REL-CHANGE-012
+  - GOV-DISC-013
+  - GOV-WAIV-014
+  - GOV-EVIDFRESH-054
+  - SEC-GITIGNORE-051
+  - SEC-PINLOCK-052
+  - AWS-CI-037
+  - AWS-SECRET-038
+  - AWS-SEC-039
+  - AWS-SCA-040
+  - AWS-SBOM-041
+  - AWS-PIPE-042
+  - AWS-PROV-043
+  - AWS-PIPEIAM-056
+  - AWS-CP-044
+  - AWS-CB-045
+  - AWS-CBIDENT-057
+  - AWS-SBOMART-058
+  - AWS-PROVART-059
+  - DEP-UPDATE-001
+  - CONT-IMAGE-001
+  - CONT-IMAGE-002
+  - CONT-IMAGE-003
+  - ORG-MFA-001
+  - BUILD-SBOM-QUAL-003

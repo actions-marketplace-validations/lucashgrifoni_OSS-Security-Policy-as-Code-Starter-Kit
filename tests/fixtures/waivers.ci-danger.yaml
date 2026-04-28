@@ -1,0 +1,7 @@
+version: 1
+waivers:
+  - control_id: CI-DANGER-007
+    justification: "Demo waiver for automated tests only."
+    owner: "security@example.com"
+    status: approved
+    expires_at: "2099-01-01"

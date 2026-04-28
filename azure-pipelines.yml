@@ -1,0 +1,187 @@
+trigger:
+  branches:
+    include:
+      - main
+      - master
+      - develop
+  paths:
+    exclude:
+      - gitpage/**
+
+pr:
+  branches:
+    include:
+      - main
+      - master
+  paths:
+    exclude:
+      - gitpage/**
+
+pool:
+  name: Default
+  demands:
+    - Agent.OS -equals Linux
+
+variables:
+  # Keep Azure aligned with the project's tested/runtime baseline.
+  pythonVersion: "3.12"
+  pythonCmd: "python3.12"
+  venvDir: ".venv-ci"
+  venvPython: ".venv-ci/bin/python"
+
+stages:
+  - stage: quality
+    displayName: Quality
+    jobs:
+      - job: quality_checks
+        displayName: Lint, types, tests and smoke checks
+        timeoutInMinutes: 30
+        steps:
+          - checkout: self
+            clean: true
+
+          - script: |
+              mkdir -p test-results security-results out/selfcheck-ci out/ci-hardened-example
+              if ! command -v "$(pythonCmd)" >/dev/null 2>&1; then
+                echo "Required Python $(pythonVersion) interpreter not found on self-hosted agent: $(pythonCmd)" >&2
+                echo "Install Python $(pythonVersion) on the agent and expose it as $(pythonCmd)." >&2
+                exit 1
+              fi
+              $(pythonCmd) --version
+            displayName: Select supported Python version
+
+          - script: |
+              mkdir -p test-results security-results out/selfcheck-ci out/ci-hardened-example
+              $(pythonCmd) -m venv $(venvDir)
+              $(venvPython) -m pip install --upgrade pip
+              $(venvPython) -m pip cache purge || true
+            displayName: Create CI virtualenv
+
+          - script: |
+              $(venvPython) -m pip install --no-cache-dir -e ".[dev]"
+            displayName: Install project and dev dependencies
+
+          - script: $(venvPython) -m ruff check .
+            displayName: Ruff check
+
+          - script: $(venvPython) -m ruff format --check .
+            displayName: Ruff format check
+
+          - script: $(venvPython) -m mypy src
+            displayName: Mypy
+
+          - script: |
+              $(venvPython) -m pytest --junitxml=test-results/pytest.xml
+            displayName: Pytest
+
+          - script: |
+              $(venvPython) -m bandit -q -f json -o security-results/bandit.json -r src
+            displayName: Bandit
+            continueOnError: true
+
+          - script: |
+              $(venvPython) -m pip_audit --format json --output security-results/pip-audit.json
+            displayName: Pip audit
+            continueOnError: true
+
+          - task: PublishTestResults@2
+            displayName: Publish pytest results
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: test-results/pytest.xml
+              testRunTitle: pytest
+              failTaskOnFailedTests: true
+              failTaskOnMissingResultsFile: false
+
+          - script: |
+              $(venvPython) -m oss_policy_kit --help
+              $(venvPython) -m oss_policy_kit evaluate --help
+            displayName: CLI help smoke
+
+          - script: |
+              $(venvPython) -m oss_policy_kit evaluate --target ./examples/hardened-repo --profile github-level-1 --output-dir ./out/ci-hardened-example
+            displayName: Evaluate hardened example
+
+          - script: |
+              $(venvPython) -m oss_policy_kit --target . --profile azure-level-1 --output-dir ./out/selfcheck-ci --fail-on fail
+            displayName: Self-check
+
+          - task: PublishPipelineArtifact@1
+            displayName: Publish security scan artifacts
+            condition: succeededOrFailed()
+            inputs:
+              targetPath: security-results
+              artifact: security-results
+              publishLocation: pipeline
+
+          - task: PublishPipelineArtifact@1
+            displayName: Publish self-check artifact
+            condition: succeededOrFailed()
+            inputs:
+              targetPath: out/selfcheck-ci
+              artifact: selfcheck-ci
+              publishLocation: pipeline
+
+  - stage: package
+    displayName: Package
+    dependsOn: quality
+    condition: succeeded()
+    jobs:
+      - job: build_distribution
+        displayName: Build distribution and SBOM
+        timeoutInMinutes: 25
+        steps:
+          - checkout: self
+            clean: true
+
+          - script: |
+              mkdir -p dist
+              if ! command -v "$(pythonCmd)" >/dev/null 2>&1; then
+                echo "Required Python $(pythonVersion) interpreter not found on self-hosted agent: $(pythonCmd)" >&2
+                echo "Install Python $(pythonVersion) on the agent and expose it as $(pythonCmd)." >&2
+                exit 1
+              fi
+              $(pythonCmd) --version
+            displayName: Select supported Python version
+
+          - script: |
+              $(pythonCmd) -m venv $(venvDir)
+              $(venvPython) -m pip install --upgrade pip
+              $(venvPython) -m pip cache purge || true
+              $(venvPython) -m pip install --no-cache-dir build twine cyclonedx-bom
+              $(venvPython) -m pip install --no-cache-dir -e ".[dev]"
+            displayName: Install packaging tools
+
+          - script: |
+              rm -rf dist build src/*.egg-info
+              $(venvPython) -m build
+            displayName: Build sdist and wheel
+
+          - script: $(venvPython) scripts/twine_check_dist.py
+            displayName: Twine check
+
+          - script: |
+              $(venvPython) -m cyclonedx_py environment --output-format JSON --output-file dist/sbom.cyclonedx.json
+            displayName: Generate CycloneDX SBOM
+
+          - script: |
+              $(pythonCmd) -m venv .venv-smoke
+              source .venv-smoke/bin/activate
+              python -m pip install --upgrade pip
+              wheel_path="$(find dist -maxdepth 1 -name '*.whl' | head -n 1)"
+              if [ -z "$wheel_path" ]; then
+                echo "No wheel found under dist/" >&2
+                exit 1
+              fi
+              python -m pip install --no-cache-dir "$wheel_path"
+              python -m oss_policy_kit --help
+              python -m oss_policy_kit evaluate --help
+            displayName: Smoke install wheel
+
+          - task: PublishPipelineArtifact@1
+            displayName: Publish distribution artifacts
+            inputs:
+              targetPath: dist
+              artifact: dist
+              publishLocation: pipeline

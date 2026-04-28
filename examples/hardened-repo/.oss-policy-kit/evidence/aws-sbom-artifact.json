@@ -1,0 +1,19 @@
+{
+  "schema_version": "aws-sbom-artifact/v1",
+  "attested_at": "2026-04-21",
+  "attested_by": "example-maintainer",
+  "artifact": {
+    "uri": "s3://example-org-example-repo-artifacts/releases/v0.0.0/example.tgz",
+    "digest_sha256": "01a42ab340a77f79fc7506b9c420810cb6738a17db7da98fabdd3aa8dcb705d3"
+  },
+  "sbom": {
+    "format": "cyclonedx",
+    "digest_sha256": "a604f2cf84f318de121c4f8da0b0748bd04d8ae535fab4cd983f67b8d614ee60"
+  },
+  "posture": {
+    "sbom_covers_release_artifact": true,
+    "sbom_digest_recorded": true,
+    "artifact_digest_recorded": true
+  },
+  "notes": "Synthetic artifact-bound SBOM record for fixture evaluation."
+}

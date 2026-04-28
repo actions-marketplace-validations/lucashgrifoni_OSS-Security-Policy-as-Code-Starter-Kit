@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/schema/evidence-branch-protection.schema.json",
+  "title": "Branch protection evidence file",
+  "description": "Self-attested branch protection posture for a GitHub repository default branch. Place at .oss-policy-kit/evidence/branch-protection.json. This file is trust-level: self-attested (maintainer-supplied, not platform-verified).",
+  "type": "object",
+  "required": ["schema_version", "attested_at", "attested_by", "branch", "protections"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Schema identifier for this evidence file format.",
+      "const": "branch-protection/v1"
+    },
+    "attested_at": {
+      "type": "string",
+      "format": "date",
+      "description": "ISO-8601 date (YYYY-MM-DD) when the maintainer last verified these settings."
+    },
+    "attested_by": {
+      "type": "string",
+      "description": "GitHub username or team identifier of the person attesting this file."
+    },
+    "branch": {
+      "type": "string",
+      "description": "Default branch name this evidence applies to (e.g. 'main', 'master')."
+    },
+    "protections": {
+      "type": "object",
+      "description": "Boolean flags for each branch protection dimension.",
+      "additionalProperties": false,
+      "required": ["require_pull_request_reviews", "dismiss_stale_reviews", "require_status_checks", "enforce_admins", "restrict_force_push"],
+      "properties": {
+        "require_pull_request_reviews": {
+          "type": "boolean",
+          "description": "At least one required reviewer before merge."
+        },
+        "dismiss_stale_reviews": {
+          "type": "boolean",
+          "description": "Stale pull request approvals are dismissed when new commits are pushed."
+        },
+        "require_status_checks": {
+          "type": "boolean",
+          "description": "One or more status checks are required to pass before merging."
+        },
+        "enforce_admins": {
+          "type": "boolean",
+          "description": "Branch protections apply to administrators as well."
+        },
+        "restrict_force_push": {
+          "type": "boolean",
+          "description": "Force pushes to the protected branch are blocked."
+        },
+        "require_signed_commits": {
+          "type": "boolean",
+          "description": "Commits must be signed (optional field)."
+        },
+        "required_linear_history": {
+          "type": "boolean",
+          "description": "Merges that create a non-linear history are blocked (optional field)."
+        }
+      }
+    },
+    "collection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_collection_method", "collected_at", "source_url"],
+      "properties": {
+        "evidence_collection_method": { "type": "string", "enum": ["live", "manual"] },
+        "collected_at": { "type": "string" },
+        "source_url": { "type": "string" },
+        "mode": { "type": "string", "enum": ["api"] }
+      }
+    },
+    "notes": {
+      "type": "string",
+      "description": "Optional free-text notes about deviations or context."
+    }
+  }
+}

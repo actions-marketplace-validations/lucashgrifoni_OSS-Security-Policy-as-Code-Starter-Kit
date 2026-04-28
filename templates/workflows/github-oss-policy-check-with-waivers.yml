@@ -1,0 +1,50 @@
+# OSS Security Policy as Code Starter Kit — CI with in-repo waivers
+# Copy to .github/workflows/oss-policy-check.yml and ensure waivers/waivers.yaml is committed.
+# The --waivers path must match your versioned waiver file in the repository.
+name: OSS Policy Check (with waivers)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  oss-policy-check:
+    name: Evaluate OSS security baseline
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install oss-policy-kit
+        run: pip install oss-policy-kit
+
+      - name: Evaluate OSS policy baseline
+        run: |
+          python -m oss_policy_kit evaluate \
+            --target . \
+            --profile github-level-1 \
+            --fail-on fail \
+            --waivers ./waivers/waivers.yaml \
+            --output-dir ./oss-policy-reports
+
+      - name: Upload policy reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oss-policy-reports
+          path: ./oss-policy-reports/
+          retention-days: 30

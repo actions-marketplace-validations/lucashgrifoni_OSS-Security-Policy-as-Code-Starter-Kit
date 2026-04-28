@@ -1,0 +1,34 @@
+id: azure-level-2
+title: Azure — advisory (level 2)
+description: >
+  **Advisory** profile for day-to-day use: starter scope plus secure template posture (`extends`),
+  deployment identity YAML signals (**AZ-IDENT-036**), the full pipeline signal bundle, dependency
+  auto-update detection, and container image security posture checks (digest pinning, non-root user,
+  image scanning signals — not-applicable when no Dockerfile present). Platform truth (branch
+  policies, environments, service connections) still requires evidence or **collect-evidence** —
+  not inferred as a hard gate here.
+  **Natural next step:** `azure-level-3` for the evidence-backed hard-gate, or `azure-release-hardening-2`
+  for the release ladder at advisory depth.
+audience: Teams with mature Azure Pipelines seeking stronger local discipline before evidence files.
+controls:
+  - GOV-SEC-001
+  - GOV-CON-002
+  - GOV-COWN-003
+  - GOV-LIC-004
+  - REL-CHANGE-012
+  - GOV-DISC-013
+  - GOV-WAIV-014
+  - SEC-GITIGNORE-051
+  - SEC-PINLOCK-052
+  - AZ-PIPE-027
+  - AZ-PIPE-028
+  - AZ-PIPE-029
+  - AZ-PIPE-030
+  - AZ-SEC-031
+  - AZ-SCA-032
+  - AZ-SBOM-033
+  - AZ-IDENT-036
+  - DEP-UPDATE-001
+  - CONT-IMAGE-001
+  - CONT-IMAGE-002
+  - CONT-IMAGE-003

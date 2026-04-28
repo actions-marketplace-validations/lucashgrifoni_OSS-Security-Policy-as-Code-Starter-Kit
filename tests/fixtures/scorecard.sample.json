@@ -1,0 +1,8 @@
+{
+  "scorecard": {
+    "version": "1",
+    "checks": [
+      { "name": "Code-QL", "score": 8, "reason": "supplemental-example" }
+    ]
+  }
+}

@@ -1,0 +1,32 @@
+id: aws-release-hardening-2
+title: AWS release hardening — advisory + evidence (level 2)
+description: >
+  Extends **aws-level-2** (advisory) with CodePipeline and CodeBuild evidence files for promotion
+  and project posture. Stronger than level 1 release hardening because committed pipeline exports
+  must already meet the structured bar (AWS-PIPE-042). Includes dependency auto-update detection
+  and container image security posture checks (digest pinning,   non-root user, image scanning signals).
+  **Natural next step:** `aws-release-hardening-3` for the strictest bundled AWS release gate.
+audience: AWS teams combining curated pipeline files with platform evidence JSON for releases.
+controls:
+  - GOV-SEC-001
+  - GOV-CON-002
+  - GOV-COWN-003
+  - GOV-LIC-004
+  - REL-CHANGE-012
+  - GOV-DISC-013
+  - GOV-WAIV-014
+  - SEC-GITIGNORE-051
+  - SEC-PINLOCK-052
+  - AWS-CI-037
+  - AWS-SECRET-038
+  - AWS-SEC-039
+  - AWS-SCA-040
+  - AWS-SBOM-041
+  - AWS-PIPE-042
+  - AWS-PROV-043
+  - AWS-CP-044
+  - AWS-CB-045
+  - DEP-UPDATE-001
+  - CONT-IMAGE-001
+  - CONT-IMAGE-002
+  - CONT-IMAGE-003

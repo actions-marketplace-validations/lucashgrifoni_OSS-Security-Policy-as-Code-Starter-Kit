@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/schema/evidence-azure-sbom-artifact.schema.json",
+  "title": "Azure DevOps SBOM bound to a release artifact",
+  "type": "object",
+  "required": ["schema_version", "attested_at", "attested_by", "artifact", "sbom", "posture"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "azure-sbom-artifact/v1" },
+    "attested_at": { "type": "string", "format": "date" },
+    "attested_by": { "type": "string" },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["uri", "digest_sha256"],
+      "properties": {
+        "uri": { "type": "string" },
+        "digest_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "sbom": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "digest_sha256"],
+      "properties": {
+        "format": { "type": "string", "enum": ["cyclonedx", "spdx"] },
+        "digest_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "posture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sbom_covers_release_artifact", "sbom_digest_recorded", "artifact_digest_recorded"],
+      "properties": {
+        "sbom_covers_release_artifact": { "type": "boolean" },
+        "sbom_digest_recorded": { "type": "boolean" },
+        "artifact_digest_recorded": { "type": "boolean" }
+      }
+    },
+    "collection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_collection_method", "collected_at", "source_url"],
+      "properties": {
+        "evidence_collection_method": { "type": "string", "enum": ["live", "manual"] },
+        "collected_at": { "type": "string" },
+        "source_url": { "type": "string" },
+        "mode": { "type": "string", "enum": ["api"] }
+      }
+    },
+    "notes": { "type": "string" }
+  }
+}

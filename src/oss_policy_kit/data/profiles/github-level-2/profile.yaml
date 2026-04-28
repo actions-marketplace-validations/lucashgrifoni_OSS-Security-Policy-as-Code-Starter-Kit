@@ -1,0 +1,40 @@
+﻿id: github-level-2
+title: GitHub OSS advisory baseline (level 2)
+description: >
+  **Advisory** profile: extends the starter baseline with stricter workflow hardening signals
+  (reusable workflows, runner trust, job permissions, release safety, merge queue posture),
+  dependency auto-update detection, OpenSSF Scorecard signal, and container image security
+  posture checks (digest pinning, non-root user, image scanning signals).
+  **Natural next step:** `github-level-3` for evidence-backed GitHub gates, or `github-release-hardening-2`
+  for the release ladder at similar depth.
+audience: Maintainers with disciplined CI/CD who want stronger clone-verifiable controls.
+controls:
+  - GOV-SEC-001
+  - GOV-CON-002
+  - GOV-COWN-003
+  - GOV-LIC-004
+  - CI-WF-005
+  - CI-PERM-006
+  - CI-DANGER-007
+  - CI-PIN-008
+  - CI-LEAST-009
+  - SEC-CODEQL-010
+  - SEC-DEPREV-011
+  - REL-CHANGE-012
+  - GOV-DISC-013
+  - GOV-WAIV-014
+  - GH-WF-018
+  - GH-WF-019
+  - GH-WF-020
+  - GH-REL-021
+  - GH-DEPLOY-022
+  - GH-PROV-023
+  - GH-MERGEQ-053
+  - SEC-SECRETS-050
+  - SEC-GITIGNORE-051
+  - SEC-PINLOCK-052
+  - DEP-UPDATE-001
+  - OSS-SCORECARD-001
+  - CONT-IMAGE-001
+  - CONT-IMAGE-002
+  - CONT-IMAGE-003

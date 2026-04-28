@@ -1,0 +1,10 @@
+name: unsafe-example
+# Intentionally weak workflow for OSS Policy Kit demos - do not copy.
+on:
+  pull_request_target:
+    types: [opened]
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4

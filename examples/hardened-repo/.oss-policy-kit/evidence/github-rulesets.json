@@ -1,0 +1,13 @@
+{
+  "schema_version": "github-rulesets/v1",
+  "attested_at": "2026-04-21",
+  "attested_by": "example-maintainer",
+  "repository": "example-org/example-repo",
+  "posture": {
+    "require_pull_request": true,
+    "require_status_checks": true,
+    "restrict_force_push": true,
+    "require_code_owner_review": true
+  },
+  "notes": "Synthetic rulesets posture for fixture evaluation; not a GitHub API export."
+}

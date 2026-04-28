@@ -1,0 +1,10 @@
+name: minimal
+trigger:
+  branches:
+    include:
+      - main
+pool:
+  vmImage: ubuntu-latest
+steps:
+  - checkout: self
+  - script: echo "minimal azure pipeline"

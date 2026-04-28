@@ -1,0 +1,54 @@
+id: github-aws-level-2
+title: GitHub SCM + AWS CI/CD — advisory (level 2)
+description: >
+  **Advisory-only** multi-platform profile for repositories that use **GitHub** as the SCM layer and
+  **AWS CodeBuild / CodePipeline** as the CI/CD layer. Combines the full GitHub workflow hardening
+  signal bundle (reusable workflows, runner trust, job permissions, release safety, merge queue)
+  with the AWS advisory control set (pipeline export, buildspec provenance, managed secrets).
+  Also includes dependency auto-update detection, container image security posture checks
+  (digest pinning, non-root user, image scanning — not-applicable when no Dockerfile present),
+  and general secrets/lockfile hygiene. Signal-grade scanner/SBOM/provenance controls are
+  advisory signals, not cryptographic proof.
+  Explicit positioning: this profile is **advisory**, not a hard gate. For strict gates, use
+  `github-level-3` / `github-release-hardening-3` or the `aws-*-3` profiles, depending on which
+  CI/CD platform should serve as the source of truth.
+  **Natural next step:** adopt `aws-level-3` or `github-level-3` separately when you need a true hard-gate on one platform.
+audience: >
+  Teams that host source on GitHub but build and deploy through AWS CodeBuild or CodePipeline,
+  seeking a unified advisory discipline without maintaining evidence files.
+controls:
+  - GOV-SEC-001
+  - GOV-CON-002
+  - GOV-COWN-003
+  - GOV-LIC-004
+  - CI-WF-005
+  - CI-PERM-006
+  - CI-DANGER-007
+  - CI-PIN-008
+  - CI-LEAST-009
+  - SEC-CODEQL-010
+  - SEC-DEPREV-011
+  - REL-CHANGE-012
+  - GOV-DISC-013
+  - GOV-WAIV-014
+  - GH-WF-018
+  - GH-WF-019
+  - GH-WF-020
+  - GH-REL-021
+  - GH-DEPLOY-022
+  - GH-PROV-023
+  - GH-MERGEQ-053
+  - SEC-SECRETS-050
+  - SEC-GITIGNORE-051
+  - SEC-PINLOCK-052
+  - AWS-CI-037
+  - AWS-SECRET-038
+  - AWS-SEC-039
+  - AWS-SCA-040
+  - AWS-SBOM-041
+  - AWS-PIPE-042
+  - AWS-PROV-043
+  - DEP-UPDATE-001
+  - CONT-IMAGE-001
+  - CONT-IMAGE-002
+  - CONT-IMAGE-003

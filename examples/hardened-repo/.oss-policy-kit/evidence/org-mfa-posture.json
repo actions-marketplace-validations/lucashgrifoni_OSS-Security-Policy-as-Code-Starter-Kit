@@ -1,0 +1,13 @@
+{
+  "schema_version": "org-mfa-posture/v1",
+  "attested_at": "2026-04-21",
+  "attested_by": "example-maintainer",
+  "org_name": "example-org",
+  "platform": "github",
+  "mfa_required_for_all_members": true,
+  "mfa_required_for_admins": true,
+  "enforcement_scope": "all_members",
+  "sso_enforced": false,
+  "phishing_resistant_mfa": false,
+  "notes": "Synthetic org MFA attestation for fixture evaluation."
+}

@@ -1,0 +1,47 @@
+id: azure-release-hardening-3
+title: Azure release hardening — hard-gate + release signals (level 3)
+description: >
+  Strictest bundled Azure release profile: **azure-level-3** hard-gate core (evidence freshness,
+  branch + pipeline governance with API fidelity metadata, service connection and federation
+  decomposition, artifact SBOM/provenance) **plus** the **signal** bundle (**AZ-SEC/SBOM/SCA-031..033**)
+  for release-time visibility. Adds GOV-EVIDFRESH-054, AZ-SCONN-056, AZ-WIFEV-057, and
+  AZ-ARTSBOM/ARTPRV-058/059 over level 2. Also includes dependency auto-update detection,
+  container image security posture (digest pinning, non-root user, image scanning), org-level
+  MFA enforcement evidence, and SBOM quality signals.
+  Maturity note: this is the strictest bundled Azure release gate, but the **031..033** bundle stays
+  `assurance: signal` — treat their PASS as directional release-time visibility, not proof. Inside
+  this kit GitHub remains the most mature path; use `github-release-hardening-3` as the extreme
+  reference until Azure evidence collection reaches parity.
+  **Natural next step:** keep evidence live via `collect-evidence --platform azure` and explicit waivers — this is the ceiling of the bundled Azure release profile set.
+audience: High-assurance Azure DevOps teams combining API-backed evidence with release hygiene signals.
+controls:
+  - GOV-SEC-001
+  - GOV-CON-002
+  - GOV-COWN-003
+  - GOV-LIC-004
+  - REL-CHANGE-012
+  - GOV-DISC-013
+  - GOV-WAIV-014
+  - GOV-EVIDFRESH-054
+  - SEC-GITIGNORE-051
+  - SEC-PINLOCK-052
+  - AZ-PIPE-027
+  - AZ-PIPE-028
+  - AZ-PIPE-029
+  - AZ-PIPE-030
+  - AZ-SEC-031
+  - AZ-SCA-032
+  - AZ-SBOM-033
+  - AZ-IDENT-036
+  - AZ-PLAT-034
+  - AZ-PLAT-035
+  - AZ-SCONN-056
+  - AZ-WIFEV-057
+  - AZ-ARTSBOM-058
+  - AZ-ARTPRV-059
+  - DEP-UPDATE-001
+  - CONT-IMAGE-001
+  - CONT-IMAGE-002
+  - CONT-IMAGE-003
+  - ORG-MFA-001
+  - BUILD-SBOM-QUAL-003

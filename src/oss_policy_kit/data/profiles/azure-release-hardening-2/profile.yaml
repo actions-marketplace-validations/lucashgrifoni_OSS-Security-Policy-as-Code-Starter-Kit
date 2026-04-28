@@ -1,0 +1,34 @@
+id: azure-release-hardening-2
+title: Azure release hardening — advisory + evidence (level 2)
+description: >
+  Extends **azure-level-2** (advisory) with **AZ-PLAT-034** and **AZ-PLAT-035** evidence. Stronger than
+  release-hardening-1 because the pipeline discipline and identity YAML signals are already required.
+  Includes dependency auto-update detection and container image security posture checks (digest
+  pinning, non-root user, image scanning signals).
+  **Natural next step:** `azure-release-hardening-3` for the strictest bundled Azure release gate.
+audience: Teams combining curated YAML with Azure DevOps governance evidence for releases.
+controls:
+  - GOV-SEC-001
+  - GOV-CON-002
+  - GOV-COWN-003
+  - GOV-LIC-004
+  - REL-CHANGE-012
+  - GOV-DISC-013
+  - GOV-WAIV-014
+  - GOV-EVIDFRESH-054
+  - SEC-GITIGNORE-051
+  - SEC-PINLOCK-052
+  - AZ-PIPE-027
+  - AZ-PIPE-028
+  - AZ-PIPE-029
+  - AZ-PIPE-030
+  - AZ-SEC-031
+  - AZ-SCA-032
+  - AZ-SBOM-033
+  - AZ-IDENT-036
+  - AZ-PLAT-034
+  - AZ-PLAT-035
+  - DEP-UPDATE-001
+  - CONT-IMAGE-001
+  - CONT-IMAGE-002
+  - CONT-IMAGE-003

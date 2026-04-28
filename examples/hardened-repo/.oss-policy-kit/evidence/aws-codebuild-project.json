@@ -1,0 +1,16 @@
+{
+  "schema_version": "aws-codebuild-project/v1",
+  "attested_at": "2026-04-21",
+  "attested_by": "example-maintainer",
+  "project": "example-codebuild-project",
+  "posture": {
+    "privileged_mode_disabled": true,
+    "no_plaintext_credentials_in_project_config": true,
+    "codebuild_service_role_configured": true
+  },
+  "identity": {
+    "service_role_arn_present": true,
+    "no_plaintext_environment_credentials": true
+  },
+  "notes": "Synthetic CodeBuild posture for fixture evaluation."
+}

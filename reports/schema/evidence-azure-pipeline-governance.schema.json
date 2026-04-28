@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/schema/evidence-azure-pipeline-governance.schema.json",
+  "title": "Azure pipeline governance evidence",
+  "type": "object",
+  "required": ["schema_version", "attested_at", "attested_by", "project", "posture"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "azure-pipeline-governance/v1" },
+    "attested_at": { "type": "string", "format": "date" },
+    "attested_by": { "type": "string" },
+    "project": { "type": "string" },
+    "posture": {
+      "type": "object",
+      "required": [
+        "approvals_required",
+        "environment_checks_enabled",
+        "service_connection_restricted",
+        "federated_identity_preferred"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "approvals_required": { "type": "boolean" },
+        "environment_checks_enabled": { "type": "boolean" },
+        "service_connection_restricted": { "type": "boolean" },
+        "federated_identity_preferred": { "type": "boolean" }
+      }
+    },
+    "posture_support": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pipelines_api_reachable",
+        "environments_api_reachable",
+        "service_endpoints_api_verified",
+        "environment_approval_checks_observable"
+      ],
+      "properties": {
+        "pipelines_api_reachable": { "type": "boolean" },
+        "environments_api_reachable": { "type": "boolean" },
+        "service_endpoints_api_verified": { "type": "boolean" },
+        "environment_approval_checks_observable": { "type": "boolean" }
+      }
+    },
+    "collection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_collection_method", "collected_at", "source_url"],
+      "properties": {
+        "evidence_collection_method": { "type": "string", "enum": ["live", "manual"] },
+        "collected_at": { "type": "string" },
+        "source_url": { "type": "string" },
+        "mode": { "type": "string", "enum": ["api"] }
+      }
+    },
+    "service_connections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "authentication"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "authentication": {
+            "type": "string",
+            "enum": ["workload_identity_federation", "secret", "certificate", "managed_identity", "unknown"]
+          },
+          "federation_subject": {
+            "type": "string",
+            "description": "Optional. Required when authentication is workload_identity_federation. Subject claim of the OIDC federation (e.g. repo:org/repo:ref:refs/heads/main)."
+          },
+          "issuer_url": {
+            "type": "string",
+            "description": "Optional. Required when authentication is workload_identity_federation. OIDC issuer URL of the federated identity provider."
+          },
+          "audience": {
+            "type": "string",
+            "description": "Optional. Required when authentication is workload_identity_federation. Audience value validated by the federated identity provider."
+          }
+        }
+      }
+    },
+    "notes": { "type": "string" }
+  }
+}

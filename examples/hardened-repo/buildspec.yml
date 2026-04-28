@@ -1,0 +1,21 @@
+# Synthetic AWS CodeBuild fixture for OSS Policy Kit demos (no live AWS implied).
+version: 0.2
+env:
+  parameter-store:
+    EXAMPLE_CONFIG: /example-org/example-repo/config
+  secrets-manager:
+    EXAMPLE_SECRET: "arn:aws:secretsmanager:us-east-1:000000000000:secret:example"
+phases:
+  install:
+    commands:
+      - echo "install"
+  build:
+    commands:
+      - echo "build"
+      - cosign version
+      - trivy fs --scanners secret .
+      - pip-audit -r requirements.txt || true
+      - echo "SBOM generation (fixture) would run syft here to emit cyclonedx output"
+artifacts:
+  files:
+    - "**/*"

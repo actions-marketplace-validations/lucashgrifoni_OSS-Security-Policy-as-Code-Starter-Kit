@@ -1,0 +1,2 @@
+# Minimal manifest for SEC-PINLOCK / pip-audit fixture lines in buildspec (pinned example).
+oss-policy-kit==3.2.0

@@ -1,0 +1,15 @@
+{
+  "schema_version": "aws-codepipeline/v1",
+  "attested_at": "2026-04-21",
+  "attested_by": "example-maintainer",
+  "pipeline": "example-pipeline",
+  "posture": {
+    "manual_approval_before_production": true,
+    "artifact_store_encryption_enabled": true,
+    "production_execution_mode_not_parallel": true
+  },
+  "iam": {
+    "pipeline_service_role_arn_configured": true
+  },
+  "notes": "Synthetic CodePipeline governance attestation aligned with committed export under pipelines/aws/."
+}

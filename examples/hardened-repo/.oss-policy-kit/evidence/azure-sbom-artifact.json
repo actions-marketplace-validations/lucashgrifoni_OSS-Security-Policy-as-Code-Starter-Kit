@@ -1,0 +1,19 @@
+{
+  "schema_version": "azure-sbom-artifact/v1",
+  "attested_at": "2026-04-21",
+  "attested_by": "example-maintainer",
+  "artifact": {
+    "uri": "https://dev.azure.com/example-org/_apis/build/builds/12345/artifacts?artifactName=drop&api-version=7.1",
+    "digest_sha256": "217222989e29453ef32583793351191ae6c50778a4bf072072a4a730c7fefdc4"
+  },
+  "sbom": {
+    "format": "cyclonedx",
+    "digest_sha256": "3e16d319b19ded7b8b499ef09f800af3326ab2039272b4c9e4ffa559440dbce5"
+  },
+  "posture": {
+    "sbom_covers_release_artifact": true,
+    "sbom_digest_recorded": true,
+    "artifact_digest_recorded": true
+  },
+  "notes": "Synthetic Azure DevOps artifact-bound SBOM record for fixture evaluation."
+}

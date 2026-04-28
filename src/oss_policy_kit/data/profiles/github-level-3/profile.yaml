@@ -1,0 +1,47 @@
+﻿id: github-level-3
+title: GitHub OSS hard-gate baseline (level 3)
+description: >
+  **Hard-gate** profile: deterministic checks plus GitHub platform evidence files and
+  stricter workflow signals (merge queue, reusable workflow SHA pins, evidence freshness).
+  Includes dependency auto-update detection, OpenSSF Scorecard signal, container image
+  security posture (digest pinning, non-root user, image scanning), org-level MFA enforcement
+  evidence, and SBOM quality signals. Deprecated controls and weak-only cloud OIDC /
+  provenance / secret-scan YAML signals are excluded so this profile can be used as a
+  strong gate when evidence is maintained.
+  **Natural next step:** `github-release-hardening-3` when releases are the primary risk surface;
+  otherwise maintain evidence freshness and live collectors — there is no higher bundled pure-repo gate.
+audience: Security-focused maintainers seeking strict GitHub supply-chain posture with evidence.
+controls:
+  - GOV-SEC-001
+  - GOV-CON-002
+  - GOV-COWN-003
+  - GOV-LIC-004
+  - CI-WF-005
+  - CI-PERM-006
+  - CI-DANGER-007
+  - CI-PIN-008
+  - CI-LEAST-009
+  - SEC-CODEQL-010
+  - SEC-DEPREV-011
+  - REL-CHANGE-012
+  - GOV-DISC-013
+  - GOV-WAIV-014
+  - GH-WF-018
+  - GH-WF-019
+  - GH-WF-020
+  - GH-REL-021
+  - GH-MERGEQ-053
+  - CI-WFCALLSHA-055
+  - SEC-GITIGNORE-051
+  - SEC-PINLOCK-052
+  - GOV-EVIDFRESH-054
+  - GH-PLAT-024
+  - GH-PLAT-025
+  - GH-PLAT-026
+  - DEP-UPDATE-001
+  - OSS-SCORECARD-001
+  - CONT-IMAGE-001
+  - CONT-IMAGE-002
+  - CONT-IMAGE-003
+  - ORG-MFA-001
+  - BUILD-SBOM-QUAL-003

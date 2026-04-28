@@ -1,0 +1,34 @@
+name: Feature request
+description: Propose an improvement to the kit, controls, docs, or templates.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please keep requests aligned with the kit's scope: templates, local evaluation, policy packs, and honest automation limits.
+        The project is not aiming to become a SaaS dashboard or a universal scanner in the near term.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What problem are you trying to solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Describe the smallest useful improvement.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and trade-offs
+      description: Explain risks, complexity, and why this belongs in the kit.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

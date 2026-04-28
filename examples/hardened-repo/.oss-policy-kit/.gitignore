@@ -1,0 +1,5 @@
+# Synthetic fixture: only `evidence/` is intended to be versioned under this directory.
+*
+!.gitignore
+!evidence/
+!evidence/**

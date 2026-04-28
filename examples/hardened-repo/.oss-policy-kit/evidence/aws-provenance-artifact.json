@@ -1,0 +1,19 @@
+{
+  "schema_version": "aws-provenance-artifact/v1",
+  "attested_at": "2026-04-21",
+  "attested_by": "example-maintainer",
+  "artifact": {
+    "uri": "s3://example-org-example-repo-artifacts/releases/v0.0.0/example.tgz",
+    "digest_sha256": "01a42ab340a77f79fc7506b9c420810cb6738a17db7da98fabdd3aa8dcb705d3"
+  },
+  "attestation": {
+    "kind": "cosign",
+    "digest_sha256": "896c07bfdf7fe8c0ee9871e3327bbd8d68a0574df914deaa083f25207754ad16"
+  },
+  "posture": {
+    "attestation_covers_release_artifact": true,
+    "attestation_digest_recorded": true,
+    "artifact_digest_recorded": true
+  },
+  "notes": "Synthetic provenance attestation record for fixture evaluation."
+}

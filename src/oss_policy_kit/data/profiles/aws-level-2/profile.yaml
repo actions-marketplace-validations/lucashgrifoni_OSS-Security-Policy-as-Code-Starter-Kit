@@ -1,0 +1,33 @@
+id: aws-level-2
+title: AWS — advisory (level 2)
+description: >
+  **Advisory** profile for day-to-day use: everything in level 1 plus a validated CodePipeline
+  export under `pipelines/aws/`, provenance signals in buildspec, strict managed-secret sourcing,
+  dependency auto-update detection, and container image security posture checks (digest pinning,
+  non-root user, image scanning signals — not-applicable when no Dockerfile present).
+  Still relies on **signal** controls for scanners/SBOM/provenance text — interpret PASS as directional,
+  not as a hard production gate.
+  **Natural next step:** `aws-level-3` for the evidence-backed hard-gate, or `aws-release-hardening-2`
+  for the release ladder at advisory depth.
+audience: Teams with curated pipeline exports who want stronger local discipline without full evidence files.
+controls:
+  - GOV-SEC-001
+  - GOV-CON-002
+  - GOV-COWN-003
+  - GOV-LIC-004
+  - REL-CHANGE-012
+  - GOV-DISC-013
+  - GOV-WAIV-014
+  - SEC-GITIGNORE-051
+  - SEC-PINLOCK-052
+  - AWS-CI-037
+  - AWS-SECRET-038
+  - AWS-SEC-039
+  - AWS-SCA-040
+  - AWS-SBOM-041
+  - AWS-PIPE-042
+  - AWS-PROV-043
+  - DEP-UPDATE-001
+  - CONT-IMAGE-001
+  - CONT-IMAGE-002
+  - CONT-IMAGE-003

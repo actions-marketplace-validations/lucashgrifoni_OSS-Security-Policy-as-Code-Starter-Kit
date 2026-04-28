@@ -1,0 +1,39 @@
+{
+  "profile_id": "github-level-1",
+  "profile_title": "GitHub OSS starter baseline (level 1)",
+  "summary_by_status": {
+    "pass": 14
+  },
+  "result_status_by_control": {
+    "GOV-SEC-001": "pass",
+    "GOV-CON-002": "pass",
+    "GOV-COWN-003": "pass",
+    "GOV-LIC-004": "pass",
+    "CI-WF-005": "pass",
+    "CI-PERM-006": "pass",
+    "CI-DANGER-007": "pass",
+    "CI-PIN-008": "pass",
+    "CI-LEAST-009": "pass",
+    "SEC-CODEQL-010": "pass",
+    "SEC-DEPREV-011": "pass",
+    "REL-CHANGE-012": "pass",
+    "GOV-DISC-013": "pass",
+    "GOV-WAIV-014": "pass"
+  },
+  "result_lifecycle_by_control": {
+    "GOV-SEC-001": "stable",
+    "GOV-CON-002": "stable",
+    "GOV-COWN-003": "stable",
+    "GOV-LIC-004": "stable",
+    "CI-WF-005": "stable",
+    "CI-PERM-006": "stable",
+    "CI-DANGER-007": "stable",
+    "CI-PIN-008": "stable",
+    "CI-LEAST-009": "stable",
+    "SEC-CODEQL-010": "stable",
+    "SEC-DEPREV-011": "stable",
+    "REL-CHANGE-012": "stable",
+    "GOV-DISC-013": "stable",
+    "GOV-WAIV-014": "stable"
+  }
+}

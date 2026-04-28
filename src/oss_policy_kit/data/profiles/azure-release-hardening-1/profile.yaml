@@ -1,0 +1,25 @@
+id: azure-release-hardening-1
+title: Azure release hardening — starter + evidence (level 1)
+description: >
+  **Starter + evidence:** extends **azure-level-1** with **AZ-PLAT-034** and **AZ-PLAT-035** evidence for branch
+  policies and pipeline governance (self-attested or API-collected).
+  **Natural next step:** `azure-release-hardening-2` or `azure-level-2` for stronger pipeline posture before the level-3 hard-gate.
+audience: Teams preparing releases with governance JSON before adopting the full advisory ladder.
+controls:
+  - GOV-SEC-001
+  - GOV-CON-002
+  - GOV-COWN-003
+  - GOV-LIC-004
+  - REL-CHANGE-012
+  - GOV-DISC-013
+  - GOV-WAIV-014
+  - SEC-GITIGNORE-051
+  - SEC-PINLOCK-052
+  - AZ-PIPE-027
+  - AZ-PIPE-028
+  - AZ-PIPE-029
+  - AZ-SEC-031
+  - AZ-SCA-032
+  - AZ-SBOM-033
+  - AZ-PLAT-034
+  - AZ-PLAT-035

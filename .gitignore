@@ -1,0 +1,55 @@
+# Local assistant/workspace state
+.claude/
+.cursorrules
+# Ignore local kit output everywhere; do not remove this broad rule.
+.oss-policy-kit/
+# Exception: version synthetic evidence for the bundled hardened-repo fixture only.
+!examples/hardened-repo/.oss-policy-kit/
+!examples/hardened-repo/.oss-policy-kit/evidence/
+!examples/hardened-repo/.oss-policy-kit/evidence/**
+.vscode/
+
+# Python caches, virtualenvs, and build outputs
+.coverage
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv/
+.consumer-smoke-venv/
+__pycache__/
+*.egg-info/
+*.py[cod]
+build/
+coverage.xml
+dist/
+htmlcov/
+
+# Generated reports and temporary evaluation labs
+.scannerwork/
+artifacts/
+out/
+sonar-report/
+test-runs/
+teste-projeto/
+# Local validation run outputs (per-auditor snapshots under reports/validacao-<date>/)
+reports/validacao-*/
+
+# Front-end local dependencies/build outputs
+gitpage/dist/
+gitpage/node_modules/
+
+# Local secrets and private notes
+.secrets/
+docs/superpowers/
+private-notes/
+secrets/sonar.token
+
+# Maintainer-private planning documents kept at the repository root.
+# These are never intended for the public mirror; pinning them here prevents
+# `git add -A` / `git add .` from accidentally staging them during a release freeze.
+/Critérios obrigatórios.txt
+/Crit*.txt
+/Criterios*.txt
+/Secrets*.txt
+/*.private.md
+/*.private.txt

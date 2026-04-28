@@ -1,0 +1,7 @@
+# Synthetic fixture: demonstrates DEP-UPDATE-001 for policy kit examples (not a live schedule contract).
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"

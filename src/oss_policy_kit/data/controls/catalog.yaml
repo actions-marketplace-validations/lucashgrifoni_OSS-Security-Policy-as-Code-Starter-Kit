@@ -1,0 +1,472 @@
+version: 1
+# lifecycle values: experimental | stable | deprecated
+# - experimental: semantics may change; do not gate strict CI on this without pinning kit version.
+# - stable: intended stable semantics for the current major.minor kit line.
+# - deprecated: retained for compatibility; scheduled for removal in a future release.
+#
+# assurance (control maturity of proof):
+# - deterministic: strong local proof (filesystem / structural parsing).
+# - signal: heuristic or partial observability from repo signals.
+# - evidence-backed: depends on validated .oss-policy-kit/evidence JSON and/or live API collection.
+#
+# weight (risk-adjusted scoring, 1-3):
+# - 3: critical — direct security impact or supply-chain integrity risk.
+# - 2: high — important governance, identity, or CI discipline controls.
+# - 1: medium — presence/hygiene checks and signal-grade heuristics.
+controls:
+  - id: GOV-SEC-001
+    title: SECURITY.md present
+    category: governance
+    automation: automated
+    lifecycle: stable
+    assurance: deterministic
+    weight: 3
+  - id: GOV-CON-002
+    title: CONTRIBUTING guide present
+    category: governance
+    automation: automated
+    lifecycle: stable
+    assurance: deterministic
+    weight: 1
+  - id: GOV-COWN-003
+    title: CODEOWNERS configured
+    category: governance
+    automation: automated
+    lifecycle: stable
+    assurance: deterministic
+    weight: 2
+  - id: GOV-LIC-004
+    title: LICENSE file present
+    category: governance
+    automation: automated
+    lifecycle: stable
+    assurance: deterministic
+    weight: 1
+  - id: CI-WF-005
+    title: GitHub Actions workflows exist
+    category: ci_cd
+    automation: automated
+    lifecycle: stable
+    assurance: deterministic
+    weight: 2
+  - id: CI-PERM-006
+    title: Workflows declare explicit top-level permissions
+    category: ci_cd
+    automation: automated
+    lifecycle: stable
+    assurance: deterministic
+    weight: 3
+  - id: CI-DANGER-007
+    title: No pull_request_target without strong justification
+    category: ci_cd
+    automation: automated
+    lifecycle: stable
+    assurance: deterministic
+    weight: 3
+  - id: CI-PIN-008
+    title: Third-party actions pinned to immutable references
+    category: supply_chain
+    automation: automated
+    lifecycle: stable
+    assurance: deterministic
+    weight: 3
+  - id: CI-LEAST-009
+    title: Workflow permissions are not obviously over-broad
+    category: ci_cd
+    automation: automated
+    lifecycle: stable
+    assurance: signal
+    weight: 2
+  - id: SEC-CODEQL-010
+    title: CodeQL or equivalent security scanning in CI
+    category: vulnerability_management
+    automation: partially_observable
+    lifecycle: stable
+    assurance: signal
+    weight: 2
+  - id: SEC-DEPREV-011
+    title: Dependency review in pull requests
+    category: supply_chain
+    automation: automated
+    lifecycle: stable
+    assurance: deterministic
+    weight: 2
+  - id: REL-CHANGE-012
+    title: Changelog or documented release notes
+    category: release
+    automation: automated
+    lifecycle: stable
+    assurance: deterministic
+    weight: 1
+  - id: GOV-DISC-013
+    title: Responsible disclosure channel documented
+    category: governance
+    automation: partially_observable
+    lifecycle: stable
+    assurance: signal
+    weight: 2
+  - id: GOV-WAIV-014
+    title: Versioned waiver policy file present in repository (not CLI-only waivers)
+    category: governance
+    automation: human_or_policy
+    lifecycle: stable
+    assurance: deterministic
+    weight: 1
+  - id: PLAT-BRPROT-015
+    title: Default branch protection / rulesets (evidence-backed)
+    category: platform
+    automation: not_observable_locally
+    lifecycle: stable
+    assurance: evidence-backed
+    weight: 3
+  - id: GH-WF-018
+    title: Reusable workflows avoid secrets inherit
+    category: ci_cd
+    automation: automated
+    lifecycle: stable
+    assurance: deterministic
+    weight: 2
+  - id: GH-WF-019
+    title: PR-triggered workflows avoid self-hosted runners
+    category: ci_cd
+    automation: automated
+    lifecycle: stable
+    assurance: deterministic
+    weight: 2
+  - id: GH-WF-020
+    title: Job-level permissions avoid broad write scopes
+    category: ci_cd
+    automation: automated
+    lifecycle: stable
+    assurance: deterministic
+    weight: 2
+  - id: GH-REL-021
+    title: Release/deploy workflows declare concurrency controls
+    category: release
+    automation: partially_observable
+    lifecycle: stable
+    assurance: signal
+    weight: 1
+  - id: GH-DEPLOY-022
+    title: Cloud deployment workflows show OIDC posture
+    category: platform
+    automation: partially_observable
+    lifecycle: stable
+    assurance: signal
+    weight: 2
+  - id: GH-PROV-023
+    title: Build provenance or artifact attestation signal in workflows
+    category: supply_chain
+    automation: partially_observable
+    lifecycle: stable
+    assurance: signal
+    weight: 2
+  - id: GH-PLAT-024
+    title: GitHub rulesets posture evidenced
+    category: platform
+    automation: not_observable_locally
+    lifecycle: stable
+    assurance: evidence-backed
+    weight: 3
+  - id: GH-PLAT-025
+    title: GitHub environment protection posture evidenced
+    category: platform
+    automation: not_observable_locally
+    lifecycle: stable
+    assurance: evidence-backed
+    weight: 3
+  - id: GH-PLAT-026
+    title: GitHub secret scanning posture evidenced
+    category: platform
+    automation: not_observable_locally
+    lifecycle: stable
+    assurance: evidence-backed
+    weight: 2
+  - id: AZ-PIPE-027
+    title: Azure Pipelines definitions exist in supported paths
+    category: ci_cd
+    automation: automated
+    lifecycle: stable
+    assurance: deterministic
+    weight: 2
+  - id: AZ-PIPE-028
+    title: Azure Pipelines include pull request validation trigger posture
+    category: ci_cd
+    automation: automated
+    lifecycle: stable
+    assurance: deterministic
+    weight: 2
+  - id: AZ-PIPE-029
+    title: Azure checkout avoids persistCredentials true
+    category: ci_cd
+    automation: automated
+    lifecycle: stable
+    assurance: deterministic
+    weight: 2
+  - id: AZ-PIPE-030
+    title: Azure pipelines use secure template extension posture
+    category: ci_cd
+    automation: automated
+    lifecycle: stable
+    assurance: deterministic
+    weight: 1
+  - id: AZ-SEC-031
+    title: Azure pipeline security scan signal detected
+    category: vulnerability_management
+    automation: partially_observable
+    lifecycle: stable
+    assurance: signal
+    weight: 1
+  - id: AZ-SCA-032
+    title: Azure pipeline dependency audit or SCA signal detected
+    category: supply_chain
+    automation: partially_observable
+    lifecycle: stable
+    assurance: signal
+    weight: 1
+  - id: AZ-SBOM-033
+    title: Azure pipeline SBOM generation signal detected
+    category: supply_chain
+    automation: partially_observable
+    lifecycle: stable
+    assurance: signal
+    weight: 1
+  - id: AZ-PLAT-034
+    title: Azure Repos branch policy posture evidenced
+    category: platform
+    automation: not_observable_locally
+    lifecycle: stable
+    assurance: evidence-backed
+    weight: 3
+  - id: AZ-PLAT-035
+    title: Azure pipeline governance posture evidenced
+    category: platform
+    automation: not_observable_locally
+    lifecycle: stable
+    assurance: evidence-backed
+    weight: 3
+  - id: AZ-IDENT-036
+    title: Azure deployment identity federation posture
+    category: platform
+    automation: not_observable_locally
+    lifecycle: stable
+    assurance: evidence-backed
+    weight: 2
+  - id: AZ-SCONN-056
+    title: Azure DevOps service connection authentication posture evidenced
+    category: platform
+    automation: not_observable_locally
+    lifecycle: stable
+    assurance: evidence-backed
+    weight: 3
+  - id: AZ-WIFEV-057
+    title: Azure DevOps workload identity federation posture evidenced
+    category: platform
+    automation: not_observable_locally
+    lifecycle: stable
+    assurance: evidence-backed
+    weight: 2
+  - id: AZ-ARTSBOM-058
+    title: Azure DevOps SBOM attested against a concrete release artifact digest
+    category: supply_chain
+    automation: not_observable_locally
+    lifecycle: stable
+    assurance: evidence-backed
+    weight: 2
+  - id: AZ-ARTPRV-059
+    title: Azure DevOps provenance or attestation attested against a concrete release artifact digest
+    category: supply_chain
+    automation: not_observable_locally
+    lifecycle: stable
+    assurance: evidence-backed
+    weight: 2
+  - id: AWS-CI-037
+    title: AWS CodeBuild buildspec or committed CodePipeline file exists
+    category: ci_cd
+    automation: automated
+    lifecycle: stable
+    assurance: deterministic
+    weight: 2
+  - id: AWS-SECRET-038
+    title: CodeBuild buildspec avoids inline secret anti-patterns and prefers managed secret sources
+    category: ci_cd
+    automation: automated
+    lifecycle: stable
+    assurance: deterministic
+    weight: 3
+  - id: AWS-SEC-039
+    title: Security scanning signal in CodeBuild buildspec
+    category: vulnerability_management
+    automation: partially_observable
+    lifecycle: stable
+    assurance: signal
+    weight: 1
+  - id: AWS-SCA-040
+    title: Dependency audit or SCA signal in CodeBuild buildspec
+    category: supply_chain
+    automation: partially_observable
+    lifecycle: stable
+    assurance: signal
+    weight: 1
+  - id: AWS-SBOM-041
+    title: SBOM generation signal in CodeBuild buildspec
+    category: supply_chain
+    automation: partially_observable
+    lifecycle: stable
+    assurance: signal
+    weight: 1
+  - id: AWS-PIPE-042
+    title: Committed CodePipeline export under pipelines/aws/ with minimal useful structure
+    category: ci_cd
+    automation: automated
+    lifecycle: stable
+    assurance: deterministic
+    weight: 2
+  - id: AWS-PROV-043
+    title: Provenance or attestation signal in CodeBuild buildspec
+    category: supply_chain
+    automation: partially_observable
+    lifecycle: stable
+    assurance: signal
+    weight: 1
+  - id: AWS-CP-044
+    title: CodePipeline promotion and artifact governance evidenced
+    category: platform
+    automation: not_observable_locally
+    lifecycle: stable
+    assurance: evidence-backed
+    weight: 3
+  - id: AWS-CB-045
+    title: CodeBuild project posture evidenced
+    category: platform
+    automation: not_observable_locally
+    lifecycle: stable
+    assurance: evidence-backed
+    weight: 3
+  - id: AWS-CC-046
+    title: CodeCommit approval-rule review posture evidenced (optional)
+    category: platform
+    automation: not_observable_locally
+    lifecycle: stable
+    assurance: evidence-backed
+    weight: 1
+  - id: AWS-PIPEIAM-056
+    title: CodePipeline service role / IAM execution boundary evidenced
+    category: platform
+    automation: partially_observable
+    lifecycle: stable
+    assurance: evidence-backed
+    weight: 3
+  - id: AWS-CBIDENT-057
+    title: CodeBuild project identity and credential boundary evidenced
+    category: platform
+    automation: not_observable_locally
+    lifecycle: stable
+    assurance: evidence-backed
+    weight: 3
+  - id: AWS-SBOMART-058
+    title: SBOM attested against a concrete release artifact digest
+    category: supply_chain
+    automation: not_observable_locally
+    lifecycle: stable
+    assurance: evidence-backed
+    weight: 2
+  - id: AWS-PROVART-059
+    title: Provenance or attestation attested against a concrete release artifact digest
+    category: supply_chain
+    automation: not_observable_locally
+    lifecycle: stable
+    assurance: evidence-backed
+    weight: 2
+  - id: SEC-SECRETS-050
+    title: Secret scanning tool in CI
+    category: vulnerability_management
+    automation: partially_observable
+    lifecycle: stable
+    assurance: signal
+    weight: 2
+  - id: SEC-GITIGNORE-051
+    title: .gitignore present with basic secret protection patterns
+    category: governance
+    automation: automated
+    lifecycle: stable
+    assurance: deterministic
+    weight: 1
+  - id: SEC-PINLOCK-052
+    title: Dependency lockfile or pinned dependencies present
+    category: supply_chain
+    automation: automated
+    lifecycle: stable
+    assurance: deterministic
+    weight: 2
+  - id: GH-MERGEQ-053
+    title: GitHub merge queue or merge_group trigger posture
+    category: ci_cd
+    automation: partially_observable
+    lifecycle: stable
+    assurance: signal
+    weight: 1
+  - id: GOV-EVIDFRESH-054
+    title: Collected evidence under .oss-policy-kit/evidence is not stale
+    category: governance
+    automation: automated
+    lifecycle: stable
+    assurance: deterministic
+    weight: 2
+  - id: CI-WFCALLSHA-055
+    title: Reusable workflow calls pinned to immutable commit SHAs
+    category: ci_cd
+    automation: automated
+    lifecycle: stable
+    assurance: deterministic
+    weight: 3
+  # ── New controls added in maturity uplift ─────────────────────────────────
+  - id: DEP-UPDATE-001
+    title: Automated dependency update tool configured (Dependabot or Renovate)
+    category: supply_chain
+    automation: automated
+    lifecycle: stable
+    assurance: deterministic
+    weight: 2
+  - id: OSS-SCORECARD-001
+    title: OpenSSF Scorecard score meets minimum threshold
+    category: vulnerability_management
+    automation: partially_observable
+    lifecycle: stable
+    assurance: signal
+    weight: 1
+  - id: CONT-IMAGE-001
+    title: Dockerfile base images pinned to immutable digest
+    category: supply_chain
+    automation: automated
+    lifecycle: stable
+    assurance: deterministic
+    weight: 2
+  - id: CONT-IMAGE-002
+    title: Dockerfile declares non-root USER
+    category: ci_cd
+    automation: automated
+    lifecycle: stable
+    assurance: deterministic
+    weight: 2
+  - id: CONT-IMAGE-003
+    title: Container image scanning signal in CI
+    category: vulnerability_management
+    automation: partially_observable
+    lifecycle: stable
+    assurance: signal
+    weight: 1
+  - id: ORG-MFA-001
+    title: Organization MFA enforcement posture evidenced
+    category: platform
+    automation: not_observable_locally
+    lifecycle: stable
+    assurance: evidence-backed
+    weight: 3
+  - id: BUILD-SBOM-QUAL-003
+    title: SBOM format validity and completeness signal
+    category: supply_chain
+    automation: partially_observable
+    lifecycle: stable
+    assurance: signal
+    weight: 2

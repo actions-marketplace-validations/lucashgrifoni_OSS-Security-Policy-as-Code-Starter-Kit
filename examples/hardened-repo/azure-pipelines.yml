@@ -1,0 +1,17 @@
+# Synthetic Azure Pipelines fixture for OSS Policy Kit demos (no live Azure DevOps org implied).
+extends:
+  template: pipelines/azure/ci-template.yml@self
+trigger:
+  branches:
+    include:
+      - main
+pr:
+  branches:
+    include:
+      - main
+pool:
+  vmImage: ubuntu-latest
+steps:
+  - script: echo "Synthetic pipeline step for fixture coverage."
+  - script: trivy fs --scanners vuln .
+  - script: echo "Fixture SBOM step references cyclonedx CLI output path"

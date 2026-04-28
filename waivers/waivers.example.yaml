@@ -1,0 +1,11 @@
+version: 1
+waivers:
+  - control_id: CI-DANGER-007
+    justification: >
+      pull_request_target is required for this workflow pattern; reviewed in ADR-12
+      and restricted to label-gated runs only.
+    owner: security@example.com
+    status: approved
+    expires_at: "2026-12-31"
+    applies_to:
+      - ".github/workflows/special.yml"

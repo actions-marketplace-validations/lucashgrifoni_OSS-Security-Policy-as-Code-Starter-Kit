@@ -1,0 +1,9 @@
+# Default ownership for this single-maintainer repository.
+* @lucashgrifoni
+
+# Sensitive paths.
+.github/workflows/* @lucashgrifoni
+src/ @lucashgrifoni
+src/oss_policy_kit/data/ @lucashgrifoni
+templates/ @lucashgrifoni
+waivers/ @lucashgrifoni

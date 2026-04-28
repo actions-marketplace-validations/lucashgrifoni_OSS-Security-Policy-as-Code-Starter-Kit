@@ -1,0 +1,13 @@
+version: 0.2
+env:
+  secrets-manager:
+    API_TOKEN: arn:aws:secretsmanager:us-east-1:123456789012:secret:example
+  parameter-store:
+    CONFIG_FLAG: /app/flag
+phases:
+  build:
+    commands:
+      - trivy fs .
+      - pip-audit
+      - cyclonedx-py environment --output-file sbom.json
+      - cosign version

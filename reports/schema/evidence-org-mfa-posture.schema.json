@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/schema/evidence-org-mfa-posture.schema.json",
+  "title": "Organization MFA posture evidence file",
+  "description": "Self-attested MFA enforcement posture for a source-code organization (GitHub Org, Azure DevOps Org, or AWS IAM). Place at .oss-policy-kit/evidence/org-mfa-posture.json. Trust level: self-attested (maintainer-supplied, not platform-verified).",
+  "type": "object",
+  "required": ["schema_version", "attested_at", "attested_by", "org_name", "platform", "mfa_required_for_all_members"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Schema identifier for this evidence file format.",
+      "const": "org-mfa-posture/v1"
+    },
+    "attested_at": {
+      "type": "string",
+      "format": "date",
+      "description": "ISO-8601 date (YYYY-MM-DD) when the maintainer last verified these settings."
+    },
+    "attested_by": {
+      "type": "string",
+      "description": "Username or identifier of the person attesting this file."
+    },
+    "org_name": {
+      "type": "string",
+      "description": "Name of the organization this evidence applies to."
+    },
+    "platform": {
+      "type": "string",
+      "enum": ["github", "azure-devops", "aws-iam", "other"],
+      "description": "Platform where the organization is hosted."
+    },
+    "mfa_required_for_all_members": {
+      "type": "boolean",
+      "description": "Whether MFA is required for all organization members (not just admins)."
+    },
+    "mfa_required_for_admins": {
+      "type": "boolean",
+      "description": "Whether MFA is required for all organization administrators."
+    },
+    "sso_enforced": {
+      "type": "boolean",
+      "description": "Whether SSO is enforced for access (optional, provides stronger assurance)."
+    },
+    "phishing_resistant_mfa": {
+      "type": "boolean",
+      "description": "Whether phishing-resistant MFA (WebAuthn/FIDO2) is required (optional, highest assurance)."
+    },
+    "enforcement_scope": {
+      "type": "string",
+      "enum": ["all_members", "admins_only", "selected_teams", "partial"],
+      "description": "Optional. Describes who MFA enforcement actually covers. Only `all_members` is treated as full enforcement; `admins_only`, `selected_teams`, and `partial` downgrade the control to MANUAL_REVIEW_REQUIRED."
+    },
+    "notes": {
+      "type": "string",
+      "description": "Optional free-text notes about deviations, exceptions, or context."
+    }
+  }
+}

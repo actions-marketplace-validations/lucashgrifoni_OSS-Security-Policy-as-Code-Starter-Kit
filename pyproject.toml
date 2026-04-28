@@ -1,0 +1,122 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oss-policy-kit"
+version = "4.0.1"
+description = "Open source starter kit for adopting OSS security baselines via policy packs, templates, evidence, and remediation."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+requires-python = ">=3.12"
+authors = [{ name = "Lucas Henrique Grifoni" }]
+keywords = ["open-source", "security", "policy", "github-actions", "devsecops", "osps"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Security",
+]
+dependencies = [
+  "typer>=0.12.5",
+  "click>=8.1.8,<8.4",
+  "pyyaml>=6.0.1",
+  "jsonschema>=4.20",
+]
+
+[project.optional-dependencies]
+github = ["httpx>=0.27"]
+azure = ["httpx>=0.27"]
+aws = ["boto3>=1.34", "botocore>=1.34"]
+all = ["httpx>=0.27", "boto3>=1.34", "botocore>=1.34"]
+dev = [
+  "pytest>=8.0",
+  "pytest-cov>=4.1",
+  "ruff>=0.6",
+  "mypy>=1.11",
+  "bandit>=1.7.9",
+  "pip-audit>=2.7",
+  "types-PyYAML>=6.0",
+  "types-jsonschema>=4.20",
+  "build>=1.2",
+  "twine>=5.0",
+  "cyclonedx-bom>=4.0",
+  "httpx>=0.27",
+  "boto3>=1.34",
+  "botocore>=1.34",
+  "moto>=5.0.26",
+]
+
+# Third-party evaluator plugins can register custom controls via:
+#   [project.entry-points."oss_policy_kit.evaluators"]
+#   "ORG-CTRL-001" = "my_package.evaluators:eval_org_ctrl_001"
+# The callable must match: Callable[[EvalContext], EvalOutcome] with EvalContext from
+# oss_policy_kit.application.evaluators and EvalOutcome from oss_policy_kit.domain.models.
+# External plugins cannot override built-in control IDs.
+
+[project.scripts]
+oss-policy-kit = "oss_policy_kit.cli.main:main"
+
+[project.urls]
+Homepage = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit"
+Repository = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit"
+Documentation = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit#readme"
+Changelog = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/blob/main/CHANGELOG.md"
+Issues = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/issues"
+Security = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/blob/main/SECURITY.md"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# Policy payloads only (YAML/JSON). Do not use `data/**/*`: it also picks up
+# `__pycache__/*.pyc` under `data/schema/` when present locally.
+[tool.setuptools.package-data]
+oss_policy_kit = ["data/**/*.yaml", "data/**/*.json"]
+
+[tool.setuptools.exclude-package-data]
+oss_policy_kit = [
+  "**/__pycache__",
+  "**/__pycache__/**",
+  "**/*.py[co]",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+src = ["src", "tests", "scripts"]
+exclude = ["gitpage", ".venv", ".venv-ci", ".venv-smoke", "venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/oss_policy_kit/cli/main.py" = ["B008"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_configs = true
+packages = ["oss_policy_kit"]
+
+[[tool.mypy.overrides]]
+module = ["boto3.*", "botocore.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+
+[tool.coverage.run]
+source = ["oss_policy_kit"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_lines = [
+  "pragma: no cover",
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError",
+]

@@ -1,0 +1,74 @@
+name: False positive report
+description: Report a result that appears technically incorrect, misleading, or too noisy.
+title: "[False Positive]: "
+labels:
+  - false-positive
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form when the kit reported a finding that you believe is incorrect, misleading, or not applicable in the way it was classified.
+
+        Do not use this form for undisclosed security vulnerabilities.
+        Use the private reporting path described in `SECURITY.md`.
+  - type: input
+    id: profile
+    attributes:
+      label: Profile
+      description: Which bundled or custom profile produced the result?
+      placeholder: github-level-1
+    validations:
+      required: true
+  - type: input
+    id: control_id
+    attributes:
+      label: Control or finding id
+      description: Include the control id when available.
+      placeholder: GH-WF-018
+  - type: textarea
+    id: summary
+    attributes:
+      label: Why this looks wrong
+      description: Explain why the observed result is technically incorrect, misleading, or too noisy.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Provide the smallest reliable reproduction.
+      placeholder: |
+        1. Run ...
+        2. Evaluate ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+      description: What should the status, severity, or reasoning have been?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: Paste the observed status, reasoning, and any relevant report snippet.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and repository shape
+      description: Describe the target repository shape, relevant files, and any evidence JSON involved.
+  - type: input
+    id: version
+    attributes:
+      label: Kit version
+      placeholder: 4.0.0
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Python version, OS, shell, and any CI context that matters.
