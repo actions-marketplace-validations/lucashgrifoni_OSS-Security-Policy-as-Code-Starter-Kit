@@ -63,9 +63,9 @@ oss-policy-kit = "oss_policy_kit.cli.main:main"
 Homepage = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit"
 Repository = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit"
 Documentation = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit#readme"
-Changelog = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/blob/main/CHANGELOG.md"
+Changelog = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/blob/master/CHANGELOG.md"
 Issues = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/issues"
-Security = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/blob/main/SECURITY.md"
+Security = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/blob/master/SECURITY.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]

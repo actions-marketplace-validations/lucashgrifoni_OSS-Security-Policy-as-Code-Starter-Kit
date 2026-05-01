@@ -7,6 +7,7 @@ This project is intentionally small and explicit about trust boundaries. GitHub 
 ## Quick Links
 
 - [What This Kit Does](#what-this-kit-does)
+- [Current Release State](#current-release-state)
 - [Quickstart](#quickstart)
 - [CI/CD Integration](#ci-cd-integration)
 - [Validation Walkthrough](#validation-walkthrough)
@@ -24,6 +25,7 @@ This project is intentionally small and explicit about trust boundaries. GitHub 
 
 | Area | What you get |
 | --- | --- |
+| Current release | `v4.0.1` / Python package `oss-policy-kit==4.0.1` |
 | Input | A local repository clone |
 | Output | `evaluation-report.json` and `evaluation-report.md` |
 | Core scope | Clone-visible governance and GitHub/Azure/AWS CI/CD signals |
@@ -32,8 +34,24 @@ This project is intentionally small and explicit about trust boundaries. GitHub 
 | Examples | Hardened and vulnerable sample repositories |
 | Packaging | Python package with CLI and bundled policy data |
 | Positioning | Evidence and signals, not certification |
-| **Assurance (v3.0.1+)** | Each catalog control is labeled **`deterministic`**, **`signal`**, or **`evidence-backed`**; the value is copied into **`reports/0.3`** JSON and Markdown rows so consumers can reason about proof strength ( **`reports/0.3`** adds **`summary_by_gate_role`** for `--fail-on` semantics — see `docs/reports-contract-v0.3.md`; use **`--report-json-contract 0.2`** for the previous wire shape). |
+| **Assurance model** | Each catalog control is labeled **`deterministic`**, **`signal`**, or **`evidence-backed`**; the value is copied into **`reports/0.3`** JSON and Markdown rows so consumers can reason about proof strength ( **`reports/0.3`** adds **`summary_by_gate_role`** for `--fail-on` semantics — see `docs/reports-contract-v0.3.md`; use **`--report-json-contract 0.2`** for the previous wire shape). |
 | **Profiles CLI (`profiles --format json`)** | **`profile-list/v2`** adds **`family`**, **`posture`**, **`live_signal_posture`**, plus **`maturity_label`**, **`assurance_mix`**, **`is_legacy_alias`**, **`canonical_profile_id`**. Discovery flags **`--family`**, **`--only-extreme`**, **`--advisory-only`** narrow the listing. **`github-release-hardening`** remains a **legacy** alias of **`github-release-hardening-1`**. **`summary_by_status.fail == 0` is not “all-pass”** — see [docs/profiles/overview.md](docs/profiles/overview.md) and [docs/release-playbook-hardgate.md](docs/release-playbook-hardgate.md). |
+
+## Current Release State
+
+`v4.0.1` is the current public-launch release line.
+
+| Surface | Current state |
+| --- | --- |
+| Package | `oss-policy-kit==4.0.1` is published on PyPI |
+| GitHub Release | `v4.0.1` is published with wheel and sdist assets |
+| Default branch | `master` |
+| License | Apache-2.0 (`LICENSE` + `NOTICE`) |
+| Report contract | `reports/0.3` by default; `0.2` and `0.1` remain selectable for compatibility |
+| Public scope | Source, policy data, docs, examples, templates, tests, screenshots, and optional GitHub Pages site |
+| Non-public local state | Assistant notes, private planning, generated reports, build outputs, caches, local secrets, and maintainer scratch files are ignored and must not be published |
+
+The repository is designed to be reproducible from a clean clone: install the package, run the built-in examples, and compare the generated JSON/Markdown reports. Public release readiness evidence is documented under `docs/`, especially [public release readiness](docs/public-release-readiness.md), [public launch checklist](docs/public-launch-checklist.md), and [publication traceability matrix](docs/publication-traceability-matrix.md).
 
 ## Why This Exists
 
@@ -177,7 +195,7 @@ Interpret **exit codes** in pipelines: **`0`** means evaluation finished and the
 
 Artifacts in the workflow templates upload `./oss-policy-reports/` so you retain JSON and Markdown evidence even when the gate fails early.
 
-GitHub Releases for this kit include **wheels**, **sdist**, and an **SBOM** (`sbom.cyclonedx.json`) produced in the publish workflow.
+GitHub Releases for this kit include **wheel** and **sdist** distribution assets. The publish workflow also generates a CycloneDX SBOM as a CI artifact for release evidence.
 
 ## Validation Walkthrough
 
@@ -741,6 +759,10 @@ gitpage/                   Optional Vite/React site for GitHub Pages (not part o
 
 Keep generated artifacts (`out/`, `artifacts/`, `dist/`, caches, and `*.egg-info/`) untracked during local work.  
 The `screenshots/` directory is intentionally versioned because it is part of the public README walkthrough.
+
+### Public repository hygiene
+
+Only product source, packaged policy data, public documentation, examples, templates, tests, screenshots, workflow definitions, and the optional `gitpage/` site should be versioned. Local assistant state, private planning notes, generated validation reports, build outputs, dependency folders, caches, local secrets, and maintainer-only scratch directories must stay ignored.
 
 ## Documentation
 

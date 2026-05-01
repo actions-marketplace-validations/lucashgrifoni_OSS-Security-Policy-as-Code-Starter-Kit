@@ -41,6 +41,7 @@ gitpage/node_modules/
 # Local secrets and private notes
 .secrets/
 docs/superpowers/
+melhorias/
 private-notes/
 secrets/sonar.token
 
