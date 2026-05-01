@@ -42,6 +42,8 @@ _CAPTURE_TEXT_KWARGS = {
     "encoding": "utf-8",
     "errors": "replace",
 }
+_DEFAULT_OUTPUT_SUMMARY = Path("out/consumer-smoke-summary.json")
+_DEFAULT_VENV_DIR = Path(".consumer-smoke-venv")
 
 
 def _py_exe(venv_dir: Path) -> Path:
@@ -67,6 +69,14 @@ def _resolve_repo_root(value: Path) -> Path:
         raise SystemExit(f"--repo-root is not a directory: {repo_root}")
     if not (repo_root / "pyproject.toml").is_file():
         raise SystemExit(f"--repo-root must contain pyproject.toml: {repo_root}")
+    return repo_root
+
+
+def _resolve_current_repo_root(requested: Path) -> Path:
+    repo_root = _resolve_repo_root(Path.cwd())
+    requested_root = _resolve_repo_root(requested)
+    if requested_root != repo_root:
+        raise SystemExit("--repo-root must match the current working directory for consumer smoke runs.")
     return repo_root
 
 
@@ -107,7 +117,7 @@ def _validate_wheel_glob(pattern: str) -> str:
 def _resolve_venv_dir(repo_root: Path, value: Path | None) -> Path:
     venv_dir = _resolve_repo_child(
         repo_root,
-        value or Path(".consumer-smoke-venv"),
+        value or _DEFAULT_VENV_DIR,
         label="--venv-dir",
     )
     if venv_dir.exists() and not (venv_dir / "pyvenv.cfg").is_file():
@@ -186,40 +196,20 @@ def main() -> int:
         help="Repository root (default: current directory).",
     )
     parser.add_argument(
-        "--wheel-glob",
-        default=None,
-        help=(
-            "Glob relative to repo root for the wheel. "
-            "Default: the wheel matching the current project version in pyproject.toml."
-        ),
-    )
-    parser.add_argument(
-        "--venv-dir",
-        type=Path,
-        default=None,
-        help="Virtualenv directory (default: <repo-root>/.consumer-smoke-venv).",
-    )
-    parser.add_argument(
-        "--output-summary",
-        type=Path,
-        default=None,
-        help="Write JSON summary here (default: <repo-root>/out/consumer-smoke-summary.json).",
-    )
-    parser.add_argument(
         "--keep-venv",
         action="store_true",
         help="Do not delete the venv after the run.",
     )
     args = parser.parse_args()
 
-    repo_root = _resolve_repo_root(args.repo_root)
-    venv_dir = _resolve_venv_dir(repo_root, args.venv_dir)
+    repo_root = _resolve_current_repo_root(args.repo_root)
+    venv_dir = _resolve_venv_dir(repo_root, None)
     out_summary = _resolve_repo_child(
         repo_root,
-        args.output_summary or Path("out/consumer-smoke-summary.json"),
-        label="--output-summary",
+        _DEFAULT_OUTPUT_SUMMARY,
+        label="output summary",
     )
-    wheel = resolve_wheel(repo_root, args.wheel_glob)
+    wheel = resolve_wheel(repo_root)
 
     if venv_dir.is_dir():
         _remove_virtualenv(repo_root, venv_dir)
@@ -250,9 +240,9 @@ def main() -> int:
         check=True,
     )
     kit_root = proc_kit.stdout.strip()
-    examples_hardened = repo_root / "examples" / "hardened-repo"
-    examples_vuln = repo_root / "examples" / "vulnerable-repo"
-    invalid_wf = repo_root / "tests" / "fixtures" / "repositories" / "invalid-workflow-target"
+    examples_hardened = Path("examples") / "hardened-repo"
+    examples_vuln = Path("examples") / "vulnerable-repo"
+    invalid_wf = Path("tests") / "fixtures" / "repositories" / "invalid-workflow-target"
     waivers = examples_hardened / "waivers" / "waivers.yaml"
 
     steps: list[SmokeStep] = []
@@ -271,11 +261,11 @@ def main() -> int:
             "oss_policy_kit",
             "evaluate",
             "--target",
-            str(repo_root),
+            ".",
             "--profile",
             "github-level-1",
             "--output-dir",
-            str(repo_root / "out" / "consumer-smoke-selfcheck"),
+            os.fspath(Path("out") / "consumer-smoke-selfcheck"),
             "--format",
             "json",
         ],
@@ -288,11 +278,11 @@ def main() -> int:
             "oss_policy_kit",
             "evaluate",
             "--target",
-            str(examples_hardened),
+            os.fspath(examples_hardened),
             "--profile",
             "github-level-1",
             "--output-dir",
-            str(repo_root / "out" / "consumer-smoke-hardened"),
+            os.fspath(Path("out") / "consumer-smoke-hardened"),
         ],
         0,
     )
@@ -303,11 +293,11 @@ def main() -> int:
             "oss_policy_kit",
             "evaluate",
             "--target",
-            str(examples_vuln),
+            os.fspath(examples_vuln),
             "--profile",
             "github-level-1",
             "--output-dir",
-            str(repo_root / "out" / "consumer-smoke-vuln"),
+            os.fspath(Path("out") / "consumer-smoke-vuln"),
         ],
         0,
     )
@@ -318,17 +308,17 @@ def main() -> int:
             "oss_policy_kit",
             "evaluate",
             "--target",
-            str(examples_vuln),
+            os.fspath(examples_vuln),
             "--profile",
             "github-level-1",
             "--output-dir",
-            str(repo_root / "out" / "consumer-smoke-vuln-fail"),
+            os.fspath(Path("out") / "consumer-smoke-vuln-fail"),
             "--fail-on",
             "fail",
         ],
         1,
     )
-    if invalid_wf.is_dir():
+    if (repo_root / invalid_wf).is_dir():
         add(
             "invalid_fail_on_degraded",
             [
@@ -336,11 +326,11 @@ def main() -> int:
                 "oss_policy_kit",
                 "evaluate",
                 "--target",
-                str(invalid_wf),
+                os.fspath(invalid_wf),
                 "--profile",
                 "github-level-1",
                 "--output-dir",
-                str(repo_root / "out" / "consumer-smoke-invalid-degraded"),
+                os.fspath(Path("out") / "consumer-smoke-invalid-degraded"),
                 "--fail-on",
                 "degraded",
             ],
@@ -353,13 +343,13 @@ def main() -> int:
             "oss_policy_kit",
             "evaluate",
             "--target",
-            str(examples_hardened),
+            os.fspath(examples_hardened),
             "--profile",
             "github-level-1",
             "--waivers",
-            str(waivers),
+            os.fspath(waivers),
             "--output-dir",
-            str(repo_root / "out" / "consumer-smoke-waivers"),
+            os.fspath(Path("out") / "consumer-smoke-waivers"),
         ],
         0,
     )
@@ -370,13 +360,13 @@ def main() -> int:
             "oss_policy_kit",
             "evaluate",
             "--target",
-            str(examples_hardened),
+            os.fspath(examples_hardened),
             "--profile",
             "github-level-1",
             "--kit-root",
             kit_root,
             "--output-dir",
-            str(repo_root / "out" / "consumer-smoke-kit-root"),
+            os.fspath(Path("out") / "consumer-smoke-kit-root"),
         ],
         0,
     )
