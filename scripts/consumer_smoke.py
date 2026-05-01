@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import tomllib
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -49,6 +50,93 @@ def _py_exe(venv_dir: Path) -> Path:
     return venv_dir / "bin" / "python"
 
 
+def _is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True
+
+
+def _resolve_repo_root(value: Path) -> Path:
+    try:
+        repo_root = value.expanduser().resolve(strict=True)
+    except FileNotFoundError as exc:
+        raise SystemExit(f"--repo-root does not exist: {value}") from exc
+    if not repo_root.is_dir():
+        raise SystemExit(f"--repo-root is not a directory: {repo_root}")
+    if not (repo_root / "pyproject.toml").is_file():
+        raise SystemExit(f"--repo-root must contain pyproject.toml: {repo_root}")
+    return repo_root
+
+
+def _resolve_repo_child(
+    repo_root: Path,
+    value: Path,
+    *,
+    label: str,
+    must_exist: bool = False,
+    allow_repo_root: bool = False,
+) -> Path:
+    expanded = value.expanduser()
+    candidate = expanded if expanded.is_absolute() else repo_root / expanded
+    try:
+        resolved = candidate.resolve(strict=must_exist)
+    except FileNotFoundError as exc:
+        raise SystemExit(f"{label} does not exist: {candidate}") from exc
+    if not _is_relative_to(resolved, repo_root):
+        raise SystemExit(f"{label} must stay inside --repo-root: {resolved}")
+    if not allow_repo_root and resolved == repo_root:
+        raise SystemExit(f"{label} must not point at the repository root: {resolved}")
+    return resolved
+
+
+def _validate_wheel_glob(pattern: str) -> str:
+    pattern_path = Path(pattern)
+    if pattern_path.is_absolute() or pattern_path.drive or pattern_path.root:
+        raise SystemExit("--wheel-glob must be relative to --repo-root.")
+    if any(part == ".." for part in pattern_path.parts):
+        raise SystemExit("--wheel-glob must not contain parent-directory traversal.")
+    if not pattern_path.parts or pattern_path.parts[0] != "dist":
+        raise SystemExit("--wheel-glob must resolve under the repository dist/ directory.")
+    if not pattern.endswith(".whl"):
+        raise SystemExit("--wheel-glob must select wheel artifacts ending in .whl.")
+    return pattern
+
+
+def _resolve_venv_dir(repo_root: Path, value: Path | None) -> Path:
+    venv_dir = _resolve_repo_child(
+        repo_root,
+        value or Path(".consumer-smoke-venv"),
+        label="--venv-dir",
+    )
+    if venv_dir.exists() and not (venv_dir / "pyvenv.cfg").is_file():
+        raise SystemExit(f"--venv-dir exists but is not a virtualenv: {venv_dir}")
+    return venv_dir
+
+
+def _remove_virtualenv(repo_root: Path, venv_dir: Path, *, ignore_errors: bool = False) -> None:
+    safe_venv_dir = _resolve_repo_child(repo_root, venv_dir, label="virtualenv cleanup target", must_exist=True)
+    if not safe_venv_dir.is_dir() or not (safe_venv_dir / "pyvenv.cfg").is_file():
+        raise SystemExit(f"Refusing to remove non-virtualenv directory: {safe_venv_dir}")
+    shutil.rmtree(safe_venv_dir, ignore_errors=ignore_errors)
+
+
+def _safe_python_exe(venv_dir: Path) -> Path:
+    py = _py_exe(venv_dir).resolve(strict=True)
+    if not _is_relative_to(py, venv_dir):
+        raise SystemExit(f"Virtualenv Python resolved outside --venv-dir: {py}")
+    return py
+
+
+def _safe_subprocess_argv(py: Path, argv: Sequence[str]) -> list[str]:
+    py_arg = os.fspath(py)
+    safe_args = [str(arg) for arg in argv]
+    if any("\x00" in arg for arg in [py_arg, *safe_args]):
+        raise SystemExit("Refusing to execute subprocess arguments containing NUL bytes.")
+    return [py_arg, *safe_args]
+
+
 def _load_project_dist(repo_root: Path) -> ProjectDist:
     pyproject = repo_root / "pyproject.toml"
     if not pyproject.is_file():
@@ -66,8 +154,11 @@ def _load_project_dist(repo_root: Path) -> ProjectDist:
 
 def resolve_wheel(repo_root: Path, wheel_glob: str | None = None) -> Path:
     project = _load_project_dist(repo_root)
-    pattern = wheel_glob or f"dist/{project.dist_stem}-{project.version}-*.whl"
-    matches = sorted(repo_root.glob(pattern))
+    pattern = _validate_wheel_glob(wheel_glob or f"dist/{project.dist_stem}-{project.version}-*.whl")
+    matches = sorted(
+        _resolve_repo_child(repo_root, path, label="wheel artifact", must_exist=True)
+        for path in repo_root.glob(pattern)
+    )
     if not matches:
         msg = f"No wheel found under {repo_root} matching {pattern}. Run python -m build first."
         raise SystemExit(msg)
@@ -75,11 +166,14 @@ def resolve_wheel(repo_root: Path, wheel_glob: str | None = None) -> Path:
         joined = ", ".join(str(path.name) for path in matches)
         msg = f"Expected exactly one wheel for pattern {pattern}, found {len(matches)}: {joined}"
         raise SystemExit(msg)
-    return matches[0]
+    wheel = matches[0]
+    if not _is_relative_to(wheel, repo_root / "dist") or wheel.suffix != ".whl":
+        raise SystemExit(f"Resolved wheel must stay under dist/ and end in .whl: {wheel}")
+    return wheel
 
 
-def _run(py: Path, argv: list[str], *, cwd: Path) -> int:
-    proc = subprocess.run([str(py), *argv], cwd=cwd, **_CAPTURE_TEXT_KWARGS)
+def _run(py: Path, argv: Sequence[str], *, cwd: Path) -> int:
+    proc = subprocess.run(_safe_subprocess_argv(py, argv), cwd=cwd, shell=False, **_CAPTURE_TEXT_KWARGS)
     return int(proc.returncode)
 
 
@@ -118,30 +212,40 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    repo_root = args.repo_root.resolve()
-    venv_dir = (args.venv_dir or (repo_root / ".consumer-smoke-venv")).resolve()
-    out_summary = args.output_summary or (repo_root / "out" / "consumer-smoke-summary.json")
+    repo_root = _resolve_repo_root(args.repo_root)
+    venv_dir = _resolve_venv_dir(repo_root, args.venv_dir)
+    out_summary = _resolve_repo_child(
+        repo_root,
+        args.output_summary or Path("out/consumer-smoke-summary.json"),
+        label="--output-summary",
+    )
     wheel = resolve_wheel(repo_root, args.wheel_glob)
 
     if venv_dir.is_dir():
-        shutil.rmtree(venv_dir)
+        _remove_virtualenv(repo_root, venv_dir)
 
     subprocess.run(
         [sys.executable, "-m", "venv", str(venv_dir)],
         cwd=repo_root,
+        shell=False,
         check=True,
     )
-    py = _py_exe(venv_dir)
+    py = _safe_python_exe(venv_dir)
 
     subprocess.run(
-        [str(py), "-m", "pip", "install", "--upgrade", "pip", str(wheel)],
+        _safe_subprocess_argv(py, ["-m", "pip", "install", "--upgrade", "pip", str(wheel)]),
         cwd=repo_root,
+        shell=False,
         check=True,
     )
 
     proc_kit = subprocess.run(
-        [str(py), "-c", "from oss_policy_kit.application.loader import bundled_kit_root; print(bundled_kit_root())"],
+        _safe_subprocess_argv(
+            py,
+            ["-c", "from oss_policy_kit.application.loader import bundled_kit_root; print(bundled_kit_root())"],
+        ),
         cwd=repo_root,
+        shell=False,
         **_CAPTURE_TEXT_KWARGS,
         check=True,
     )
@@ -309,7 +413,7 @@ def main() -> int:
     md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     if not args.keep_venv:
-        shutil.rmtree(venv_dir, ignore_errors=True)
+        _remove_virtualenv(repo_root, venv_dir, ignore_errors=True)
 
     if mismatches:
         print(f"Smoke mismatches: {', '.join(mismatches)}", file=sys.stderr)

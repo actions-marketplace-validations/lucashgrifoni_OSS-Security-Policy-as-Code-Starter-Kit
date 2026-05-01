@@ -44,6 +44,30 @@ def test_consumer_smoke_fails_when_current_version_wheel_is_ambiguous(tmp_path: 
         consumer_smoke.resolve_wheel(tmp_path)
 
 
+def test_consumer_smoke_rejects_wheel_glob_outside_dist(tmp_path: Path) -> None:
+    _write_pyproject(tmp_path)
+
+    with pytest.raises(SystemExit, match="parent-directory"):
+        consumer_smoke.resolve_wheel(tmp_path, "../*.whl")
+
+
+def test_consumer_smoke_rejects_venv_dir_outside_repo(tmp_path: Path) -> None:
+    repo_root = tmp_path.resolve()
+    outside = repo_root.parent / "outside-consumer-smoke-venv"
+
+    with pytest.raises(SystemExit, match="inside --repo-root"):
+        consumer_smoke._resolve_venv_dir(repo_root, outside)
+
+
+def test_consumer_smoke_rejects_existing_non_virtualenv_dir(tmp_path: Path) -> None:
+    repo_root = tmp_path.resolve()
+    unsafe_target = repo_root / "src"
+    unsafe_target.mkdir()
+
+    with pytest.raises(SystemExit, match="not a virtualenv"):
+        consumer_smoke._resolve_venv_dir(repo_root, unsafe_target)
+
+
 def test_twine_check_dist_uses_only_current_version_artifacts(tmp_path: Path) -> None:
     _write_pyproject(tmp_path)
     dist = tmp_path / "dist"
