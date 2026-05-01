@@ -37,6 +37,11 @@
 # the workflow level and, when applicable, tightened at job level. On private
 # repositories, SARIF upload and Dependency Review require GitHub Advanced
 # Security; on public repositories both are free.
+#
+# Set repository variable ENABLE_CODE_SCANNING_UPLOAD=true only when GitHub
+# Code Scanning/SARIF uploads are available for the repository. Without it,
+# scanners still run, but SARIF upload jobs are skipped to keep private-repo
+# pre-launch validation reproducible.
 
 name: Security CI/CD
 
@@ -110,7 +115,7 @@ jobs:
             .
 
       - name: Upload Semgrep SARIF
-        if: ${{ always() && hashFiles('semgrep.sarif') != '' }}
+        if: ${{ always() && vars.ENABLE_CODE_SCANNING_UPLOAD == 'true' && hashFiles('semgrep.sarif') != '' }}
         uses: github/codeql-action/upload-sarif@ce64ddcb0d8d890d2df4a9d1c04ff297367dea2a # v3
         with:
           sarif_file: semgrep.sarif
@@ -157,7 +162,7 @@ jobs:
           --sarif-file-output=snyk-code.sarif
 
       - name: Upload Snyk Code SARIF
-        if: ${{ always() && env.SNYK_TOKEN != '' && hashFiles('snyk-code.sarif') != '' }}
+        if: ${{ always() && vars.ENABLE_CODE_SCANNING_UPLOAD == 'true' && env.SNYK_TOKEN != '' && hashFiles('snyk-code.sarif') != '' }}
         uses: github/codeql-action/upload-sarif@ce64ddcb0d8d890d2df4a9d1c04ff297367dea2a # v3
         with:
           sarif_file: snyk-code.sarif
@@ -165,6 +170,7 @@ jobs:
 
   sast-codeql:
     name: SAST - CodeQL
+    if: ${{ vars.ENABLE_CODE_SCANNING_UPLOAD == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -242,7 +248,7 @@ jobs:
           --sarif-file-output=snyk-oss.sarif
 
       - name: Upload Snyk Open Source SARIF
-        if: ${{ always() && env.SNYK_TOKEN != '' && hashFiles('snyk-oss.sarif') != '' }}
+        if: ${{ always() && vars.ENABLE_CODE_SCANNING_UPLOAD == 'true' && env.SNYK_TOKEN != '' && hashFiles('snyk-oss.sarif') != '' }}
         uses: github/codeql-action/upload-sarif@ce64ddcb0d8d890d2df4a9d1c04ff297367dea2a # v3
         with:
           sarif_file: snyk-oss.sarif
@@ -280,7 +286,7 @@ jobs:
           skip-dirs: ${{ env.TRIVY_SKIP_DIRS }}
 
       - name: Upload Trivy dependency SARIF
-        if: ${{ always() && hashFiles('trivy-deps.sarif') != '' }}
+        if: ${{ always() && vars.ENABLE_CODE_SCANNING_UPLOAD == 'true' && hashFiles('trivy-deps.sarif') != '' }}
         uses: github/codeql-action/upload-sarif@ce64ddcb0d8d890d2df4a9d1c04ff297367dea2a # v3
         with:
           sarif_file: trivy-deps.sarif
@@ -317,7 +323,7 @@ jobs:
           skip-dirs: ${{ env.TRIVY_SKIP_DIRS }}
 
       - name: Upload Trivy IaC SARIF
-        if: ${{ always() && hashFiles('trivy-iac.sarif') != '' }}
+        if: ${{ always() && vars.ENABLE_CODE_SCANNING_UPLOAD == 'true' && hashFiles('trivy-iac.sarif') != '' }}
         uses: github/codeql-action/upload-sarif@ce64ddcb0d8d890d2df4a9d1c04ff297367dea2a # v3
         with:
           sarif_file: trivy-iac.sarif
@@ -354,7 +360,7 @@ jobs:
           skip-dirs: ${{ env.TRIVY_SKIP_DIRS }}
 
       - name: Upload Trivy secrets SARIF
-        if: ${{ always() && hashFiles('trivy-secrets.sarif') != '' }}
+        if: ${{ always() && vars.ENABLE_CODE_SCANNING_UPLOAD == 'true' && hashFiles('trivy-secrets.sarif') != '' }}
         uses: github/codeql-action/upload-sarif@ce64ddcb0d8d890d2df4a9d1c04ff297367dea2a # v3
         with:
           sarif_file: trivy-secrets.sarif
@@ -383,6 +389,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+          GITLEAKS_CONFIG: ".gitleaks.toml"
           GITLEAKS_ENABLE_COMMENTS: "false"
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
           GITLEAKS_ENABLE_SUMMARY: "true"

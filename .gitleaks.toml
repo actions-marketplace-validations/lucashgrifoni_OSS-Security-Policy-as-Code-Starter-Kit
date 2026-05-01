@@ -1,0 +1,5 @@
+[allowlist]
+description = "Allow deterministic fake credentials used only by parser regression tests."
+regexes = [
+  '''AKIA1234567890ABCDEF''',
+]
