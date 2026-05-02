@@ -71,13 +71,9 @@ jobs:
         run: |
           python -m oss_policy_kit evaluate --target ./examples/hardened-repo --profile github-level-1 --output-dir ./out/ci-hardened-example
 
-      - name: Self-check pass demo (github-level-1)
+      - name: Self-check (github-level-1)
         run: |
-          python -m oss_policy_kit evaluate --target . --profile github-level-1 --output-dir ./out/github-pass-demo --fail-on fail
-
-      - name: Self-check fail demo (github-level-1)
-        run: |
-          python -m oss_policy_kit evaluate --target ./examples/vulnerable-repo --profile github-level-1 --output-dir ./out/github-fail-demo --fail-on fail
+          python -m oss_policy_kit evaluate --target . --profile github-level-1 --output-dir ./out/selfcheck-ci --fail-on fail
 
   package:
     name: Package (build, twine, SBOM)

@@ -377,16 +377,20 @@ Use this mode when you want the job to:
 2. write `evaluation-report.json` and `evaluation-report.md`
 3. fail the CI step only after the evidence is available for review
 
-That behavior matters. A blocked pipeline should still leave behind actionable evidence. The screenshot below illustrates that exact pattern: the reports were written first, and the step ended with exit code `1` because the selected threshold was violated.
+That behavior matters. A blocked pipeline should still leave behind actionable evidence. The screenshots below are sanitized real CI runs that show both outcomes: a passing GitHub self-check against the current repository shape, a failing GitHub gate against the intentionally vulnerable fixture, and the same failure pattern in Azure Pipelines on an Ubuntu/Linux agent.
 
 <p align="center">
-  <img src="./screenshots/07-ci-gate.png" alt="GitHub Actions step showing reports written before the process completes with exit code 1 under fail-on fail." width="960">
+  <img src="./screenshots/10-github-actions-selfcheck-pass.png" alt="GitHub Actions self-check pass demo for github-level-1 showing pass=14." width="960">
 </p>
 
-The same gate pattern also works in Azure Pipelines on an Ubuntu/Linux agent. Keep the output directory as a published pipeline artifact so reviewers can inspect the JSON and Markdown reports even when `--fail-on fail` blocks the job. The image below is a sanitized failure-path example; it is not a status claim for the current repository revision.
+<p align="center">
+  <img src="./screenshots/11-github-actions-selfcheck-fail.png" alt="GitHub Actions self-check fail demo for github-level-1 against the vulnerable fixture showing fail=11, manual-review-required=1, and exit code 1." width="960">
+</p>
+
+Keep the output directory as a published pipeline artifact so reviewers can inspect the JSON and Markdown reports even when `--fail-on fail` blocks the job. The Azure example is a failure-path demo against a minimal target; it is not a status claim for the current repository revision.
 
 <p align="center">
-  <img src="./screenshots/10-azure-pipelines-ubuntu-gate.png" alt="Sanitized Azure Pipelines Ubuntu agent step showing azure-level-1 reports written before Bash exits with code 1 under fail-on fail." width="960">
+  <img src="./screenshots/12-azure-pipelines-selfcheck-fail.png" alt="Sanitized Azure Pipelines Ubuntu agent step showing azure-level-1 reports written before Bash exits with code 1 under fail-on fail." width="960">
 </p>
 
 ## CLI Usage

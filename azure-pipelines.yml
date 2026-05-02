@@ -28,6 +28,7 @@ variables:
   pythonCmd: "python3.12"
   venvDir: ".venv-ci"
   venvPython: ".venv-ci/bin/python"
+  pipCacheDir: "$(Pipeline.Workspace)/.pip-cache"
 
 stages:
   - stage: quality
@@ -39,6 +40,7 @@ stages:
         steps:
           - checkout: self
             clean: true
+            fetchDepth: 1
 
           - script: |
               mkdir -p test-results security-results out/selfcheck-ci out/ci-hardened-example
@@ -50,16 +52,27 @@ stages:
               $(pythonCmd) --version
             displayName: Select supported Python version
 
+          - task: Cache@2
+            displayName: Restore pip cache
+            inputs:
+              key: 'pip | "$(Agent.OS)" | "$(pythonVersion)" | quality | pyproject.toml'
+              restoreKeys: |
+                pip | "$(Agent.OS)" | "$(pythonVersion)"
+              path: $(pipCacheDir)
+
           - script: |
               mkdir -p test-results security-results out/selfcheck-ci out/ci-hardened-example
               $(pythonCmd) -m venv $(venvDir)
               $(venvPython) -m pip install --upgrade pip
-              $(venvPython) -m pip cache purge || true
             displayName: Create CI virtualenv
+            env:
+              PIP_CACHE_DIR: $(pipCacheDir)
 
           - script: |
-              $(venvPython) -m pip install --no-cache-dir -e ".[dev]"
+              $(venvPython) -m pip install -e ".[dev]"
             displayName: Install project and dev dependencies
+            env:
+              PIP_CACHE_DIR: $(pipCacheDir)
 
           - script: $(venvPython) -m ruff check .
             displayName: Ruff check
@@ -104,8 +117,8 @@ stages:
             displayName: Evaluate hardened example
 
           - script: |
-              $(venvPython) -m oss_policy_kit evaluate --target ./tests/fixtures/repositories/azure-minimal-target --profile azure-level-1 --output-dir ./out/selfcheck-ci --fail-on fail
-            displayName: Self-check fail demo (azure-level-1)
+              $(venvPython) -m oss_policy_kit evaluate --target . --profile azure-level-1 --output-dir ./out/selfcheck-ci --fail-on fail
+            displayName: Self-check (azure-level-1)
 
           - task: PublishPipelineArtifact@1
             displayName: Publish security scan artifacts
@@ -134,6 +147,7 @@ stages:
         steps:
           - checkout: self
             clean: true
+            fetchDepth: 1
 
           - script: |
               mkdir -p dist
@@ -145,13 +159,21 @@ stages:
               $(pythonCmd) --version
             displayName: Select supported Python version
 
+          - task: Cache@2
+            displayName: Restore pip cache
+            inputs:
+              key: 'pip | "$(Agent.OS)" | "$(pythonVersion)" | package | pyproject.toml'
+              restoreKeys: |
+                pip | "$(Agent.OS)" | "$(pythonVersion)"
+              path: $(pipCacheDir)
+
           - script: |
               $(pythonCmd) -m venv $(venvDir)
               $(venvPython) -m pip install --upgrade pip
-              $(venvPython) -m pip cache purge || true
-              $(venvPython) -m pip install --no-cache-dir build twine cyclonedx-bom
-              $(venvPython) -m pip install --no-cache-dir -e ".[dev]"
+              $(venvPython) -m pip install build twine cyclonedx-bom
             displayName: Install packaging tools
+            env:
+              PIP_CACHE_DIR: $(pipCacheDir)
 
           - script: |
               rm -rf dist build src/*.egg-info
@@ -174,10 +196,12 @@ stages:
                 echo "No wheel found under dist/" >&2
                 exit 1
               fi
-              python -m pip install --no-cache-dir "$wheel_path"
+              python -m pip install "$wheel_path"
               python -m oss_policy_kit --help
               python -m oss_policy_kit evaluate --help
             displayName: Smoke install wheel
+            env:
+              PIP_CACHE_DIR: $(pipCacheDir)
 
           - task: PublishPipelineArtifact@1
             displayName: Publish distribution artifacts
