@@ -104,8 +104,8 @@ stages:
             displayName: Evaluate hardened example
 
           - script: |
-              $(venvPython) -m oss_policy_kit --target . --profile azure-level-1 --output-dir ./out/selfcheck-ci --fail-on fail
-            displayName: Self-check
+              $(venvPython) -m oss_policy_kit evaluate --target . --profile azure-level-1 --output-dir ./out/selfcheck-ci --fail-on fail
+            displayName: Self-check (azure-level-1)
 
           - task: PublishPipelineArtifact@1
             displayName: Publish security scan artifacts

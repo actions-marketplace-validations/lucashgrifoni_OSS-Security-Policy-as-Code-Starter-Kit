@@ -383,6 +383,12 @@ That behavior matters. A blocked pipeline should still leave behind actionable e
   <img src="./screenshots/07-ci-gate.png" alt="GitHub Actions step showing reports written before the process completes with exit code 1 under fail-on fail." width="960">
 </p>
 
+The same gate pattern also works in Azure Pipelines on an Ubuntu/Linux agent. Keep the output directory as a published pipeline artifact so reviewers can inspect the JSON and Markdown reports even when `--fail-on fail` blocks the job. The image below is a sanitized failure-path example; it is not a status claim for the current repository revision.
+
+<p align="center">
+  <img src="./screenshots/10-azure-pipelines-ubuntu-gate.png" alt="Sanitized Azure Pipelines Ubuntu agent step showing azure-level-1 reports written before Bash exits with code 1 under fail-on fail." width="960">
+</p>
+
 ## CLI Usage
 
 ### Public Contract
