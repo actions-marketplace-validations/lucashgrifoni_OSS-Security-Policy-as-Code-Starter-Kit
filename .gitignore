@@ -48,7 +48,6 @@ secrets/sonar.token
 # Maintainer-private planning documents kept at the repository root.
 # These are never intended for the public mirror; pinning them here prevents
 # `git add -A` / `git add .` from accidentally staging them during a release freeze.
-/Critérios obrigatórios.txt
 /Crit*.txt
 /Criterios*.txt
 /Secrets*.txt

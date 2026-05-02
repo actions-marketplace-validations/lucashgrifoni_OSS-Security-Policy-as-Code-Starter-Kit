@@ -40,8 +40,8 @@
 #
 # Set repository variable ENABLE_CODE_SCANNING_UPLOAD=true only when GitHub
 # Code Scanning/SARIF uploads are available for the repository. Without it,
-# scanners still run, but SARIF upload jobs are skipped to keep private-repo
-# pre-launch validation reproducible.
+# scanners still run, but SARIF upload jobs are skipped so validation remains
+# reproducible even when the Code Scanning upload API is unavailable.
 
 name: Security CI/CD
 

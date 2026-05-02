@@ -31,7 +31,7 @@ def _report_with_summary(summary: dict[str, int]) -> ExecutionReport:
         schema_version="https://example/reports/0.1",
         generated_at="2026-01-01T00:00:00Z",
         kit_version="1.0.2",
-        target_path="/tmp/repo",
+        target_path="repo-under-test",
         profile_id="github-level-1",
         profile_title="GitHub Level 1",
         summary_by_status=summary,
@@ -45,7 +45,7 @@ def test_print_stdout_summary_human_includes_canonical_order_and_total(capsys: p
     print_stdout_summary(report, output_format="human")
     out = capsys.readouterr().out.strip()
     assert "Profile: github-level-1" in out
-    assert "Target: /tmp/repo" in out
+    assert "Target: repo-under-test" in out
     assert "fail=1" in out
     assert "pass=10" in out
     assert "manual-review-required=2" in out
@@ -71,7 +71,7 @@ def test_print_stdout_summary_top_gaps_use_reason_not_positive_title(capsys: pyt
         schema_version="https://example/reports/0.1",
         generated_at="2026-01-01T00:00:00Z",
         kit_version="1.0.2",
-        target_path="/tmp/repo",
+        target_path="repo-under-test",
         profile_id="github-level-1",
         profile_title="GitHub Level 1",
         summary_by_status={"fail": 1},

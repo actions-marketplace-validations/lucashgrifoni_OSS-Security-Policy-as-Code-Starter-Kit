@@ -20,7 +20,7 @@ function resolveGithubRepoUrl(fromEnv: string | undefined): string {
 
 function resolveDocsReadmeUrl(fromEnv: string | undefined, repoUrl: string): string {
   const t = fromEnv?.trim();
-  if (!t || isLegacyGithubSearchUrl(t)) return `${repoUrl}/tree/main/docs`;
+  if (!t || isLegacyGithubSearchUrl(t)) return `${repoUrl}/tree/master/docs`;
   return t;
 }
 

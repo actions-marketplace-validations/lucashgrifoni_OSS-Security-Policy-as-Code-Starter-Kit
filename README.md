@@ -45,9 +45,10 @@ This project is intentionally small and explicit about trust boundaries. GitHub 
 | --- | --- |
 | Package | `oss-policy-kit==4.0.1` is published on PyPI |
 | GitHub Release | `v4.0.1` is published with wheel and sdist assets |
-| Default branch | `master` |
+| Default branch | `master`; it may contain documentation, site, or CI hygiene commits after the immutable `v4.0.1` tag |
 | License | Apache-2.0 (`LICENSE` + `NOTICE`) |
 | Report contract | `reports/0.3` by default; `0.2` and `0.1` remain selectable for compatibility |
+| Security workflow | Scanners run in `Security CI/CD`; SARIF upload is gated by `ENABLE_CODE_SCANNING_UPLOAD=true` so validation does not fail when Code Scanning upload APIs are unavailable |
 | Public scope | Source, policy data, docs, examples, templates, tests, screenshots, and optional GitHub Pages site |
 | Non-public local state | Assistant notes, private planning, generated reports, build outputs, caches, local secrets, and maintainer scratch files are ignored and must not be published |
 
@@ -286,7 +287,7 @@ python -m pytest -q
 The passing test run below is evidence that the implementation is stable at the code level, not just at the documentation level.
 
 <p align="center">
-  <img src="./screenshots/03-test-suite.png" alt="Pytest output showing the automated test suite passing with 373 passed and 1 skipped." width="960">
+  <img src="./screenshots/03-test-suite.png" alt="Pytest output showing the automated test suite passing with 408 passed and 1 skipped." width="960">
 </p>
 
 Then run a maintainer self-check when you want to know whether the repository itself satisfies the chosen baseline in its current revision:
@@ -295,10 +296,10 @@ Then run a maintainer self-check when you want to know whether the repository it
 python -m oss_policy_kit evaluate --target . --profile github-level-1 --output-dir ./out/selfcheck
 ```
 
-This is the command to use when validating the repository before release, before documentation updates, or after changing workflows and governance files. The screenshot below shows the current repository revision producing `pass=13, fail=1` on `github-level-1`, which is the honest current self-check state.
+This is the command to use when validating the repository before release, before documentation updates, or after changing workflows and governance files. The current repository revision produces `pass=14` on `github-level-1`; generated reports under `./out/selfcheck` remain the source of truth for the exact commit being evaluated.
 
 <p align="center">
-  <img src="./screenshots/04-selfcheck-current.png" alt="Current repository self-check report showing pass=13 and fail=1 for github-level-1." width="960">
+  <img src="./screenshots/04-selfcheck-current.png" alt="Current repository self-check report for github-level-1." width="960">
 </p>
 
 ### 5. Compare Known-Good And Known-Bad Fixtures
@@ -762,7 +763,7 @@ The `screenshots/` directory is intentionally versioned because it is part of th
 
 ### Public repository hygiene
 
-Only product source, packaged policy data, public documentation, examples, templates, tests, screenshots, workflow definitions, and the optional `gitpage/` site should be versioned. Local assistant state, private planning notes, generated validation reports, build outputs, dependency folders, caches, local secrets, and maintainer-only scratch directories must stay ignored.
+Only product source, packaged policy data, public documentation, examples, templates, tests, screenshots, workflow definitions, and the optional `gitpage/` site should be versioned. Local assistant state, private planning notes, generated validation reports, build outputs, dependency folders, caches, local secrets, and maintainer-only scratch directories must stay ignored and must not be recovered into the public mirror.
 
 ## Documentation
 
