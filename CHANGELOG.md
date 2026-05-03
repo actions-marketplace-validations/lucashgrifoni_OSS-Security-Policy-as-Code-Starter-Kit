@@ -6,6 +6,45 @@ This changelog follows the same public-facing format used by the GitHub release 
 
 ---
 
+## OSS Security Policy as Code Starter Kit v4.0.2
+
+This patch release consolidates documentation, release hygiene, and CI hygiene improvements that landed after v4.0.1. It does not change runtime behavior, bundled profiles, the control catalog, evaluator logic, CLI flags, report schemas, or packaged policy data.
+
+---
+
+### Highlights
+
+- Updated public launch documentation to reflect the current release state
+- Added sanitized real CI screenshots for GitHub Actions and Azure Pipelines self-check flows
+- Improved workflow self-check commands to use the supported `evaluate` subcommand
+- Refined Azure Pipelines execution hygiene with pip caching and shallow checkout behavior
+- Preserved the v4.0.1 release as immutable while promoting the current public repository state into v4.0.2
+
+---
+
+### Improvements
+
+- Better public release traceability between README, screenshots, CI examples, and repository state
+- Clearer documentation of what is included in the public repository and what remains outside the public mirror
+- Improved CI example accuracy through real sanitized pass/fail self-check evidence
+- Cleaner repository hygiene through safer ignore patterns for maintainer-private working notes
+- Improved cross-platform CLI test stability by avoiding Linux-specific path assumptions in test expectations
+
+---
+
+### Notes
+
+- This is a patch release in the 4.0.x line
+- No runtime, schema, CLI, control, evaluator, or bundled profile behavior changes are introduced relative to v4.0.1
+- The v4.0.1 tag remains immutable and is not moved
+- This release focuses on publication readiness, documentation accuracy, CI hygiene, and release traceability
+
+---
+
+**License:** Apache-2.0.
+
+---
+
 ## OSS Security Policy as Code Starter Kit v4.0.1
 
 This public-launch patch release promotes the validated launch candidate into the official 4.0.1 release without changing runtime behavior, bundled profiles, control catalog, evaluator logic, CLI flags, report schemas, or packaged policy data.

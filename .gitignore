@@ -43,6 +43,8 @@ gitpage/node_modules/
 docs/superpowers/
 private-notes/
 secrets/sonar.token
+# Maintainer-private working notes folder kept outside the public mirror.
+/melhorias/
 
 # Maintainer-private planning documents kept at the repository root.
 # These are never intended for the public mirror; pinning them here prevents
