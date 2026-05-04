@@ -4,16 +4,21 @@ Evaluate clone-visible OSS repository governance plus GitHub Actions, Azure Pipe
 
 This project is intentionally small and explicit about trust boundaries. GitHub support is the most mature path today; Azure and AWS support are clone-based and evidence-driven rather than live platform verification.
 
+Operational privacy: evaluation is local and clone-visible by default. API-backed evidence collection runs only when explicitly invoked, and should be scoped to the platform/repository being assessed.
+
 ## Quick Links
 
 - [What This Kit Does](#what-this-kit-does)
 - [Current Release State](#current-release-state)
+- [Recommended First Command](#recommended-first-command)
 - [Quickstart](#quickstart)
 - [CI/CD Integration](#ci-cd-integration)
 - [Validation Walkthrough](#validation-walkthrough)
 - [CLI Usage](#cli-usage)
 - [How To Interpret Results](#how-to-interpret-results)
 - [Adoption Paths](#adoption-paths)
+- [CHANGELOG.md](CHANGELOG.md)
+- [GitHub Releases](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/releases)
 - [Bundled profiles overview](docs/profiles/overview.md)
 - [Release hard-gate playbook](docs/release-playbook-hardgate.md)
 - [Release-hardening workflow (L3 + evidence)](docs/release-hardening-workflow.md)
@@ -37,6 +42,16 @@ This project is intentionally small and explicit about trust boundaries. GitHub 
 | **Assurance model** | Each catalog control is labeled **`deterministic`**, **`signal`**, or **`evidence-backed`**; the value is copied into **`reports/0.3`** JSON and Markdown rows so consumers can reason about proof strength ( **`reports/0.3`** adds **`summary_by_gate_role`** for `--fail-on` semantics — see `docs/reports-contract-v0.3.md`; use **`--report-json-contract 0.2`** for the previous wire shape). |
 | **Profiles CLI (`profiles --format json`)** | **`profile-list/v2`** adds **`family`**, **`posture`**, **`live_signal_posture`**, plus **`maturity_label`**, **`assurance_mix`**, **`is_legacy_alias`**, **`canonical_profile_id`**. Discovery flags **`--family`**, **`--only-extreme`**, **`--advisory-only`** narrow the listing. **`github-release-hardening`** remains a **legacy** alias of **`github-release-hardening-1`**. **`summary_by_status.fail == 0` is not “all-pass”** — see [docs/profiles/overview.md](docs/profiles/overview.md) and [docs/release-playbook-hardgate.md](docs/release-playbook-hardgate.md). |
 
+## Recommended First Command
+
+After installing, run the hardened example first:
+
+```bash
+python -m oss_policy_kit evaluate --target ./examples/hardened-repo --profile github-level-1 --output-dir ./out/hardened --summary-only
+```
+
+This confirms the CLI, bundled profile data, example repository, and report generation path before you evaluate your own repository.
+
 ## Current Release State
 
 `v4.0.3` is the current public-launch release line. It is a public repository hygiene patch on top of the immutable `v4.0.2` tag, focused on organizing the Azure Pipelines definition under `pipelines/azure/`, keeping public CI YAML free of sensitive tenant or runner metadata, and aligning discovery/docs with that supported layout. It does not change bundled profiles, the control catalog, evaluator scoring, CLI flags, report schemas, or packaged policy data.
@@ -50,7 +65,7 @@ This project is intentionally small and explicit about trust boundaries. GitHub 
 | Report contract | `reports/0.3` by default; `0.2` and `0.1` remain selectable for compatibility |
 | Security workflow | Scanners run in `Security CI/CD`; SARIF upload is gated by `ENABLE_CODE_SCANNING_UPLOAD=true` so validation does not fail when Code Scanning upload APIs are unavailable |
 | Public scope | Source, policy data, docs, examples, templates, tests, screenshots, and optional GitHub Pages site |
-| Non-public local state | Assistant notes, private planning, generated reports, build outputs, caches, local secrets, and maintainer scratch files are ignored and must not be published |
+| Non-public local state | Local notes, generated reports, build outputs, caches, local secrets, and scratch files are ignored and must not be published |
 
 The repository is designed to be reproducible from a clean clone: install the package, run the built-in examples, and compare the generated JSON/Markdown reports. Public release readiness evidence is documented under `docs/`, especially [public release readiness](docs/public-release-readiness.md), [public launch checklist](docs/public-launch-checklist.md), and [publication traceability matrix](docs/publication-traceability-matrix.md).
 
@@ -185,6 +200,7 @@ Starter workflows live under [`templates/workflows/`](./templates/workflows/):
 - [`github-oss-policy-check.yml`](./templates/workflows/github-oss-policy-check.yml) — baseline `evaluate` against `github-level-1`, fail the job when any control is `fail`.
 - [`github-oss-policy-check-with-waivers.yml`](./templates/workflows/github-oss-policy-check-with-waivers.yml) — same as above but passes `--waivers ./waivers/waivers.yaml`.
 - [`github-oss-policy-check-level-2.yml`](./templates/workflows/github-oss-policy-check-level-2.yml) — stricter `github-level-2` profile when your GitHub Actions maturity justifies it.
+- [`pipelines/azure/azure-pipelines.yml`](./pipelines/azure/azure-pipelines.yml) — Azure Pipelines example for lint, tests, package build, SBOM artifact generation, and self-check gating on a Linux/Ubuntu agent.
 
 Typical CI command:
 
@@ -779,7 +795,7 @@ The `screenshots/` directory is intentionally versioned because it is part of th
 
 ### Public repository hygiene
 
-Only product source, packaged policy data, public documentation, examples, templates, tests, screenshots, workflow definitions, and the optional `gitpage/` site should be versioned. Local assistant state, private planning notes, generated validation reports, build outputs, dependency folders, caches, local secrets, and maintainer-only scratch directories must stay ignored and must not be recovered into the public mirror.
+Only product source, packaged policy data, public documentation, examples, templates, tests, screenshots, workflow definitions, and the optional `gitpage/` site should be versioned. Local notes, generated validation reports, build outputs, dependency folders, caches, local secrets, and scratch directories must stay ignored and must not be recovered into the public mirror.
 
 ## Documentation
 
