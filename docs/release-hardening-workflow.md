@@ -108,7 +108,7 @@ posture percent when different controls are in `pass` vs `fail`. Treat
   under `.oss-policy-kit/evidence/` and replace the placeholder values with
   real data (or use `collect-evidence`).
 - **Score stuck at 0%**: usually the target folder has no
-  `.github/workflows/`, no `buildspec.yml`, no `azure-pipelines.yml`. Run
+  `.github/workflows/`, no `buildspec.yml`, no Azure pipeline YAML in a supported path. Run
   `python -m oss_policy_kit recommend-profile --target .` to see which
   profile family actually fits the repository shape.
 - **"Signal came from supplemental evidence only"**: the profile produced a

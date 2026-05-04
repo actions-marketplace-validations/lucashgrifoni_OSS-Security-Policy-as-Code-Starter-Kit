@@ -6,6 +6,45 @@ This changelog follows the same public-facing format used by the GitHub release 
 
 ---
 
+## OSS Security Policy as Code Starter Kit v4.0.3
+
+This patch release improves public repository hygiene for Azure Pipelines by moving the project pipeline into the supported `pipelines/azure/` layout, reducing unnecessary platform metadata exposure, and aligning detection, documentation, and CLI messaging with that organized structure.
+
+---
+
+### Highlights
+
+- Moved the project Azure Pipelines definition from the repository root into `pipelines/azure/`
+- Kept the public Azure YAML free of secrets, tenant identifiers, subscription identifiers, service connection details, internal URLs, private IPs, local paths, and specific machine names
+- Updated repository discovery so `evaluate-many --skip-non-repos` recognizes supported nested Azure pipeline layouts
+- Improved profile recommendation and terminal wording for Azure pipeline detection
+- Normalized synthetic Azure fixture names so examples do not look like real production service connections
+
+---
+
+### Improvements
+
+- Cleaner public repository structure for multi-platform CI evidence
+- Better alignment between Azure documentation, parser support, profile recommendation, and batch repository detection
+- Lower metadata noise in public fixtures and CI examples
+- Added regression coverage for nested Azure pipeline repository detection
+- Revalidated GitHub and Azure self-checks, targeted Azure tests, linting, typing, and secret/provenance hygiene scans
+
+---
+
+### Notes
+
+- This is a patch release in the 4.0.x line
+- Users running the provided Azure DevOps pipeline should update the pipeline YAML path to `pipelines/azure/azure-pipelines.yml`
+- No report schema, bundled profile, control catalog, evaluator scoring, or packaged policy data changes are introduced
+- The v4.0.2 tag remains immutable and is not moved
+
+---
+
+**License:** Apache-2.0.
+
+---
+
 ## OSS Security Policy as Code Starter Kit v4.0.2
 
 This patch release consolidates documentation, release hygiene, and CI hygiene improvements that landed after v4.0.1. It does not change runtime behavior, bundled profiles, the control catalog, evaluator logic, CLI flags, report schemas, or packaged policy data.

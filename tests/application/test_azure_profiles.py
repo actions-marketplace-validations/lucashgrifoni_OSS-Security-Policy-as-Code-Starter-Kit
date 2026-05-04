@@ -86,7 +86,7 @@ def test_azure_release_hardening_with_evidence_is_self_attested(tmp_path: Path) 
                 },
                 "service_connections": [
                     {
-                        "name": "prod-wif",
+                        "name": "example-wif",
                         "authentication": "workload_identity_federation",
                     }
                 ],
@@ -146,7 +146,7 @@ def test_azure_level_3_flags_missing_artifact_evidence(tmp_path: Path) -> None:
                 },
                 "service_connections": [
                     {
-                        "name": "prod-wif",
+                        "name": "example-wif",
                         "authentication": "workload_identity_federation",
                     }
                 ],

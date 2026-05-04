@@ -28,7 +28,7 @@ stages:
         steps:
           - task: AzureCLI@2
             inputs:
-              azureSubscription: prod-wif
+              azureSubscription: example-wif
               addSpnToEnvironment: false
               scriptType: bash
               scriptLocation: inlineScript

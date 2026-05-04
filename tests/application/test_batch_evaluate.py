@@ -53,6 +53,15 @@ def test_scripts_dir_with_readme_not_a_repository(tmp_path: Path) -> None:
     assert ok is False
 
 
+def test_nested_azure_pipeline_marks_likely_repository(tmp_path: Path) -> None:
+    nested = tmp_path / "pipelines" / "azure"
+    nested.mkdir(parents=True)
+    (nested / "ci.yml").write_text("trigger: [main]\n", encoding="utf-8")
+    ok, sig = is_likely_repository(tmp_path)
+    assert ok is True
+    assert sig == "pipelines/azure/*.yml"
+
+
 def test_batch_all_tied_true_when_same_fail_counts(tmp_path: Path) -> None:
     mono = tmp_path / "mono"
     a = mono / "a"

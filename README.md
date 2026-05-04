@@ -25,7 +25,7 @@ This project is intentionally small and explicit about trust boundaries. GitHub 
 
 | Area | What you get |
 | --- | --- |
-| Current release | `v4.0.2` / Python package `oss-policy-kit==4.0.2` |
+| Current release | `v4.0.3` / Python package `oss-policy-kit==4.0.3` |
 | Input | A local repository clone |
 | Output | `evaluation-report.json` and `evaluation-report.md` |
 | Core scope | Clone-visible governance and GitHub/Azure/AWS CI/CD signals |
@@ -39,13 +39,13 @@ This project is intentionally small and explicit about trust boundaries. GitHub 
 
 ## Current Release State
 
-`v4.0.2` is the current public-launch release line. It is a documentation, release-hygiene, and CI-hygiene patch on top of the immutable `v4.0.1` tag and does not change runtime behavior, bundled profiles, the control catalog, evaluator logic, CLI flags, report schemas, or packaged policy data.
+`v4.0.3` is the current public-launch release line. It is a public repository hygiene patch on top of the immutable `v4.0.2` tag, focused on organizing the Azure Pipelines definition under `pipelines/azure/`, keeping public CI YAML free of sensitive tenant or runner metadata, and aligning discovery/docs with that supported layout. It does not change bundled profiles, the control catalog, evaluator scoring, CLI flags, report schemas, or packaged policy data.
 
 | Surface | Current state |
 | --- | --- |
-| Package | `oss-policy-kit==4.0.2` is the package version for this release line |
-| GitHub Release | `v4.0.2` is the release target for wheel and sdist assets; `v4.0.1` remains available as an immutable predecessor |
-| Default branch | `master`; it may contain documentation, site, or CI hygiene commits after the immutable `v4.0.2` tag |
+| Package | `oss-policy-kit==4.0.3` is the package version for this release line |
+| GitHub Release | `v4.0.3` is the release target for wheel and sdist assets; `v4.0.2` remains available as an immutable predecessor |
+| Default branch | `master`; it may contain documentation, site, or CI hygiene commits after the immutable `v4.0.3` tag |
 | License | Apache-2.0 (`LICENSE` + `NOTICE`) |
 | Report contract | `reports/0.3` by default; `0.2` and `0.1` remain selectable for compatibility |
 | Security workflow | Scanners run in `Security CI/CD`; SARIF upload is gated by `ENABLE_CODE_SCANNING_UPLOAD=true` so validation does not fail when Code Scanning upload APIs are unavailable |
@@ -120,7 +120,7 @@ Pick one path; they are listed in priority order for most users.
    Install a specific released version:
 
    ```bash
-   python -m pip install oss-policy-kit==4.0.2
+   python -m pip install oss-policy-kit==4.0.3
    ```
 
    Quick sanity check:

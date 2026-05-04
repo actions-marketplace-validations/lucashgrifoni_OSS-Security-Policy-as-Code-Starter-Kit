@@ -33,6 +33,7 @@ _REPO_PRIMARY_SIGNALS: tuple[str, ...] = (
     "build.gradle.kts",
     "buildspec.yml",
     "azure-pipelines.yml",
+    "azure-pipelines.yaml",
     "Dockerfile",
     "docker-compose.yml",
     "docker-compose.yaml",
@@ -42,6 +43,10 @@ _REPO_GLOB_PRIMARY: tuple[str, ...] = (
     "*.csproj",
     "*.sln",
     "buildspec*.yml",
+    "pipelines/azure/*.yml",
+    "pipelines/azure/*.yaml",
+    ".azure-pipelines/*.yml",
+    ".azure-pipelines/*.yaml",
 )
 
 REPO_SIGNALS = _REPO_PRIMARY_SIGNALS

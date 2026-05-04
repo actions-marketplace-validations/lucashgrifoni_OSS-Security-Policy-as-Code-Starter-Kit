@@ -116,7 +116,7 @@ def test_az_ident_036_without_evidence_returns_manual_review(tmp_path: Path) -> 
                           steps:
                             - task: AzureCLI@2
                               inputs:
-                                azureSubscription: wif-prod-connection
+                                azureSubscription: example-wif-connection
                                 scriptType: bash
                                 scriptLocation: inlineScript
                                 inlineScript: echo WorkloadIdentityFederation
@@ -161,7 +161,7 @@ def test_az_ident_036_with_valid_live_evidence_passes(tmp_path: Path) -> None:
             },
             "service_connections": [
                 {
-                    "name": "prod-wif",
+                    "name": "example-wif",
                     "authentication": "workload_identity_federation",
                     "federation_subject": "repo:org/repo:ref:refs/heads/main",
                     "issuer_url": "https://token.actions.githubusercontent.com",
@@ -658,7 +658,7 @@ def test_az_sconn_056_accepts_workload_identity(tmp_path: Path) -> None:
             },
             "service_connections": [
                 {
-                    "name": "prod-wif",
+                    "name": "example-wif",
                     "authentication": "workload_identity_federation",
                     "federation_subject": "repo:org/repo:ref:refs/heads/main",
                     "issuer_url": "https://token.actions.githubusercontent.com",
@@ -692,7 +692,7 @@ def test_az_wifev_057_rejects_placeholder_federation_subject(tmp_path: Path) -> 
             },
             "service_connections": [
                 {
-                    "name": "prod-wif",
+                    "name": "example-wif",
                     "authentication": "workload_identity_federation",
                     "federation_subject": "<subject>",
                     "issuer_url": "<issuer>",
@@ -724,7 +724,7 @@ def test_az_wifev_057_rejects_empty_proof_fields(tmp_path: Path) -> None:
             },
             "service_connections": [
                 {
-                    "name": "prod-wif",
+                    "name": "example-wif",
                     "authentication": "workload_identity_federation",
                     "federation_subject": "   ",
                     "issuer_url": "   ",
@@ -755,7 +755,7 @@ def test_az_wifev_057_accepts_populated_proof_fields(tmp_path: Path) -> None:
             },
             "service_connections": [
                 {
-                    "name": "prod-wif",
+                    "name": "example-wif",
                     "authentication": "workload_identity_federation",
                     "federation_subject": "repo:org/repo:ref:refs/heads/main",
                     "issuer_url": "https://token.actions.githubusercontent.com",

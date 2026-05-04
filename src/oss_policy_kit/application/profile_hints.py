@@ -232,7 +232,7 @@ def _collect_signals(
         _append_signal(
             signals,
             "azure_pipelines_yaml",
-            f"Found {len(az_paths)} Azure Pipelines file(s) at repository root.",
+            f"Found {len(az_paths)} Azure Pipelines file(s) in supported paths.",
         )
     if buildspec:
         _append_signal(signals, "aws_codebuild_buildspec", "Found buildspec.yml / buildspec.yaml at root.")

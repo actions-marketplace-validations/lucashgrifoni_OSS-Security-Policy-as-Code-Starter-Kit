@@ -1281,7 +1281,7 @@ def evaluate_many_cmd(
             "Detection requires at least one primary signal: .git, a build "
             "manifest (package.json, pyproject.toml, requirements.txt, go.mod, "
             "Cargo.toml, pom.xml, etc.), a CI file (.github/workflows/, "
-            "azure-pipelines.yml, buildspec.yml), or a Dockerfile. "
+            "azure-pipelines.yml, pipelines/azure/*.yml, buildspec.yml), or a Dockerfile. "
             "README.md alone is NOT sufficient."
         ),
     ),

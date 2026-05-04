@@ -812,7 +812,7 @@ def print_recommend_profile_human_rich(
     scope_lines = Text()
     scope_lines.append("Repository signals\n", style=f"bold {STYLE_EMPHASIS}")
     scope_lines.append(f"  .github/workflows      {gh}\n", style="default")
-    scope_lines.append(f"  azure-pipelines.yml    {az}\n", style="default")
+    scope_lines.append(f"  Azure pipeline YAML    {az}\n", style="default")
     scope_lines.append(f"  buildspec.yml          {aws}\n", style="default")
     if not compact:
         scope_lines.append("\nSignal board\n", style=f"bold {STYLE_EMPHASIS}")
