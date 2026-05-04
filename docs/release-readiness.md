@@ -1,8 +1,8 @@
 # Release readiness
 
-This is the short maintainer checklist for patch releases, public launch, and routine repository operations.
+This is the maintainer checklist for patch releases, public launch, and routine repository operations.
 
-For the first public repository launch hard gate, use [public-release-readiness.md](public-release-readiness.md) together with [publication-traceability-matrix.md](publication-traceability-matrix.md). This page remains the faster operational checklist.
+Keep detailed launch evidence, private planning notes, and internal traceability packs outside the public repository. This page is the public operational checklist.
 
 ## Repository contents
 

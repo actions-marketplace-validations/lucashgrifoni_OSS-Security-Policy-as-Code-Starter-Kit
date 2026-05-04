@@ -118,7 +118,7 @@ Then verify:
 - `README.md` and relevant docs still match actual behavior
 - the repository security reporting path described in `SECURITY.md` is still correct
 
-See [docs/packaging-and-release.md](docs/packaging-and-release.md), [docs/release-readiness.md](docs/release-readiness.md), [docs/public-release-readiness.md](docs/public-release-readiness.md), [docs/publication-traceability-matrix.md](docs/publication-traceability-matrix.md), and [ROADMAP.md](ROADMAP.md) for the full maintainer and publication-readiness contract.
+See [docs/packaging-and-release.md](docs/packaging-and-release.md) and [docs/release-readiness.md](docs/release-readiness.md) for the maintainer and release-readiness contract.
 
 ## Security issues
 

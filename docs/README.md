@@ -10,7 +10,6 @@ Repository entry points:
 
 - [README.md](../README.md) - product overview, install paths, CLI contract, result interpretation
 - [CHANGELOG.md](../CHANGELOG.md) - released changes by version
-- [ROADMAP.md](../ROADMAP.md) - public roadmap and post-publication maintenance governance
 
 ## For Users
 
@@ -27,8 +26,6 @@ Repository entry points:
 ## For Maintainers
 
 - [release-readiness.md](release-readiness.md) - release gate, public launch checks, patch release routine, and repository operations
-- [public-release-readiness.md](public-release-readiness.md) - hard gate for the first public repository launch
-- [publication-traceability-matrix.md](publication-traceability-matrix.md) - promise-to-evidence matrix for release candidates
 
 ## Reference
 

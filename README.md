@@ -22,7 +22,6 @@ Operational privacy: evaluation is local and clone-visible by default. API-backe
 - [Bundled profiles overview](docs/profiles/overview.md)
 - [Release hard-gate playbook](docs/release-playbook-hardgate.md)
 - [Release-hardening workflow (L3 + evidence)](docs/release-hardening-workflow.md)
-- [Public release gate](docs/public-release-readiness.md)
 - [Documentation](#documentation)
 - [Maintainer Self-Check](#maintainer-self-check)
 
@@ -67,7 +66,7 @@ This confirms the CLI, bundled profile data, example repository, and report gene
 | Public scope | Source, policy data, docs, examples, templates, tests, screenshots, and optional GitHub Pages site |
 | Non-public local state | Local notes, generated reports, build outputs, caches, local secrets, and scratch files are ignored and must not be published |
 
-The repository is designed to be reproducible from a clean clone: install the package, run the built-in examples, and compare the generated JSON/Markdown reports. Public release readiness evidence is documented under `docs/`, especially [public release readiness](docs/public-release-readiness.md), [public launch checklist](docs/public-launch-checklist.md), and [publication traceability matrix](docs/publication-traceability-matrix.md).
+The repository is designed to be reproducible from a clean clone: install the package, run the built-in examples, and compare the generated JSON/Markdown reports. Public documentation stays focused on product usage, release operation, profile behavior, and supported evidence workflows.
 
 ## Why This Exists
 
@@ -810,9 +809,6 @@ Only product source, packaged policy data, public documentation, examples, templ
 - [docs/architecture.md](docs/architecture.md) - package boundaries, trust model, and evidence semantics
 - [docs/packaging-and-release.md](docs/packaging-and-release.md) - install, build, and distribution guidance
 - [docs/release-readiness.md](docs/release-readiness.md) - release gate and public launch checks
-- [docs/public-release-readiness.md](docs/public-release-readiness.md) - mandatory hard gate for the first public repository launch
-- [docs/publication-traceability-matrix.md](docs/publication-traceability-matrix.md) - promise-to-evidence mapping for the release candidate
-- [ROADMAP.md](ROADMAP.md) - public roadmap and post-publication maintenance governance
 
 ## Maintainer Self-Check
 
