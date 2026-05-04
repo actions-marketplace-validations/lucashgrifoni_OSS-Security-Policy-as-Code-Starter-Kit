@@ -26,6 +26,7 @@ Repository entry points:
 ## For Maintainers
 
 - [release-readiness.md](release-readiness.md) - release gate, public launch checks, patch release routine, and repository operations
+- [secret-leak-response.md](secret-leak-response.md) - runbook for handling credentials or other sensitive values committed to a repository
 
 ## Reference
 
