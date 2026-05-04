@@ -834,18 +834,6 @@ Top-level keys in the current report contract:
 - `summary_by_gate_role`: `reports/0.3` gate-role aggregation for CI semantics.
 - `gate_execution_model`: `reports/0.3` documentation object for `--fail-on` mapping.
 
-## Project Status
-
-This project is published, maintained, and intentionally scoped.
-
-It prioritizes:
-
-- clarity over hype
-- evidence over vague scoring
-- explicit limits over fake assurance
-
-Planned evolution stays conservative and is tracked through released changes, public documentation, and [ROADMAP.md](ROADMAP.md).
-
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
