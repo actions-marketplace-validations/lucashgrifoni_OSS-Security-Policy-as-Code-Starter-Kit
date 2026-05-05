@@ -2,6 +2,13 @@ name: Publish to PyPI
 
 on:
   push:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/publish-pypi.yml"
+      - "pyproject.toml"
+      - "src/**"
+      - "scripts/twine_check_dist.py"
     tags:
       - "v*"
   workflow_dispatch:
