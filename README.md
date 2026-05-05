@@ -29,7 +29,7 @@ Operational privacy: evaluation is local and clone-visible by default. API-backe
 
 | Area | What you get |
 | --- | --- |
-| Current release | `v4.0.3` / Python package `oss-policy-kit==4.0.3` |
+| Current release | `v4.0.4` / Python package `oss-policy-kit==4.0.4` |
 | Input | A local repository clone |
 | Output | `evaluation-report.json` and `evaluation-report.md` |
 | Core scope | Clone-visible governance and GitHub/Azure/AWS CI/CD signals |
@@ -53,13 +53,13 @@ This confirms the CLI, bundled profile data, example repository, and report gene
 
 ## Current Release State
 
-`v4.0.3` is the current public-launch release line. It is a public repository hygiene patch on top of the immutable `v4.0.2` tag, focused on organizing the Azure Pipelines definition under `pipelines/azure/`, keeping public CI YAML free of sensitive tenant or runner metadata, and aligning discovery/docs with that supported layout. It does not change bundled profiles, the control catalog, evaluator scoring, CLI flags, report schemas, or packaged policy data.
+`v4.0.4` is the current public-launch release line. It aligns the current default branch with the release artifacts after the post-`v4.0.3` documentation, site, CI, and public provenance hygiene updates. It does not change bundled profiles, the control catalog, evaluator scoring, CLI flags, report schemas, or packaged policy data.
 
 | Surface | Current state |
 | --- | --- |
-| Package | `oss-policy-kit==4.0.3` is the package version for this release line |
-| GitHub Release | `v4.0.3` is the release target for wheel and sdist assets; `v4.0.2` remains available as an immutable predecessor |
-| Default branch | `master`; it may contain documentation, site, or CI hygiene commits after the immutable `v4.0.3` tag |
+| Package | `oss-policy-kit==4.0.4` is the package version for this release line |
+| GitHub Release | `v4.0.4` is the release target for wheel and sdist assets; `v4.0.3` remains available as an immutable predecessor |
+| Default branch | `master`; aligned with the current public-launch release state |
 | License | Apache-2.0 (`LICENSE` + `NOTICE`) |
 | Report contract | `reports/0.3` by default; `0.2` and `0.1` remain selectable for compatibility |
 | Security workflow | Scanners run in `Security CI/CD`; SARIF upload is gated by `ENABLE_CODE_SCANNING_UPLOAD=true` so validation does not fail when Code Scanning upload APIs are unavailable |
@@ -134,7 +134,7 @@ Pick one path; they are listed in priority order for most users.
    Install a specific released version:
 
    ```bash
-   python -m pip install oss-policy-kit==4.0.3
+   python -m pip install oss-policy-kit==4.0.4
    ```
 
    Quick sanity check:

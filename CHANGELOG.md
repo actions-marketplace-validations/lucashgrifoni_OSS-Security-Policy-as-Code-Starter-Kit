@@ -6,6 +6,44 @@ This changelog follows the same public-facing format used by the GitHub release 
 
 ---
 
+## OSS Security Policy as Code Starter Kit v4.0.4
+
+This patch release aligns the current public repository state with the release line after the post-v4.0.3 documentation, site, CI, and public provenance hygiene updates. It does not change runtime behavior, bundled profiles, the control catalog, evaluator scoring, CLI flags, report schemas, or packaged policy data.
+
+---
+
+### Highlights
+
+- Promoted the current default-branch documentation and CI hygiene state into a dedicated v4.0.4 release
+- Normalized public Git authorship metadata to the GitHub noreply identity before publication
+- Removed the public mailmap surface that was only needed for local attribution cleanup
+- Kept the GitHub Pages site on the working Tailwind v3 build path
+- Preserved the organized Azure Pipelines layout under `pipelines/azure/`
+
+---
+
+### Improvements
+
+- Better alignment between the README, changelog, package metadata, and current public release state
+- Cleaner public provenance hygiene without changing functional source code or policy data
+- More consistent packaging maturity metadata by moving the package classifier from Alpha to Beta
+- Continued validation of GitHub CI/CD, Security CI/CD, GitHub Pages, package build, and self-check workflows
+
+---
+
+### Notes
+
+- This is a patch release in the 4.0.x line
+- No runtime, schema, CLI, control, evaluator, or bundled profile behavior changes are introduced
+- The v4.0.3 release remains available as the predecessor release
+- This release exists to make the public mirror, package metadata, documentation, and release line consistent before public publication
+
+---
+
+**License:** Apache-2.0.
+
+---
+
 ## OSS Security Policy as Code Starter Kit v4.0.3
 
 This patch release improves public repository hygiene for Azure Pipelines by moving the project pipeline into the supported `pipelines/azure/` layout, reducing unnecessary platform metadata exposure, and aligning detection, documentation, and CLI messaging with that organized structure.
