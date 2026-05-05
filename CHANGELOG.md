@@ -15,8 +15,7 @@ This patch release aligns the current public repository state with the release l
 ### Highlights
 
 - Promoted the current default-branch documentation and CI hygiene state into a dedicated v4.0.4 release
-- Normalized public Git authorship metadata to the GitHub noreply identity before publication
-- Removed the public mailmap surface that was only needed for local attribution cleanup
+- Improved public repository metadata hygiene before publication
 - Kept the GitHub Pages site on the working Tailwind v3 build path
 - Preserved the organized Azure Pipelines layout under `pipelines/azure/`
 
@@ -25,7 +24,7 @@ This patch release aligns the current public repository state with the release l
 ### Improvements
 
 - Better alignment between the README, changelog, package metadata, and current public release state
-- Cleaner public provenance hygiene without changing functional source code or policy data
+- Cleaner public repository metadata hygiene without changing functional source code or policy data
 - More consistent packaging maturity metadata by moving the package classifier from Alpha to Beta
 - Continued validation of GitHub CI/CD, Security CI/CD, GitHub Pages, package build, and self-check workflows
 
@@ -36,7 +35,7 @@ This patch release aligns the current public repository state with the release l
 - This is a patch release in the 4.0.x line
 - No runtime, schema, CLI, control, evaluator, or bundled profile behavior changes are introduced
 - The v4.0.3 release remains available as the predecessor release
-- This release exists to make the public mirror, package metadata, documentation, and release line consistent before public publication
+- This release exists to make the public repository, package metadata, documentation, and release line consistent before public publication
 
 ---
 
@@ -53,7 +52,7 @@ This patch release improves public repository hygiene for Azure Pipelines by mov
 ### Highlights
 
 - Moved the project Azure Pipelines definition from the repository root into `pipelines/azure/`
-- Kept the public Azure YAML free of secrets, tenant identifiers, subscription identifiers, service connection details, internal URLs, private IPs, local paths, and specific machine names
+- Kept the public Azure YAML free of sensitive environment-specific metadata
 - Updated repository discovery so `evaluate-many --skip-non-repos` recognizes supported nested Azure pipeline layouts
 - Improved profile recommendation and terminal wording for Azure pipeline detection
 - Normalized synthetic Azure fixture names so examples do not look like real production service connections
@@ -75,7 +74,7 @@ This patch release improves public repository hygiene for Azure Pipelines by mov
 - This is a patch release in the 4.0.x line
 - Users running the provided Azure DevOps pipeline should update the pipeline YAML path to `pipelines/azure/azure-pipelines.yml`
 - No report schema, bundled profile, control catalog, evaluator scoring, or packaged policy data changes are introduced
-- The v4.0.2 tag remains immutable and is not moved
+- Previous release tags remain unchanged
 
 ---
 
@@ -95,14 +94,14 @@ This patch release consolidates documentation, release hygiene, and CI hygiene i
 - Added sanitized real CI screenshots for GitHub Actions and Azure Pipelines self-check flows
 - Improved workflow self-check commands to use the supported `evaluate` subcommand
 - Refined Azure Pipelines execution hygiene with pip caching and shallow checkout behavior
-- Preserved the v4.0.1 release as immutable while promoting the current public repository state into v4.0.2
+- Preserved the existing v4.0.1 release while promoting the current public repository state into v4.0.2
 
 ---
 
 ### Improvements
 
 - Better public release traceability between README, screenshots, CI examples, and repository state
-- Clearer documentation of what is included in the public repository and what remains outside the public mirror
+- Clearer documentation of what is included in the public repository and what remains outside the public repository
 - Improved CI example accuracy through real sanitized pass/fail self-check evidence
 - Cleaner repository hygiene through safer ignore patterns for maintainer-private working notes
 - Improved cross-platform CLI test stability by avoiding Linux-specific path assumptions in test expectations
@@ -113,7 +112,7 @@ This patch release consolidates documentation, release hygiene, and CI hygiene i
 
 - This is a patch release in the 4.0.x line
 - No runtime, schema, CLI, control, evaluator, or bundled profile behavior changes are introduced relative to v4.0.1
-- The v4.0.1 tag remains immutable and is not moved
+- Previous release tags remain unchanged
 - This release focuses on publication readiness, documentation accuracy, CI hygiene, and release traceability
 
 ---
@@ -130,7 +129,7 @@ This public-launch patch release promotes the validated launch candidate into th
 
 - First public-launch release package for the repository governance layer
 - Added formal public release readiness, traceability, and launch checklist artifacts
-- Included evidence packs covering pre-freeze and RC1 candidate validation
+- Included evidence packs covering pre-freeze and release candidate validation
 - Added roadmap and post-publication governance assets
 - Strengthened publication readiness with regression guardrails and false-positive issue intake support
 
@@ -148,7 +147,6 @@ This public-launch patch release promotes the validated launch candidate into th
 
 - This is a public-launch patch release in the 4.0.x line
 - No runtime, schema, CLI, control, evaluator, or bundled profile behavior changes are introduced relative to the validated 4.0.0 candidate
-- The v4.0.1 RC1 tag was intentionally skipped in favor of promoting the validated candidate directly to v4.0.1
 - Validation evidence is captured in the repository evidence packs and includes tests, linting, formatting, typing, packaging, smoke validation, self-check execution, and external validation reruns
 
 **License:** Apache-2.0.
@@ -522,7 +520,6 @@ This release marks the first stable major version of the kit, improving workflow
 - This is the first stable major release in the 1.x line
 - Focused on stability, release maturity, and maintainability
 - No major breaking changes are expected for normal CLI usage
-- PyPI publishing may still require manual steps unless trusted publishing is configured
 - Some schema references may continue to reflect the evaluation output contract version rather than the Python package version
 
 **License:** Apache-2.0.
