@@ -1,4 +1,4 @@
-# Builds and deploys only gitpage/ to GitHub Pages. Third-party actions are pinned to
+# Builds and deploys the gitpage/ site to GitHub Pages. Third-party actions are pinned to
 # full commit SHAs (CI-PIN-008) to match repository policy.
 
 name: Deploy GitHub Pages
