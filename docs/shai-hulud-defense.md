@@ -1,7 +1,7 @@
 # Shai-Hulud defense layer (`WORM-*` controls)
 
-> **In development (v6.0.0 Cycle 2)**. The `WORM-*` family lands with
-> PR-19 on the `feat/v6.0.0-evolution` branch. This page is the design
+> **Available since v6.0.0.** The `WORM-*` family shipped in v6.0.0 (it is
+> part of the `oss-publish-readiness-1` profile). This page is the design
 > rationale + adopter guide. See ADR-015 for the decision-of-record.
 
 ## Background

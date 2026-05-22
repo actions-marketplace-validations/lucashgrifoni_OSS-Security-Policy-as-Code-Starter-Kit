@@ -1,14 +1,13 @@
 # Reports contract `reports/2.0`
 
-> **In development (v6.0.0; breaking)**. `reports/2.0` lands with PR-16 on the `feat/v6.0.0-evolution` branch. **It does not ship in v5.9.x.** This page is the design and migration guide for what will be available when v6.0.0 GA ships. `reports/1.0` remains selectable via `--report-json-contract=1.0` during the v6.0.x line; it is removed in v6.1.0. See ADR-013 for the breaking-change rationale.
+> **Available since v6.0.0 as an opt-in contract.** `reports/2.0` shipped in v6.0.0. As of v6.3.0, `reports/1.0` **remains the default**; select `2.0` explicitly with `--report-json-contract=2.0`. The default-switch is deferred to a later v6.x point release (ADR-013). The standalone `scripts/migrate-1.0-to-2.0.py` converts existing `1.0` reports offline. See ADR-013 for the breaking-change rationale.
 
 ## TL;DR
 
 - `reports/2.0` is a **new JSON report contract** that replaces the seven-state vocabulary of `reports/1.0` with a tighter five-state vocabulary aligned with Scorecard v6.
 - Five states: **`PASS` / `FAIL` / `UNKNOWN` / `NOT_APPLICABLE` / `ATTESTED`**.
 - `UNKNOWN` gains a sub-field `reason` so the granularity of the old seven states is preserved where it matters (`manual-review-required`, `not-observable-in-clone`, etc.).
-- **Default contract in v6.0.0**: `reports/2.0`. Adopters who need byte-stability with v5.9.x output explicitly opt in via `--report-json-contract=1.0`.
-- A **deprecation warning** prints on stderr when `--report-json-contract=1.0` is used.
+- **Default contract as of v6.3.0**: `reports/1.0`. `reports/2.0` is opt-in via `--report-json-contract=2.0`; the default-switch is deferred to a later v6.x point release (ADR-013).
 - A **migration script** (`scripts/migrate-1.0-to-2.0.py`) converts existing `reports/1.0` JSON to `reports/2.0` for adopters with long-lived dashboards.
 
 ## Why a new contract

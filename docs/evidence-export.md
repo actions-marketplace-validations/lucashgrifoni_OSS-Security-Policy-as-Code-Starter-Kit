@@ -1,6 +1,6 @@
 # Evidence export (`export-evidence`)
 
-> **In development (v6.0.0; experimental)**. The `export-evidence` subcommand and its Chainloop format renderer land with PR-17 on the `feat/v6.0.0-evolution` branch. **They do not ship in v5.9.x.** The `chainloop` format is **experimental** — its output may change in v6.0.x if the Chainloop ingest spec evolves. See ADR-012 for the experimental-label rationale.
+> **Available since v6.0.0; the `chainloop` format is experimental.** The `export-evidence` subcommand and its Chainloop format renderer shipped in v6.0.0. The `chainloop` format is **experimental** — its output may change within the v6.x line if the Chainloop ingest spec evolves. See ADR-012 for the experimental-label rationale.
 
 This page is the third in the emit-only subcommand family alongside [`vex-emission.md`](vex-emission.md) (`emit-vex`) and [`insights-emission.md`](insights-emission.md) (`emit-insights`). The architectural pattern is the same: a dedicated subcommand re-projects existing evaluator outputs into a stable external format without adding new controls to the catalog.
 
@@ -33,7 +33,7 @@ The subcommand:
 | `chainloop` | experimental | Chainloop attestation envelope (JSON) wrapping the kit's report + SARIF. |
 | `sarif` | stable | Re-export of the SARIF the `evaluate` subcommand already produces. Provided for parity with the registry pattern. |
 
-Planned for v6.1.0+ (not in v6.0.0):
+Planned for a future release (not yet shipped as of v6.3.0):
 
 | Format | Notes |
 |---|---|

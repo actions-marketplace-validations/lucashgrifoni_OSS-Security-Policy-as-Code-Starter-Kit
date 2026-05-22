@@ -1,17 +1,25 @@
 # Framework alignment
 
-This page maps the **136 controls** and **38 profiles** bundled with v5.9.x to the AppSec /
+This page maps the controls and profiles bundled with the kit to the AppSec /
 DevSecOps frameworks operators most often have to defend against. It is a **mapping**, not a
-**certification claim**. The kit does not assert conformance to any of these frameworks; it
+**certification claim**.
+
+> **⚠️ Snapshot pending refresh.** The per-framework mapping tables below reflect the
+> **v5.9.x catalog (136 controls / 38 profiles)**. As of **v6.3.0** the kit bundles
+> **212 controls / 53 profiles**; the v6.0.0–v6.3.0 families (AI/LLM, EU AI Act, `WORM-*`,
+> MCP, OWASP Agentic ASI, EU CRA Art.13/14, SLSA Source) are **not yet folded into the
+> mapping tables here**. For the authoritative current control set see
+> [controls-catalog.md](controls-catalog.md) and `CHANGELOG.md`. The kit does not assert conformance to any of these frameworks; it
 documents how its honest signals align with each framework's expectations so operators can
 navigate from a framework requirement back to a concrete control or evidence file.
 
-> **v6.0.0 framework expansion (in development on `feat/v6.0.0-evolution`)** — three additional
-> framework columns are planned: **NIST SP 800-218A** (Generative AI SSDF community profile),
-> **EU AI Act Article 11 + Annex IV**, and **OpenSSF Security Insights 1.0 emit**. Roadmap
-> sections at the end of this page describe the planned coverage; the corresponding profiles,
-> controls, and CLI subcommands are **not present in v5.9.x** and only become real once their
-> v6.0.0 PR lands.
+> **v6.0.0 framework expansion — shipped.** The three framework areas formerly tracked as
+> roadmap items all shipped in the v6.0.0–v6.3.0 line: **NIST SP 800-218A** (Generative AI
+> SSDF, profile `appsec-llm-ssdf-218a-1`), **EU AI Act Article 11 + Annex IV** (profile
+> `cra-eu-ai-act-art11-1`, `LLM-AI-ACT-*` controls), and **OpenSSF Security Insights 1.0
+> emit** (the `emit-insights` subcommand). The Roadmap sections at the end of this page are
+> retained as historical design notes; the mapping tables themselves still need a v6.x
+> re-map (see the snapshot notice above).
 
 > **Honesty contract**: A `pass` on a control here does not equal a `pass` against the framework
 > requirement it maps to. Several frameworks include items the kit deliberately does **not**
@@ -445,15 +453,16 @@ Multi-platform profile aimed at AppSec teams using the kit as part of pipeline A
 
 ---
 
-# Roadmap — frameworks planned for v6.0.0
+# Former roadmap — frameworks that shipped in v6.0.0+
 
-The sections below describe **planned or development-branch** coverage on the
-`feat/v6.0.0-evolution` branch. These controls, profiles, or CLI subcommands do
-not exist in v5.9.x. They land incrementally with their corresponding v6.0.0
-PRs. See [`positioning.md`](positioning.md) → *Roadmap (v6.0.0 — in
-development)* for the broader v6.0.0 scope.
+The sections below were the v6.0.0 framework roadmap when this page was written
+against the v5.9.x build. These controls, profiles, and CLI subcommands have
+since **shipped** across the v6.0.0–v6.3.0 line; the sections are retained as
+historical design notes. They are not yet folded into the mapping tables above
+(see the snapshot notice near the top). See [`positioning.md`](positioning.md)
+for the broader shipped scope and `CHANGELOG.md` for the authoritative state.
 
-## NIST SP 800-218A — Generative AI SSDF Community Profile (planned v6.0.0)
+## NIST SP 800-218A — Generative AI SSDF Community Profile (shipped in v6.0.0)
 
 [NIST SP 800-218A](https://csrc.nist.gov/pubs/sp/800/218/a/final) extends the SSDF (SP 800-218) with controls specific to organizations producing or consuming generative AI systems. v6.0.0 introduces an **advisory** profile `appsec-llm-ssdf-218a-1` with a 7-control family `LLM-218A-*`.
 
@@ -496,7 +505,7 @@ framing.
 evidence-backed. See [`profiles/ai-agent.md`](profiles/ai-agent.md) and
 ADR-016.
 
-## EU AI Act — Article 11 + Annex IV (planned v6.0.0)
+## EU AI Act — Article 11 + Annex IV (shipped in v6.0.0)
 
 EU AI Act Article 11 + Annex IV become enforceable on **2026-08-02** and require technical documentation for high-risk AI systems, including the intended purpose, training data summary, risk management documentation, and post-market monitoring plan. v6.0.0 introduces an **advisory** profile `cra-eu-ai-act-art11-1` with a 3-control family `LLM-AI-ACT-*`.
 
@@ -512,7 +521,7 @@ Bundled controls (already in v5.9.x): `GOV-DISC-065`, `REL-CHANGE-001`, `SAST-OS
 
 **Coverage estimate at v6.0.0 GA**: 3 advisory controls + 4 bundled signals. Profile is advisory (`--fail-on degraded`).
 
-## OpenSSF Security Insights 1.0 — emit (planned v6.0.0)
+## OpenSSF Security Insights 1.0 — emit (shipped in v6.0.0)
 
 [OpenSSF Security Insights 1.0](https://security-insights.openssf.org/) is a YAML format that lets a project publish machine-readable security metadata (security contacts, vulnerability disclosure process, build provenance, dependency policy). v6.0.0 introduces an **emit-only** subcommand `oss-policy-kit emit-insights` that produces a valid `security-insights.yml` document by reusing the kit's existing evaluators read-only.
 

@@ -14,9 +14,9 @@ informed decisions about which controls to gate on.
 
 ## Current catalog summary
 
-On the bundle **targeting v4.0.0** (development branch — **not yet** released or tagged), the catalog contains **65** controls; **all** are `lifecycle: stable`.
+As of **v6.3.0**, the bundled catalog contains **212** controls: **70** are `lifecycle: stable` and **142** are `lifecycle: experimental`. There are no `deprecated` controls in the current catalog.
 
-There are no `experimental` or `deprecated` controls in that catalog snapshot. Controls that were previously labelled `experimental` have been promoted to `stable`; the two YAML-heuristic controls below were carried as **deprecated** through **v3.x** and **removed** as part of the **v4.0.0** preparation.
+The large experimental share reflects the families added across v6.0.0–v6.3.0 (AI/LLM, EU AI Act, `WORM-*`, MCP, OWASP Agentic ASI, EU CRA, SLSA Source). Experimental semantics may change between minor releases, so pin the exact kit version before gating a strict CI pipeline on them. The two YAML-heuristic controls below were carried as **deprecated** through **v3.x** and **removed** as part of the **v4.0.0** preparation.
 
 ### Removed controls (historical — targeted for **v4.0.0**)
 

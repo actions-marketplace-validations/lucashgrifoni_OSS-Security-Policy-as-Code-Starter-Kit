@@ -1,6 +1,6 @@
-# EU AI Act readiness — what the kit will help with in v6.0.0, and what it does not
+# EU AI Act readiness — what the kit helps with, and what it does not
 
-> **In development (v6.0.0)**. This page describes the planned advisory profile `cra-eu-ai-act-art11-1` and the controls in the `LLM-AI-ACT-*` family. **None of them ship in v5.9.x.** They land with PR-11 on the `feat/v6.0.0-evolution` branch. Treat this page as a design statement and adopter guide for what will be available when v6.0.0 GA ships (target: before 2026-08-02).
+> **Available since v6.0.0.** This page describes the advisory profile `cra-eu-ai-act-art11-1` and the controls in the `LLM-AI-ACT-*` family (the Annex IV expansion — `LLM-AI-ACT-{DEV,PERF,CYBER,CHANGE,STD,PMM}-*` — landed in the v6.0.0 Cycle 2). The kit produces technical alignment evidence only; it does **not** substitute for an EU AI Act conformity assessment. Treat this page as an adopter guide.
 
 This page is the AI Act companion to [`cra-readiness.md`](cra-readiness.md). It applies the same posture: the kit produces **technical alignment evidence**, not a conformity assessment.
 
@@ -93,6 +93,6 @@ Article 11 + Annex IV is the documentation obligation. Other AI Act articles ent
 - [EU AI Act consolidated text](https://eur-lex.europa.eu/eli/reg/2024/1689/oj) (Regulation (EU) 2024/1689)
 - [Annex IV — technical documentation requirements](https://artificialintelligenceact.eu/annex/4/)
 - [Article 11 — technical documentation obligation](https://artificialintelligenceact.eu/article/11/)
-- ADR-010 (planned) — `cra-eu-ai-act-art11-1` profile design and overclaim mitigation
-- [`positioning.md`](positioning.md) → *Roadmap (v6.0.0 — in development)*
-- [`framework-alignment.md`](framework-alignment.md) → *EU AI Act — Article 11 + Annex IV (planned v6.0.0)*
+- [`decisions/adr-010-cra-eu-ai-act-art11-profile.md`](decisions/adr-010-cra-eu-ai-act-art11-profile.md) — `cra-eu-ai-act-art11-1` profile design and overclaim mitigation
+- [`positioning.md`](positioning.md) → *Former v6.0.0 roadmap (shipped)*
+- [`framework-alignment.md`](framework-alignment.md) → *EU AI Act — Article 11 + Annex IV*

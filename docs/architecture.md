@@ -76,10 +76,11 @@ instead of reaching into the `evaluators` package:
 | `evaluators_governance.py` | Governance + release-changelog | v5.7.0 |
 | `evaluators_supply_chain.py` | Supply chain (SBOM, Scorecard, dep-update, CodeQL, dependency review, provenance verify) | v5.7.0 |
 | `evaluators_ci_cd.py` | CI/CD (workflow + Azure pipeline + AWS buildspec analysis) | v5.8.0 |
+| `evaluators_gitlab_ci.py` | GitLab CI pipeline posture (`GL-PIPE-*`) | v5.9.0 |
 | `evaluators_platform.py` | Repo / org / platform-side controls | v5.8.0 |
 | `evaluators_release.py` | Release artifacts (provenance, SBOM artifact-bound, deploy, audit stream, archive) | v5.8.0 |
 | `evaluators_vuln_management.py` | In-repo secret / pin / gitignore hygiene | v5.8.0 |
-| `evaluators_sast.py` | SAST adapters (Semgrep today; Trivy / Gitleaks / Grype tracked for v5.9.0) | v5.8.0 |
+| `evaluators_sast.py` | SAST evidence (Semgrep via the bundled `scan-sast` adapter; Trivy / Gitleaks / Grype SARIF consumed when supplied) | v5.8.0 |
 | `evaluators_containers.py` | Container image hardening | pre-v5.7 |
 | `evaluators_k8s.py` | Kubernetes manifest posture | pre-v5.7 |
 | `evaluators_iac.py` | Terraform / OpenTofu posture | pre-v5.7 |
@@ -90,9 +91,13 @@ instead of reaching into the `evaluators` package:
 | `evaluators_fuzzing.py` | Fuzzing presence | pre-v5.7 |
 | `evaluators_common.py` | Shared evaluator utilities | pre-v5.7 |
 
-Moving function bodies into the new boundary modules is intentionally
-incremental (one bucket per minor release) so each move can be
-validated against the byte-equivalence guarantee in isolation.
+As of v6.1.0 (ADR-026), the function bodies for the governance, CI/CD,
+GitHub, Azure, AWS, GitLab, supply-chain, AI, and CRA packs live in the
+`evaluators/` package submodules; the boundary modules above re-export
+their callables under the canonical names so external imports stay
+stable. The remaining packs (containers, k8s, IaC, webhook, fuzzing)
+still keep their bodies in their own `evaluators_*.py` module. Each move
+is validated against the byte-equivalence guarantee in isolation.
 Promoting the whole set into a Python package
 (`oss_policy_kit.application.evaluators.*`) is tracked for v6.0 (Fase 6
 of the maturity plan).
@@ -250,7 +255,7 @@ The SAST boundary module (`evaluators_sast.py`) closes around five controls: the
 
 ## `emit-vex` subcommand (v5.9.0)
 
-`oss-policy-kit emit-vex` reads the OSV-Scanner SARIF file consumed by `SAST-OSV-068` and emits a CycloneDX VEX 1.6 document. The v0.1 surface emits every distinct vulnerability ID (CVE / GHSA / OSV / RUSTSEC) with `analysis.state: in_triage`; the manufacturer fills the analysis post-hoc. Per-CVE waiver integration is planned for v5.9.x (see [`docs/decisions/adr-002-emit-vex-scope.md`](decisions/adr-002-emit-vex-scope.md) and [`docs/vex-emission.md`](vex-emission.md)).
+`oss-policy-kit emit-vex` reads the OSV-Scanner SARIF file consumed by `SAST-OSV-068` and emits a CycloneDX VEX 1.6 document. Findings without a matching waiver are emitted with `analysis.state: in_triage`; the manufacturer fills the analysis post-hoc. Per-CVE waiver integration shipped: a waiver carrying `vulnerability_ids: [...]` maps the finding to `analysis.state: not_affected` with the waiver's justification. The `--validate` and `--include-references` flags are also available (see [`docs/decisions/adr-002-emit-vex-scope.md`](decisions/adr-002-emit-vex-scope.md) and [`docs/vex-emission.md`](vex-emission.md)).
 
 The subcommand is intentionally narrow: it does not generate an SBOM (delegated to Syft / Trivy), does not verify the manufacturer's analysis (auditor's job), and does not cover non-OSV findings (zizmor / poutine / Gitleaks findings are policy patterns, not CVEs).
 

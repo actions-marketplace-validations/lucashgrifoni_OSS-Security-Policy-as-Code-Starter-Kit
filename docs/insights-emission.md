@@ -1,6 +1,6 @@
 # OpenSSF Security Insights emission (`emit-insights`)
 
-> **In development (v6.0.0)**. The `emit-insights` subcommand and the renderer it depends on land with PR-8 on the `feat/v6.0.0-evolution` branch. **They do not ship in v5.9.x.** This page is the design and adopter guide for what will be available when v6.0.0 GA ships.
+> **Available since v6.0.0.** The `emit-insights` subcommand and the renderer it depends on shipped in v6.0.0. This page is the adopter guide.
 
 This page is the OpenSSF Security Insights companion to [`vex-emission.md`](vex-emission.md). It follows the same architectural pattern: a dedicated subcommand that re-projects existing evaluator outputs into a stable external format, without adding new controls to the catalog.
 

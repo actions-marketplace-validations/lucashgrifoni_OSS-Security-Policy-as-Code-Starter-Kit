@@ -23,7 +23,7 @@ pip install oss-policy-kit
 oss-policy-kit --version
 ```
 
-Expected output: a version line like `5.8.0`. If `oss-policy-kit` is
+Expected output: a version line like `6.3.0`. If `oss-policy-kit` is
 not on `PATH`, use `python -m oss_policy_kit` instead (works identically
 on every command below).
 
@@ -97,7 +97,7 @@ oss-policy-kit recommend-profile --target ./my-repo
 ```
 
 This is a **heuristic, not a compliance decision** (the output says so
-itself). Use the suggestion as a starting point. The 36 bundled
+itself). Use the suggestion as a starting point. The 53 bundled
 profiles are documented in [`docs/profiles/overview.md`](profiles/overview.md).
 
 ## 6. Add a waiver if a gap is intentional (1 minute)
