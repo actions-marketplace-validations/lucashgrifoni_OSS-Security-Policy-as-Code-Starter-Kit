@@ -4,3 +4,6 @@ dist/
 *.local
 .env
 .env.*
+
+# Local-only standalone preview (Pages serves index.html, not this)
+preview.html
