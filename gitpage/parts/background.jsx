@@ -38,6 +38,12 @@ function AmbientBackground() {
           <div className="aurora-blob aurora-3" />
         </div>
       </div>
+      <div className="beams" aria-hidden="true">
+        <span className="beam b1" />
+        <span className="beam b2" />
+        <span className="beam b3" />
+        <span className="beam b4" />
+      </div>
       <div className="fixed inset-x-0 bottom-0 z-0 pointer-events-none grid-floor">
         <div className="grid-floor-inner" />
       </div>

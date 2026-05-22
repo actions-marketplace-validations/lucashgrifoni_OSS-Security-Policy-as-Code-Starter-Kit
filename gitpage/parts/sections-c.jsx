@@ -2,26 +2,96 @@
 
 const SAMPLE_REPORTS = [
   {
+    id: "hardened",
     title: "Hardened repository",
+    file: "hardened-report.md",
+    profile: "github-level-1",
     caption: "github-level-1 profile, 14/14 pass in the bundled hardened fixture.",
-    src: "screenshots/05-example-hardened.png",
-    width: 1551,
-    height: 1571,
-    alt: "Hardened repository report output",
-    tone: "text-signal",
+    tone: "signal",
+    stats: { pass: 14, fail: 0, review: 0, total: 14 },
+    controls: [
+      { id: "GOV-SEC-001", status: "pass", reason: "SECURITY.md present." },
+      { id: "GOV-CON-002", status: "pass", reason: "Contributing guide present." },
+      { id: "GOV-COWN-003", status: "pass", reason: "CODEOWNERS file present." },
+      { id: "GOV-LIC-004", status: "pass", reason: "LICENSE (or COPYING) file detected." },
+      { id: "CI-WF-005", status: "pass", reason: "Found 3 workflow file(s)." },
+      { id: "CI-PERM-006", status: "pass", reason: "All workflows declare top-level permissions." },
+      { id: "CI-DANGER-007", status: "pass", reason: "No pull_request_target detected in workflows." },
+      { id: "CI-PIN-008", status: "pass", reason: "No obviously mutable third-party action pins." },
+      { id: "CI-LEAST-009", status: "pass", reason: "No obviously over-broad workflow permissions." },
+      { id: "SEC-CODEQL-010", status: "pass", reason: "github/codeql-action usage detected." },
+      { id: "REL-CHANGE-012", status: "pass", reason: "Changelog or release notes file detected." },
+      { id: "GOV-WAIV-014", status: "pass", reason: "Versioned waiver file detected in repository." },
+    ],
   },
   {
+    id: "vulnerable",
     title: "Vulnerable repository",
+    file: "vulnerable-report.md",
+    profile: "github-level-1",
     caption: "Same profile against the vulnerable fixture, with multiple failing controls.",
-    src: "screenshots/06-example-vulnerable.png",
-    width: 2201,
-    height: 1094,
-    alt: "Vulnerable repository report output",
-    tone: "text-red-200",
+    tone: "red",
+    stats: { pass: 6, fail: 7, review: 1, total: 14 },
+    controls: [
+      { id: "GOV-SEC-001", status: "fail", reason: "SECURITY.md missing." },
+      { id: "GOV-CON-002", status: "fail", reason: "Contributing guide missing." },
+      { id: "GOV-COWN-003", status: "fail", reason: "CODEOWNERS file missing." },
+      { id: "GOV-LIC-004", status: "pass", reason: "LICENSE file detected." },
+      { id: "CI-WF-005", status: "pass", reason: "Found 1 workflow file." },
+      { id: "CI-PERM-006", status: "fail", reason: "Workflow does not declare top-level permissions." },
+      { id: "CI-DANGER-007", status: "fail", reason: "pull_request_target combined with untrusted checkout." },
+      { id: "CI-PIN-008", status: "fail", reason: "Third-party actions pinned to mutable tags." },
+      { id: "CI-LEAST-009", status: "fail", reason: "Over-broad workflow permissions detected." },
+      { id: "SEC-CODEQL-010", status: "review", reason: "No CodeQL usage observed; manual review required." },
+      { id: "REL-CHANGE-012", status: "pass", reason: "Changelog detected." },
+      { id: "GOV-WAIV-014", status: "pass", reason: "No waivers required for fixture." },
+    ],
   },
 ];
 
+function SampleOutputStat({ label, value, accent }) {
+  return (
+    <div className="relative flex flex-col rounded-2xl border border-white/10 bg-ink-deep/60 p-4 backdrop-blur transition hover:border-signal/30">
+      <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-steel">{label}</span>
+      <span className={`mt-1 text-3xl font-semibold leading-none ${accent}`}>
+        <Counter to={value} duration={900} />
+      </span>
+    </div>
+  );
+}
+
+const STATUS_META = {
+  pass:   { glyph: "✓", text: "text-signal",  bg: "bg-signal/10",  border: "border-signal/30" },
+  fail:   { glyph: "✗", text: "text-red-300", bg: "bg-red-500/10", border: "border-red-400/30" },
+  review: { glyph: "?", text: "text-amber-200", bg: "bg-amber-500/10", border: "border-amber-400/30" },
+};
+
+function ReportRow({ row, i, activeId }) {
+  const meta = STATUS_META[row.status] || STATUS_META.pass;
+  return (
+    <div
+      key={`${activeId}-${row.id}`}
+      className="report-row grid grid-cols-[110px_72px_1fr] items-start gap-3 border-b border-white/5 px-4 py-2.5 font-mono text-[11px] last:border-b-0 transition hover:bg-white/[0.03]"
+      style={{ animationDelay: `${i * 28}ms` }}
+    >
+      <code className="text-signal/90">{row.id}</code>
+      <span className={`inline-flex items-center gap-1.5 ${meta.text}`}>
+        <span className="text-[13px] leading-none">{meta.glyph}</span>
+        {row.status}
+      </span>
+      <span className="text-mist/85 leading-relaxed">{row.reason}</span>
+    </div>
+  );
+}
+
 function SampleOutputSection() {
+  const [activeIdx, setActiveIdx] = useState(0);
+  const item = SAMPLE_REPORTS[activeIdx];
+  const ringTone =
+    item.tone === "signal"
+      ? "ring-signal/40 shadow-glow"
+      : "ring-red-400/40 shadow-[0_0_60px_-10px_rgba(248,113,113,0.45)]";
+
   return (
     <SectionShell
       id="sample-output"
@@ -29,36 +99,141 @@ function SampleOutputSection() {
       title="The report is meant to be read by humans and kept by CI."
       subtitle="The same evaluation produces Markdown for reviewers, JSON for automation, and optional SARIF for code-scanning workflows."
     >
-      <div className="grid gap-6 lg:grid-cols-2">
-        {SAMPLE_REPORTS.map((item, i) => (
-          <Reveal key={item.title} delay={i * 80}>
-            <div className="h-full overflow-hidden rounded-3xl border border-white/10 bg-white/4 shadow-floor">
-              <div className="border-b border-white/10 px-5 py-4">
-                <h3 className={`text-lg font-semibold ${item.tone}`}>{item.title}</h3>
-                <p className="mt-1 text-sm text-slate">{item.caption}</p>
-              </div>
-              <img
-                src={item.src}
-                alt={item.alt}
-                width={item.width}
-                height={item.height}
-                className="block w-full bg-ink-deep object-cover"
-                loading="lazy"
-              />
+      <Reveal>
+        <div className={`relative overflow-hidden rounded-3xl border border-white/10 bg-ink-deep/70 ring-1 ${ringTone} transition-shadow duration-500 backdrop-blur-xl`}>
+          {/* macOS-style chrome with tabs */}
+          <div className="flex flex-wrap items-center gap-3 border-b border-white/10 bg-ink-deep/80 px-5 py-3">
+            <div className="flex items-center gap-2">
+              <span className="h-3 w-3 rounded-full bg-red-400/70" />
+              <span className="h-3 w-3 rounded-full bg-amber-400/70" />
+              <span className="h-3 w-3 rounded-full bg-signal/80" />
             </div>
-          </Reveal>
-        ))}
-      </div>
-      <Reveal className="mt-8">
-        <a
-          href="https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/tree/master/docs/sample-reports"
-          target="_blank"
-          rel="noreferrer noopener"
-          className="inline-flex items-center gap-2 rounded-lg border border-signal/40 bg-signal/10 px-4 py-3 text-sm font-medium text-signal transition hover:bg-signal/20"
-        >
-          Browse full sample reports
-          <Icon name="arrow" className="h-4 w-4" />
-        </a>
+            <div className="ml-2 flex flex-1 flex-wrap items-center gap-1">
+              {SAMPLE_REPORTS.map((r, i) => {
+                const isActive = i === activeIdx;
+                const tab = r.tone === "signal" ? "text-signal" : "text-red-200";
+                return (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => setActiveIdx(i)}
+                    className={`group relative whitespace-nowrap rounded-md px-3 py-1.5 font-mono text-[11px] transition ${
+                      isActive
+                        ? `${tab} bg-white/[0.06] border border-white/10`
+                        : "text-steel hover:text-mist border border-transparent"
+                    }`}
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full ${
+                          r.tone === "signal"
+                            ? "bg-signal shadow-[0_0_8px_rgba(8,185,139,0.8)]"
+                            : "bg-red-400"
+                        }`}
+                      />
+                      {r.file}
+                    </span>
+                    {isActive && (
+                      <span className="absolute -bottom-px left-2 right-2 h-px bg-gradient-to-r from-transparent via-current to-transparent" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <span className="hidden font-mono text-[11px] text-steel sm:inline">
+              profile: <span className="text-signal">{item.profile}</span>
+            </span>
+          </div>
+
+          {/* Body */}
+          <div className="grid gap-6 p-6 md:p-8 lg:grid-cols-[280px_1fr] lg:gap-8">
+            {/* Left: summary */}
+            <div className="flex flex-col gap-4">
+              <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.05] to-transparent p-5">
+                <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-steel">
+                  Evaluation summary
+                </p>
+                <h3 className="mt-2 text-2xl font-semibold text-mist">{item.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-slate">{item.caption}</p>
+              </div>
+
+              <div key={`stats-${item.id}`} className="grid grid-cols-3 gap-3">
+                <SampleOutputStat label="pass" value={item.stats.pass} accent="text-signal" />
+                <SampleOutputStat label="fail" value={item.stats.fail} accent="text-red-300" />
+                <SampleOutputStat label="review" value={item.stats.review} accent="text-amber-200" />
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-ink-deep/60 p-4 font-mono text-[11px] leading-relaxed text-slate">
+                <p className="text-steel">// outputs</p>
+                <p>├─ evaluation-report.md</p>
+                <p>├─ evaluation-report.json</p>
+                <p>└─ evaluation-report.sarif</p>
+              </div>
+
+              <a
+                href="https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/tree/master/docs/sample-reports"
+                target="_blank"
+                rel="noreferrer noopener"
+                className="group inline-flex items-center justify-between gap-2 rounded-xl border border-signal/35 bg-signal/10 px-4 py-3 text-sm font-medium text-signal transition hover:bg-signal/20 hover:shadow-glow-sm"
+              >
+                <span>Browse full reports</span>
+                <Icon name="arrow" className="h-4 w-4 transition group-hover:translate-x-0.5" />
+              </a>
+            </div>
+
+            {/* Right: rendered report (no screenshot) */}
+            <div className="overflow-hidden rounded-2xl border border-white/10 bg-ink-deep/70 shadow-floor">
+              {/* report header */}
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3 font-mono text-[11px] text-steel">
+                <div className="flex items-center gap-2">
+                  <Icon name="file" className="h-3.5 w-3.5 text-signal/80" />
+                  <span>{item.file}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span>
+                    score:{" "}
+                    <span className={item.tone === "signal" ? "text-signal" : "text-amber-200"}>
+                      {Math.round((item.stats.pass / item.stats.total) * 100)}%
+                    </span>
+                  </span>
+                  <span>·</span>
+                  <span>
+                    {item.stats.pass}/{item.stats.total} pass
+                  </span>
+                </div>
+              </div>
+
+              {/* health bar */}
+              <div className="flex items-center gap-1 px-4 py-3">
+                {Array.from({ length: item.stats.total }).map((_, i) => {
+                  let cls = "bg-white/10";
+                  if (i < item.stats.pass) cls = "bg-signal shadow-[0_0_6px_rgba(8,185,139,0.7)]";
+                  else if (i < item.stats.pass + item.stats.fail) cls = "bg-red-400 shadow-[0_0_6px_rgba(248,113,113,0.6)]";
+                  else if (i < item.stats.pass + item.stats.fail + item.stats.review) cls = "bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.6)]";
+                  return (
+                    <span
+                      key={i}
+                      className={`h-2 flex-1 rounded-sm ${cls} transition-all duration-300`}
+                      style={{ transitionDelay: `${i * 30}ms` }}
+                    />
+                  );
+                })}
+              </div>
+
+              {/* rows */}
+              <div key={item.id} className="max-h-[420px] overflow-y-auto">
+                <div className="grid grid-cols-[110px_72px_1fr] gap-3 border-b border-white/10 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-steel">
+                  <span>ID</span>
+                  <span>Status</span>
+                  <span>Reason</span>
+                </div>
+                {item.controls.map((row, i) => (
+                  <ReportRow key={`${item.id}-${row.id}`} row={row} i={i} activeId={item.id} />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       </Reveal>
     </SectionShell>
   );

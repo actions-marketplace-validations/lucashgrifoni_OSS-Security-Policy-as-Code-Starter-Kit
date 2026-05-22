@@ -6,6 +6,7 @@ const files = [
   "parts/background.jsx",
   "parts/header.jsx",
   "parts/hero.jsx",
+  "parts/strip.jsx",
   "parts/sections-a.jsx",
   "parts/sections-b.jsx",
   "parts/sections-c.jsx",

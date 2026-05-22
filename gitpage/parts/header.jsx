@@ -13,8 +13,6 @@ const NAV = [
   { id: "states", label: "Evaluation" },
   { id: "differentiators", label: "Why" },
   { id: "examples", label: "Signals" },
-  { id: "roadmap", label: "Roadmap" },
-  { id: "architecture", label: "Repo" },
   { id: "cta", label: "Get started" },
 ];
 

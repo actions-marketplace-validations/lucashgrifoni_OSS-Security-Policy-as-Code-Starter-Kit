@@ -156,18 +156,18 @@ function SectionShell({
     >
       <div className="relative z-10 mx-auto max-w-6xl px-4 sm:px-6">
         <Reveal>
-          <p className="font-mono text-xs uppercase tracking-[0.28em] text-signal/85">
+          <span className="glitch-eyebrow" data-text={eyebrow}>
             {eyebrow}
-          </p>
+          </span>
         </Reveal>
         <Reveal delay={80}>
-          <h2 className="mt-3 max-w-4xl text-3xl font-semibold leading-tight tracking-tight text-mist md:text-5xl">
+          <h2 className="headline-neon mt-4 max-w-4xl text-3xl font-semibold leading-tight tracking-tight text-mist md:text-5xl">
             {title}
           </h2>
         </Reveal>
         {subtitle && (
           <Reveal delay={140}>
-            <p className="mt-5 max-w-3xl text-base leading-relaxed text-slate md:text-lg">
+            <p className="mt-6 max-w-3xl text-base leading-relaxed text-slate md:text-lg">
               {subtitle}
             </p>
           </Reveal>
@@ -175,6 +175,81 @@ function SectionShell({
         <div className="mt-12 md:mt-16">{children}</div>
       </div>
     </section>
+  );
+}
+
+// Split-text: animate each character with stagger on mount
+function SplitText({ text, className = "", stagger = 40, startDelay = 0 }) {
+  const words = String(text).split(" ");
+  let charIdx = 0;
+  return (
+    <span className={className}>
+      {words.map((w, wi) => {
+        const chars = w.split("");
+        return (
+          <React.Fragment key={wi}>
+            <span className="split-word">
+              {chars.map((c, ci) => {
+                const d = startDelay + charIdx * stagger;
+                charIdx++;
+                return (
+                  <span key={ci} style={{ "--d": `${d}ms` }}>
+                    {c}
+                  </span>
+                );
+              })}
+            </span>
+            {wi < words.length - 1 ? " " : ""}
+          </React.Fragment>
+        );
+      })}
+    </span>
+  );
+}
+
+// Animated number counter — triggers when in view
+function Counter({ to, duration = 1600, suffix = "", className = "" }) {
+  const [ref, inView] = useInView({ threshold: 0.4 });
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    if (!inView) return;
+    if (prefersReducedMotion()) {
+      setN(to);
+      return;
+    }
+    let raf = 0;
+    const start = performance.now();
+    const tick = (t) => {
+      const p = Math.min(1, (t - start) / duration);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setN(Math.round(to * eased));
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [inView, to, duration]);
+  return (
+    <span ref={ref} className={className}>
+      {n}
+      {suffix}
+    </span>
+  );
+}
+
+// Horizontal infinite marquee band
+function MarqueeBand({ items, reverse = false }) {
+  const doubled = [...items, ...items];
+  return (
+    <div className={`marquee-band ${reverse ? "reverse" : ""}`}>
+      <div className="marquee-track">
+        {doubled.map((item, i) => (
+          <span key={i} className="marquee-item">
+            <span className="marquee-dot" />
+            {item}
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -446,6 +521,9 @@ Object.assign(window, {
   TiltCard,
   MagneticButton,
   SectionShell,
+  SplitText,
+  Counter,
+  MarqueeBand,
   Icon,
   scrollToId,
   prefersReducedMotion,

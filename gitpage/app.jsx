@@ -7,9 +7,11 @@ function App() {
       <SiteHeader />
       <main className="relative z-10">
         <Hero />
+        <StatsStrip />
         <ProblemSection />
         <ComparisonSection />
         <ScopeSection />
+        <ProfilesMarquee />
         <WorkflowSection />
         <SampleOutputSection />
         <QuickstartSection />
@@ -18,8 +20,6 @@ function App() {
         <EvaluationStatesSection />
         <DifferentiatorsSection />
         <SignalsSection />
-        <RoadmapSection />
-        <RepoAnatomySection />
         <CTASection />
         <SiteFooter />
       </main>

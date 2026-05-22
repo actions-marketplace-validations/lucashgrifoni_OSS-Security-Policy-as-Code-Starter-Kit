@@ -322,12 +322,15 @@ function Hero() {
 
           <Reveal delay={80}>
             <h1 className="headline-shadow mt-8 max-w-4xl text-4xl font-semibold leading-[1.04] tracking-tight text-mist md:text-6xl lg:text-7xl">
-              Pass/fail policy gates
+              <SplitText text="Pass/fail policy gates" stagger={22} />
               <br />
-              for your repository.
+              <SplitText text="for your repository." stagger={22} startDelay={520} />
               <br className="hidden md:block" />
-              With{" "}
-              <span style={{ color: "#08b98b" }}>explicit trust grading</span>.
+              <SplitText text="With " stagger={22} startDelay={950} />
+              <span style={{ color: "#08b98b" }}>
+                <SplitText text="explicit trust grading" stagger={26} startDelay={1020} />
+              </span>
+              .
             </h1>
           </Reveal>
 
