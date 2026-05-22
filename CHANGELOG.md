@@ -6,47 +6,6 @@ This changelog follows the same public-facing format used by the GitHub release 
 
 ---
 
-## Unreleased — v6.x
-
-### Highlights
-
-* **Input size limits (local CI DoS hardening).** User-controlled inputs are now size-capped before being read into memory: evidence JSON / `--scorecard-json` / `--waivers` at 5 MiB and SARIF inputs (`--sarif-output` ingestion, `emit-vex --osv-sarif`, SAST `*.sarif.json` evidence) at 20 MiB. Evidence/SARIF-backed controls degrade to `manual-review-required`; CLI inputs fail with a clear validation error (exit 2). Documented in `docs/cli-reference.md`.
-* **Third-party evaluator plugin load visibility.** Broken custom-evaluator plugins (entry-point group `oss_policy_kit.evaluators`) used to be skipped silently. Built-in evaluation is still never affected, but `evaluate --verbose` now reports each plugin load problem (`load` / `not-callable` / `builtin-precedence` / `discovery`) on stderr so operators can tell whether a custom control is actually active.
-
-### Fixes
-
-* fix SARIF `tool.driver.semanticVersion`: it was empty while `version` carried the kit SemVer. GitHub code scanning and other SARIF consumers use `semanticVersion` to correlate/dedupe alerts across tool versions, so it is now populated with the kit version. Covered by `tests/application/test_sarif_output.py`.
-* fix `scripts/migrate-1.0-to-2.0.py`: it read a top-level `controls` key, but a reports/1.0 document emits `results`, so its output was not a schema-valid reports/2.0 document. It now reshapes `results` into the 2.0 `controls` array (mapping status → state via the same table the engine uses) and produces a `reports/2.0`-schema-valid document matching the kit's native serialization. Covered by `tests/contract/test_report_migration.py`.
-* remove `paths-ignore: gitpage/**` from the `GitHub CI/CD` workflow so the required Quality check (which includes the gitpage guardrail test) runs on gitpage-only pull requests too. Previously such PRs skipped Quality, which let a broken gitpage change reach `master`.
-
-### CLI / DX
-
-* add an opt-in global `--debug` flag (`oss-policy-kit --debug <subcommand> ...`) that emits per-control diagnostics — which evaluator ran, each outcome, its evidence-collection method and source count — to stderr via the stdlib `logging` module. Without `--debug` the output is byte-identical to before.
-
-### Documentation
-
-* fix the documentation index so it matches reality: link previously-orphaned guides (`container-image`, `dev-environment`, `sigstore-rekor-v2`, `testing-strategy`) and list all migration guides (v3 → v6.0.0); document the `emit-insights` and `export-evidence` subcommands in `cli-reference.md`, which were missing.
-
-### Internal
-
-* split the ~8,800-line `application/evaluators.py` monolith into an `evaluators/` package with family submodules (governance, cicd, github, azure, aws, gitlab, supply_chain, ai, cra) over a shared `_shared.py`, with the registry and plugin loaders in `__init__.py` (ADR-026). Functions were moved verbatim: the `EVALUATOR_REGISTRY` ID set, evaluation reports, and public imports are unchanged. See `docs/architecture.md`.
-* extract the duplicated evidence-schema loading boilerplate (repeated across 19 `_*_schema()` helpers) into a single `load_evidence_schema()` in `application/evidence_loading.py`. Behavior is byte-identical (evaluation reports unchanged); only the duplication is removed.
-
-### Quality / Tests
-
-* enforce a test-coverage floor in CI (`fail_under = 72`, combined unit + property runs) so coverage cannot silently regress.
-* remove conditional `skipif`/`skip` guards on fixtures that are versioned in the repo (`invalid-workflow-target`, `repo with spaces`, `azure-/aws-hardened-target`). Those tests now always run; if a fixture goes missing the test fails clearly instead of turning into a silent green.
-* add property-based invariants over the entire evaluator registry (every `eval_*` returns a valid, deterministic `EvalOutcome` and never writes to the target) and a `reports/1.0`→`reports/2.0` migration roundtrip validated against the report schema.
-* enable a cyclomatic-complexity gate (ruff `C90`, `max-complexity = 12`) so new functions cannot grow unbounded. The functions already above the threshold are baselined with `# noqa: C901` and tracked for incremental reduction.
-
-### Security / Supply Chain
-
-* run `pip-audit` (dependency vulnerability audit, `--strict`) and `bandit` (Python SAST, gated at medium+ severity and confidence) on every push and pull request in `Security CI/CD`. Both tools were already declared dev dependencies but were not enforced in the pipeline; the kit now audits its own dependency tree and source the same way it asks adopters to.
-
-### CI/CD
-
-* bump remaining GitHub Actions to Node 24 runtime ahead of the 2026-06-02 deprecation: `download-artifact` v4→v8.0.1, `deploy-pages` v4→v5.0.0, `dependency-review-action` v4→v5.0.0, and `docker/{setup-qemu,setup-buildx,login,build-push}` to their Node 24 majors. All re-pinned by immutable SHA; no workflow logic changed. `gitleaks-action` stays on Node 20 (no upstream Node 24 release yet).
-
 ## [6.3.0](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v6.2.0...v6.3.0) (2026-05-22)
 
 

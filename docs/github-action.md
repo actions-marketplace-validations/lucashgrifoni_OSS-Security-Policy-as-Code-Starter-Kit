@@ -5,7 +5,7 @@ The kit ships as a composite GitHub Action so adopters can evaluate the bundled 
 ## Quick start
 
 ```yaml
-- uses: lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit@v5
+- uses: lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit@v6.3.0
   with:
     profile: github-level-1
     fail-on: fail
@@ -14,7 +14,7 @@ The kit ships as a composite GitHub Action so adopters can evaluate the bundled 
 Pin to a specific release for reproducibility:
 
 ```yaml
-- uses: lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit@v5.4.0
+- uses: lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit@v6.3.0
   with:
     profile: github-level-1
     fail-on: fail
@@ -33,7 +33,7 @@ For maximum supply-chain assurance, pin to the commit SHA of the release tag and
 | `waivers` | no | (empty) | Path to a YAML waivers file (kept under version control). |
 | `scorecard-json` | no | (empty) | OpenSSF Scorecard JSON used as supplemental evidence. |
 | `sarif-output` | no | (empty) | SARIF 2.1.0 file path. Relative paths resolve under `output-dir`. |
-| `kit-version` | no | (matches action tag) | Pin a specific PyPI version, or `latest` to track 5.x. |
+| `kit-version` | no | (matches action tag) | Pin a specific PyPI version, or `latest` to track the newest 6.x. |
 | `python-version` | no | `3.12` | Python used to run the kit. 3.12+ is required. |
 
 ## Outputs
@@ -60,7 +60,7 @@ permissions:
 ```yaml
 - name: Run oss-policy-kit
   id: oss-policy
-  uses: lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit@v5
+  uses: lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit@v6.3.0
   with:
     profile: github-level-2
     sarif-output: results.sarif
