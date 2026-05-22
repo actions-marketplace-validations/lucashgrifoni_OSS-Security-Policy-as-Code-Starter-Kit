@@ -196,6 +196,12 @@ jobs:
           - python
     steps:
       - name: Harden runner
+        # CodeQL `init` downloads the analysis bundle when it is not already in
+        # the runner toolcache. The Harden-Runner recommended-policy baseline
+        # missed these hosts because those runs hit a warm toolcache; on a cold
+        # cache the bundle is fetched as a GitHub release asset
+        # (objects / release-assets.githubusercontent.com, fronted by Fastly/AWS)
+        # and the job fails closed with ECONNREFUSED without them.
         uses: step-security/harden-runner@ab7a9404c0f3da075243ca237b5fac12c98deaa5 # v2
         with:
           egress-policy: block
@@ -203,6 +209,9 @@ jobs:
             github.com:443
             api.github.com:443
             uploads.github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            codeload.github.com:443
 
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
