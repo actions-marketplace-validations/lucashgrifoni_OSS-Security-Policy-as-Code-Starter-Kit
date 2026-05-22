@@ -42,7 +42,7 @@ def test_realistic_pipeline_detects_remote_include(tmp_path: Path) -> None:
     shutil.copy(_FIXTURE, tmp_path / ".gitlab-ci.yml")
     a = analyze_gitlab_ci(tmp_path)
     assert len(a.includes_remote) >= 1
-    assert any("gitlab.example.com" in ref for _, ref in a.includes_remote)
+    assert any(ref == "https://gitlab.example.com/ci/security-scan.yml" for _, ref in a.includes_remote)
 
 
 def test_realistic_pipeline_detects_trigger_restrictions(tmp_path: Path) -> None:

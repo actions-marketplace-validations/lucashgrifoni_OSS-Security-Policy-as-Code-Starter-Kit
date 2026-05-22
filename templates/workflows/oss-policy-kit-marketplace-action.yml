@@ -28,9 +28,9 @@ jobs:
 
       - name: Run oss-policy-kit baseline
         id: oss-policy
-        # Replace with a tagged release once published, e.g.:
-        # uses: lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit@v5.4.0
-        uses: lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit@v5
+        # Pin to a released tag. Use the major tag (@v6) for automatic patch
+        # updates, or an exact tag (e.g. @v6.3.0) for full reproducibility.
+        uses: lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit@v6.3.0
         with:
           target: '.'
           # Omit `profile` to read it from oss-policy-kit.yaml at the repo root.
