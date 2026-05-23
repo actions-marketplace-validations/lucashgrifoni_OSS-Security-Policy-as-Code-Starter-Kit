@@ -1,0 +1,42 @@
+id: gitlab-release-hardening-1
+title: GitLab release hardening — starter + evidence (level 1)
+description: >
+  **Starter + evidence:** extends **gitlab-level-1** with **PLAT-BRPROT-015**
+  (protected-branch evidence) plus the cross-platform release-hygiene controls
+  **SEC-GITIGNORE-051** and **SEC-PINLOCK-052**. Branch-protection posture is read
+  from ``.oss-policy-kit/evidence/branch-protection.json`` (self-attested or
+  ``collect-evidence --platform gitlab``).
+  **Posture:** release ladder, ``--fail-on fail`` recommended.
+  **Natural next step:** ``gitlab-release-hardening-2`` or ``gitlab-level-2`` for
+  stronger pipeline posture before the level-3 hard-gate.
+  **Framework alignment:** see ``docs/framework-alignment.md`` and
+  ``docs/decisions/adr-003-gitlab-ci-support.md``.
+audience: >
+  GitLab CI teams preparing releases with protected-branch evidence before adopting
+  the full advisory ladder. Maintain ``branch-protection.json`` under
+  ``.oss-policy-kit/evidence/`` (or run ``collect-evidence --platform gitlab``).
+controls:
+  # Governance core (multi-platform, deterministic).
+  - GOV-SEC-001
+  - GOV-CON-002
+  - GOV-COWN-003
+  - GOV-LIC-004
+  - REL-CHANGE-012
+  - GOV-DISC-013
+  - GOV-WAIV-014
+  # Release hygiene (cross-platform).
+  - SEC-GITIGNORE-051
+  - SEC-PINLOCK-052
+  # GitLab CI native (L1).
+  - GL-PIPE-001
+  - GL-PIPE-002
+  - GL-PIPE-003
+  - GL-PIPE-004
+  - GL-PIPE-005
+  - GL-PIPE-006
+  # Multi-platform supply chain / release hygiene.
+  - DEP-UPDATE-001
+  - SEC-DEPREV-011
+  - BUILD-SBOM-QUAL-003
+  # Release evidence (platform-agnostic).
+  - PLAT-BRPROT-015

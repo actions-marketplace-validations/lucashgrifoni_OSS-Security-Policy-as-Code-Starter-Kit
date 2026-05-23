@@ -5,10 +5,10 @@ DevSecOps frameworks operators most often have to defend against. It is a **mapp
 **certification claim**.
 
 > **⚠️ Snapshot pending refresh.** The per-framework mapping tables below reflect the
-> **v5.9.x catalog (136 controls / 38 profiles)**. As of **v6.3.0** the kit bundles
-> **212 controls / 53 profiles**; the v6.0.0–v6.3.0 families (AI/LLM, EU AI Act, `WORM-*`,
-> MCP, OWASP Agentic ASI, EU CRA Art.13/14, SLSA Source) are **not yet folded into the
-> mapping tables here**. For the authoritative current control set see
+> **v5.9.x catalog (136 controls / 38 profiles)**. As of **v6.4.0** the kit bundles
+> **212 controls / 56 profiles**; the v6.0.0+ families (AI/LLM, EU AI Act, `WORM-*`,
+> MCP, OWASP Agentic ASI, EU CRA Art.13/14, SLSA Source, the full GitLab CI family) are
+> **not yet folded into the mapping tables here**. For the authoritative current control set see
 > [controls-catalog.md](controls-catalog.md) and `CHANGELOG.md`. The kit does not assert conformance to any of these frameworks; it
 documents how its honest signals align with each framework's expectations so operators can
 navigate from a framework requirement back to a concrete control or evidence file.

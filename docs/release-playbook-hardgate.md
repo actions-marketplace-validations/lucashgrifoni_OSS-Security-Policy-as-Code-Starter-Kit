@@ -4,7 +4,7 @@ This runbook uses only commands and flags that exist in the current CLI: `evalua
 
 ## Zero `fail` is not the same as all-pass
 
-A green `--fail-on fail` run only means **no control ended in `fail`**. You can still have `manual-review-required`, `self-attested`, `not-evaluated`, `not-applicable`, and operational warnings. On the bundled `examples/hardened-repo` fixture, the six extreme profiles are tuned to reach **zero `fail`**, not a literal row of only `pass`.
+A green `--fail-on fail` run only means **no control ended in `fail`**. You can still have `manual-review-required`, `self-attested`, `not-evaluated`, `not-applicable`, and operational warnings. On the bundled `examples/hardened-repo` fixture, the six single-platform GitHub/Azure/AWS extreme profiles are tuned to reach **zero `fail`**, not a literal row of only `pass`. The fixture has no `.gitlab-ci.yml`, so the GitLab extremes (`gitlab-level-3`, `gitlab-release-hardening-3`) are not zero-fail there by design — run them against a real GitLab CI repository.
 
 ## When to use a hard-gate profile
 

@@ -17,6 +17,14 @@ GITHUB_EVIDENCE_FILENAMES: frozenset[str] = frozenset(
         "runner-groups.json",
     }
 )
+GITLAB_EVIDENCE_FILENAMES: frozenset[str] = frozenset(
+    {
+        # GitLab-distinctive evidence. branch-protection.json and org-mfa-posture.json
+        # are platform-agnostic (also emitted by the GitHub/GitLab collectors) and stay
+        # classified under the GitHub bucket to preserve historical partition behavior.
+        "gitlab-mr-rules.json",
+    }
+)
 AZURE_EVIDENCE_FILENAMES: frozenset[str] = frozenset(
     {
         "azure-branch-policies.json",
@@ -92,6 +100,20 @@ def _workflow_yaml_paths(repo_root: Path) -> list[Path]:
     return paths
 
 
+def _gitlab_ci_paths(repo_root: Path) -> list[Path]:
+    """Return GitLab CI definition paths (root ``.gitlab-ci.yml`` or under ``.gitlab/``)."""
+
+    seen: set[Path] = set()
+    paths: list[Path] = []
+    for parent in (repo_root, repo_root / ".gitlab"):
+        for name in (".gitlab-ci.yml", ".gitlab-ci.yaml"):
+            p = parent / name
+            if p.is_file() and p not in seen:
+                seen.add(p)
+                paths.append(p)
+    return paths
+
+
 def _azure_pipeline_paths(repo_root: Path) -> list[Path]:
     patterns = [
         "azure-pipelines*.yml",
@@ -118,8 +140,10 @@ def _evidence_json_paths(repo_root: Path) -> list[Path]:
     return sorted(p for p in ev.glob("*.json") if p.is_file())
 
 
-def _partition_evidence_json(ev_json: list[Path]) -> tuple[list[Path], list[Path], list[Path], list[Path]]:
-    """Partition discovered evidence JSON paths into (github, azure, aws, unrecognized).
+def _partition_evidence_json(
+    ev_json: list[Path],
+) -> tuple[list[Path], list[Path], list[Path], list[Path], list[Path]]:
+    """Partition discovered evidence JSON paths into (github, gitlab, azure, aws, unrecognized).
 
     Generic / cross-platform bundled filenames (disclosure-policy.json,
     audit-log-streaming.json, release-archival-policy.json, iac-*.json,
@@ -128,6 +152,7 @@ def _partition_evidence_json(ev_json: list[Path]) -> tuple[list[Path], list[Path
     tied to a specific CI platform.
     """
     github: list[Path] = []
+    gitlab: list[Path] = []
     azure: list[Path] = []
     aws: list[Path] = []
     other: list[Path] = []
@@ -135,6 +160,8 @@ def _partition_evidence_json(ev_json: list[Path]) -> tuple[list[Path], list[Path
         name = p.name
         if name in GITHUB_EVIDENCE_FILENAMES:
             github.append(p)
+        elif name in GITLAB_EVIDENCE_FILENAMES:
+            gitlab.append(p)
         elif name in AZURE_EVIDENCE_FILENAMES:
             azure.append(p)
         elif name in AWS_EVIDENCE_FILENAMES:
@@ -144,7 +171,7 @@ def _partition_evidence_json(ev_json: list[Path]) -> tuple[list[Path], list[Path
             continue
         else:
             other.append(p)
-    return github, azure, aws, other
+    return github, gitlab, azure, aws, other
 
 
 def _append_signal(signals: list[dict[str, str]], sig_id: str, detail: str) -> None:
@@ -249,32 +276,38 @@ def _collect_tech_stack_signals(
 def _platform_order(
     *,
     wf_paths: list[Path],
+    gl_paths: list[Path],
     az_paths: list[Path],
     buildspec: bool,
     github_ev: list[Path],
+    gitlab_ev: list[Path],
     azure_ev: list[Path],
     aws_ev: list[Path],
 ) -> list[str]:
-    """Return github, azure, aws ordered with the most strongly indicated platform first."""
+    """Return github, gitlab, azure, aws ordered with the most strongly indicated platform first."""
 
     def weight(name: str) -> int:
         if name == "github":
             return 100 * len(github_ev) + 40 * bool(wf_paths)
+        if name == "gitlab":
+            return 100 * len(gitlab_ev) + 40 * bool(gl_paths)
         if name == "azure":
             return 100 * len(azure_ev) + 40 * bool(az_paths)
         return 100 * len(aws_ev) + 40 * bool(buildspec)
 
-    present = [p for p in ("github", "azure", "aws") if weight(p) > 0]
+    present = [p for p in ("github", "gitlab", "azure", "aws") if weight(p) > 0]
     return sorted(present, key=lambda n: (-weight(n), n))
 
 
 def _collect_signals(
     wf_paths: list[Path],
+    gl_paths: list[Path],
     az_paths: list[Path],
     buildspec: bool,
     ev_dir: Path,
     ev_json: list[Path],
     github_ev: list[Path],
+    gitlab_ev: list[Path],
     azure_ev: list[Path],
     aws_ev: list[Path],
     other_ev: list[Path],
@@ -285,6 +318,12 @@ def _collect_signals(
             signals,
             "github_actions_workflows",
             f"Found {len(wf_paths)} workflow file(s) under .github/workflows/.",
+        )
+    if gl_paths:
+        _append_signal(
+            signals,
+            "gitlab_ci_yaml",
+            f"Found {len(gl_paths)} GitLab CI file(s) (.gitlab-ci.yml at root or under .gitlab/).",
         )
     if az_paths:
         _append_signal(
@@ -315,6 +354,13 @@ def _collect_signals(
             signals,
             "azure_evidence_json_files",
             f"Found {len(azure_ev)} Azure-shaped evidence JSON file(s): {names}",
+        )
+    if gitlab_ev:
+        names = ", ".join(sorted(p.name for p in gitlab_ev))
+        _append_signal(
+            signals,
+            "gitlab_evidence_json_files",
+            f"Found {len(gitlab_ev)} GitLab-shaped evidence JSON file(s): {names}",
         )
     if aws_ev:
         names = ", ".join(sorted(p.name for p in aws_ev))
@@ -445,6 +491,79 @@ def _suggestions_github(
                     "recommend-profile to graduate to a release-hardening profile."
                 ),
                 ["github_evidence_json_files"],
+            )
+        )
+    return out
+
+
+def _suggestions_gitlab(
+    *,
+    gl_paths: list[Path],
+    gitlab_ev: list[Path],
+    wf_paths: list[Path],
+    az_paths: list[Path],
+    buildspec: bool,
+    empty_evidence_dir: bool,
+) -> list[tuple[int, str, str, list[str]]]:
+    """GitLab-platform profile suggestions (see _suggestions_for_platform)."""
+
+    out: list[tuple[int, str, str, list[str]]] = []
+    # BOTH a CI signal AND release-shaped evidence required for release-hardening-2 (M-005).
+    can_rh2 = bool(gl_paths) and bool(gitlab_ev)
+    can_rh1 = empty_evidence_dir and bool(gl_paths) and not gitlab_ev
+    if can_rh2:
+        gl_keys = ("gitlab_ci_yaml", "gitlab_evidence_json_files")
+        bo = [x for x in gl_keys if _bo_hit_gl(x, gl_paths, gitlab_ev)]
+        if not bo:
+            bo = ["gitlab_ci_yaml"] if gl_paths else ["gitlab_evidence_json_files"]
+        out.append(
+            (
+                300,
+                "gitlab-release-hardening-2",
+                (
+                    "GitLab CI pipelines AND GitLab-shaped release evidence JSON are both present; "
+                    "evaluate declared release posture with gitlab-release-hardening-2 "
+                    "(verify evidence JSONs are filled, not templates)."
+                ),
+                _normalize_based_on_gl(bo, gl_paths, gitlab_ev),
+            )
+        )
+    elif can_rh1:
+        out.append(
+            (
+                290,
+                "gitlab-release-hardening-1",
+                (
+                    "Evidence directory is empty but GitLab CI pipelines exist; "
+                    "add GitLab evidence JSON, then use gitlab-release-hardening-1 as a starting ladder."
+                ),
+                ["evidence_dir_empty", "gitlab_ci_yaml"],
+            )
+        )
+    if gl_paths:
+        tier = "gitlab-level-2" if len(gl_paths) >= 2 else "gitlab-level-1"
+        out.append(
+            (
+                200,
+                tier,
+                "GitLab CI pipelines are present; evaluate clone-visible GitLab CI governance.",
+                ["gitlab_ci_yaml"],
+            )
+        )
+    # GitLab evidence without GitLab CI (and no other platform's CI): surface a weak fallback.
+    no_other_ci = not wf_paths and not az_paths and not buildspec
+    if gitlab_ev and not gl_paths and no_other_ci:
+        out.append(
+            (
+                150,
+                "gitlab-level-1",
+                (
+                    "GitLab-shaped evidence JSON files were found but no .gitlab-ci.yml exists in this "
+                    "clone. The evidence is currently unused — start from gitlab-level-1 and add a "
+                    "pipeline first (or confirm you are pointing --target at the correct repository "
+                    "root), then re-run recommend-profile to graduate to a release-hardening profile."
+                ),
+                ["gitlab_evidence_json_files"],
             )
         )
     return out
@@ -600,11 +719,13 @@ def _suggestions_for_platform(
     platform: str,
     *,
     wf_paths: list[Path],
+    gl_paths: list[Path],
     az_paths: list[Path],
     buildspec: bool,
     ev_dir: Path,
     ev_json: list[Path],
     github_ev: list[Path],
+    gitlab_ev: list[Path],
     azure_ev: list[Path],
     aws_ev: list[Path],
 ) -> list[tuple[int, str, str, list[str]]]:
@@ -615,6 +736,15 @@ def _suggestions_for_platform(
         return _suggestions_github(
             wf_paths=wf_paths,
             github_ev=github_ev,
+            az_paths=az_paths,
+            buildspec=buildspec,
+            empty_evidence_dir=empty_evidence_dir,
+        )
+    if platform == "gitlab":
+        return _suggestions_gitlab(
+            gl_paths=gl_paths,
+            gitlab_ev=gitlab_ev,
+            wf_paths=wf_paths,
             az_paths=az_paths,
             buildspec=buildspec,
             empty_evidence_dir=empty_evidence_dir,
@@ -650,6 +780,23 @@ def _normalize_based_on(bo: list[str], wf_paths: list[Path], github_ev: list[Pat
         out.insert(0, "github_actions_workflows")
     if "github_evidence_json_files" not in out and github_ev:
         out.append("github_evidence_json_files")
+    return out
+
+
+def _bo_hit_gl(name: str, gl_paths: list[Path], gitlab_ev: list[Path]) -> bool:
+    if name == "gitlab_ci_yaml":
+        return bool(gl_paths)
+    if name == "gitlab_evidence_json_files":
+        return bool(gitlab_ev)
+    return False
+
+
+def _normalize_based_on_gl(bo: list[str], gl_paths: list[Path], gitlab_ev: list[Path]) -> list[str]:
+    out = list(bo)
+    if "gitlab_ci_yaml" not in out and gl_paths:
+        out.insert(0, "gitlab_ci_yaml")
+    if "gitlab_evidence_json_files" not in out and gitlab_ev:
+        out.append("gitlab_evidence_json_files")
     return out
 
 
@@ -691,11 +838,13 @@ def _merge_platform_suggestions(
     order: list[str],
     *,
     wf_paths: list[Path],
+    gl_paths: list[Path],
     az_paths: list[Path],
     buildspec: bool,
     ev_dir: Path,
     ev_json: list[Path],
     github_ev: list[Path],
+    gitlab_ev: list[Path],
     azure_ev: list[Path],
     aws_ev: list[Path],
 ) -> list[dict[str, Any]]:
@@ -706,11 +855,13 @@ def _merge_platform_suggestions(
         for prio, pid, rationale, based_on in _suggestions_for_platform(
             plat,
             wf_paths=wf_paths,
+            gl_paths=gl_paths,
             az_paths=az_paths,
             buildspec=buildspec,
             ev_dir=ev_dir,
             ev_json=ev_json,
             github_ev=github_ev,
+            gitlab_ev=gitlab_ev,
             azure_ev=azure_ev,
             aws_ev=aws_ev,
         ):
@@ -733,15 +884,22 @@ def _multi_platform_notes(order: list[str]) -> list[str]:
     if len(order) <= 1:
         return []
     primary = order[0]
-    pretty = {"github": "GitHub Actions", "azure": "Azure Pipelines", "aws": "AWS CodeBuild"}.get(primary, primary)
-    tail = ", ".join({"github": "GitHub", "azure": "Azure", "aws": "AWS"}.get(p, p) for p in order[1:])
+    pretty = {
+        "github": "GitHub Actions",
+        "gitlab": "GitLab CI",
+        "azure": "Azure Pipelines",
+        "aws": "AWS CodeBuild",
+    }.get(primary, primary)
+    tail = ", ".join(
+        {"github": "GitHub", "gitlab": "GitLab", "azure": "Azure", "aws": "AWS"}.get(p, p) for p in order[1:]
+    )
     return [
         (
             f"Multiple CI platforms detected in this clone (primary ranked: {pretty}; also: {tail}). "
             "Profile suggestions prioritize the strongest platform signals first."
         ),
         (
-            "Pass --platform github | azure | aws (on `init`) or --profile <id> (on `evaluate`) "
+            "Pass --platform github | gitlab | azure | aws (on `init`) or --profile <id> (on `evaluate`) "
             "to override and fix the platform family yourself."
         ),
     ]
@@ -823,22 +981,27 @@ def build_profile_recommendation(repo_root: Path) -> ProfileRecommendation:
     """Inspect *repo_root* and return up to three profile suggestions with rationale."""
 
     wf_paths = _workflow_yaml_paths(repo_root)
+    gl_paths = _gitlab_ci_paths(repo_root)
     az_paths = _azure_pipeline_paths(repo_root)
     buildspec = (repo_root / "buildspec.yml").is_file() or (repo_root / "buildspec.yaml").is_file()
     ev_dir = repo_root / ".oss-policy-kit" / "evidence"
     ev_json = _evidence_json_paths(repo_root)
-    github_ev, azure_ev, aws_ev, other_ev = _partition_evidence_json(ev_json)
+    github_ev, gitlab_ev, azure_ev, aws_ev, other_ev = _partition_evidence_json(ev_json)
 
-    signals = _collect_signals(wf_paths, az_paths, buildspec, ev_dir, ev_json, github_ev, azure_ev, aws_ev, other_ev)
+    signals = _collect_signals(
+        wf_paths, gl_paths, az_paths, buildspec, ev_dir, ev_json, github_ev, gitlab_ev, azure_ev, aws_ev, other_ev
+    )
 
     tech_signals, tech_notes, prefer_l2_container, tech_primary = _collect_tech_stack_signals(repo_root)
     signals.extend(tech_signals)
 
     order = _platform_order(
         wf_paths=wf_paths,
+        gl_paths=gl_paths,
         az_paths=az_paths,
         buildspec=buildspec,
         github_ev=github_ev,
+        gitlab_ev=gitlab_ev,
         azure_ev=azure_ev,
         aws_ev=aws_ev,
     )
@@ -846,11 +1009,13 @@ def build_profile_recommendation(repo_root: Path) -> ProfileRecommendation:
     suggestions = _merge_platform_suggestions(
         order,
         wf_paths=wf_paths,
+        gl_paths=gl_paths,
         az_paths=az_paths,
         buildspec=buildspec,
         ev_dir=ev_dir,
         ev_json=ev_json,
         github_ev=github_ev,
+        gitlab_ev=gitlab_ev,
         azure_ev=azure_ev,
         aws_ev=aws_ev,
     )

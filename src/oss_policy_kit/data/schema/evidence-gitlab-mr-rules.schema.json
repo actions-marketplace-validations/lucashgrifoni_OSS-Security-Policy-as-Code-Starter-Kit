@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/schema/evidence-gitlab-mr-rules.schema.json",
+  "title": "GitLab merge-request approval rules evidence file",
+  "description": "Merge-request approval posture for a GitLab project. Place at .oss-policy-kit/evidence/gitlab-mr-rules.json. Consumed by GL-PIPE-011. Trust level: self-attested unless populated by collect-evidence --platform gitlab.",
+  "type": "object",
+  "required": ["schema_version", "attested_at", "attested_by", "project", "min_approvers"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Schema identifier for this evidence file format.",
+      "const": "gitlab-mr-rules/v1"
+    },
+    "attested_at": {
+      "type": "string",
+      "format": "date",
+      "description": "ISO-8601 date (YYYY-MM-DD) when the maintainer last verified these settings."
+    },
+    "attested_by": {
+      "type": "string",
+      "description": "GitLab username or identifier of the person attesting this file."
+    },
+    "project": {
+      "type": "string",
+      "description": "GitLab project path (group/project) or numeric project id this evidence applies to."
+    },
+    "min_approvers": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Highest required-approver count across the project approval setting and named approval rules."
+    },
+    "code_owner_approval_required": {
+      "type": "boolean",
+      "description": "Whether code-owner approval is required on the default branch or via an approval rule."
+    },
+    "reset_approvals_on_push": {
+      "type": "boolean",
+      "description": "Whether existing approvals are reset when new commits are pushed."
+    },
+    "collection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_collection_method", "collected_at", "source_url"],
+      "properties": {
+        "evidence_collection_method": { "type": "string", "enum": ["live", "manual"] },
+        "collected_at": { "type": "string" },
+        "source_url": { "type": "string" },
+        "mode": { "type": "string", "enum": ["api"] }
+      }
+    },
+    "notes": {
+      "type": "string",
+      "description": "Optional free-text notes about deviations or context."
+    }
+  }
+}

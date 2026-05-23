@@ -1,14 +1,14 @@
-# Collector parity matrix (GitHub vs Azure vs AWS)
+# Collector parity matrix (GitHub vs GitLab vs Azure vs AWS)
 
 `collect-evidence` produces JSON files under `.oss-policy-kit/evidence/` that back the
-`evidence-backed` controls in `*-level-3` and `*-release-hardening-3` profiles. The three
+`evidence-backed` controls in `*-level-3` and `*-release-hardening-3` profiles. The four
 bundled collectors do not retrieve the same set of endpoints today; this page documents the
 gap concretely so operators can see what `collect-evidence` will and will not produce, per
 platform.
 
 The authoritative sources are the collector classes under
 `src/oss_policy_kit/infrastructure/collectors/` (`github_collector.py`,
-`azure_collector.py`, `aws_collector.py`).
+`gitlab_collector.py`, `azure_collector.py`, `aws_collector.py`).
 
 ## Why parity matters
 
@@ -39,6 +39,22 @@ Either way, the kit refuses to silently inflate trust.
 
 GitHub is **the most complete collector**: 4 endpoints feed 4 evidence keys covering the 4
 GitHub-specific platform controls used by `github-level-3` and `github-release-hardening-3`.
+
+### GitLab (`GitLabEvidenceCollector`)
+
+| evidence_key | Source endpoint | Backs profile control(s) |
+|---|---|---|
+| `branch-protection` | `GET /api/v4/projects/:id/protected_branches` (+ `/approvals`) | `PLAT-BRPROT-015` |
+| `gitlab-mr-rules` | `GET /api/v4/projects/:id/approval_rules` (+ `/approvals`) | `GL-PIPE-011` |
+| `org-mfa-posture` | `GET /api/v4/groups/:id` (`require_two_factor_authentication`) | `ORG-MFA-001` |
+
+GitLab retrieves **3 evidence keys from up to 5 endpoints**. Unlike the other platforms, the
+GitLab collector **does** populate `org-mfa-posture` — GitLab exposes group-level 2FA
+enforcement via the groups API (only for projects under a **group** namespace; personal
+namespaces skip it). Requires `GITLAB_TOKEN` (`read_api`, plus group read for MFA) and
+`--repo group/project`; `GITLAB_URL` overrides the default `https://gitlab.com` for
+self-managed instances. SBOM / provenance artifact digests (`PROV-VERIFY-061`, SBOM quality)
+stay self-attested / pipeline-emitted, the same boundary as Azure / AWS.
 
 ### Azure DevOps (`AzureDevOpsEvidenceCollector`)
 
@@ -78,7 +94,7 @@ without binding to a real artifact would be misleading.
 | `azure-provenance-artifact.json` (`AZ-ARTPRV-059`) | Azure | release pipeline emit | Same |
 | `aws-sbom-artifact.json` (AWS artifact SBOM control) | AWS | release pipeline emit | Same |
 | `aws-provenance-artifact.json` (AWS artifact provenance) | AWS | release pipeline emit | Same |
-| `org-mfa-posture.json` (organization MFA) | All | maintainer attestation | Org-wide MFA enforcement is not exposed by repo-scoped APIs |
+| `org-mfa-posture.json` (organization MFA) | GitHub / Azure / AWS | maintainer attestation | Org-wide MFA enforcement is not exposed by repo-scoped APIs (**GitLab is the exception** — its groups API exposes `require_two_factor_authentication`, so the GitLab collector populates this file). |
 
 These intentionally stay as `self-attested` even after a successful `collect-evidence` run —
 that is by design, not a parity gap. The fixture README documents the same boundary.
@@ -91,10 +107,14 @@ that is by design, not a parity gap. The fixture README documents the same bound
   `AZURE_DEVOPS_ORG` + `AZURE_DEVOPS_TOKEN` are set and the project metadata is complete.
   Artifact-bound rows (`AZ-ARTSBOM-058`, `AZ-ARTPRV-059`) stay `self-attested` until the
   release pipeline emits the digest files.
+- **GitLab** profiles (`gitlab-level-3`, `gitlab-release-hardening-3`) reach `pass` on
+  `PLAT-BRPROT-015`, `GL-PIPE-011`, and `ORG-MFA-001` when `GITLAB_TOKEN` (+ group read) is set
+  and the project lives under a group namespace. Artifact-bound rows (`PROV-VERIFY-061`, SBOM
+  quality) stay `self-attested`.
 - **AWS** profiles reach `pass` on the 2-3 collected endpoints when the matching environment
   variables are set. Artifact-bound rows stay `self-attested` for the same reason.
-- **All platforms**: `org-mfa-posture` stays `self-attested` until you wire your IdP /
-  organization-level evidence manually.
+- **GitHub / Azure / AWS**: `org-mfa-posture` stays `self-attested` until you wire your IdP /
+  organization-level evidence manually (**GitLab collects it** from the groups API).
 
 ## How to read the evidence projection in `reports/1.0`
 

@@ -81,6 +81,42 @@ def _github_templates(attested_at: str) -> dict[str, dict[str, Any]]:
     }
 
 
+def _gitlab_templates(attested_at: str) -> dict[str, dict[str, Any]]:
+    return {
+        "branch-protection.json": {
+            "schema_version": "branch-protection/v1",
+            "attested_at": attested_at,
+            "attested_by": "REPLACE_ME_GITLAB_USER",
+            "branch": "main",
+            "protections": {
+                "require_pull_request_reviews": True,
+                "dismiss_stale_reviews": True,
+                "require_status_checks": True,
+                "enforce_admins": True,
+                "restrict_force_push": True,
+            },
+            "notes": (
+                "GitLab default-branch posture. require_pull_request_reviews maps to "
+                "approvals_before_merge >= 1; restrict_force_push maps to a protected branch with "
+                "allow_force_push=false. Prefer collect-evidence --platform gitlab over hand-editing."
+            ),
+        },
+        "gitlab-mr-rules.json": {
+            "schema_version": "gitlab-mr-rules/v1",
+            "attested_at": attested_at,
+            "attested_by": "REPLACE_ME_GITLAB_USER",
+            "project": "REPLACE_ME_GROUP/REPLACE_ME_PROJECT",
+            "min_approvers": 2,
+            "code_owner_approval_required": True,
+            "reset_approvals_on_push": True,
+            "notes": (
+                "Document the project's merge-request approval rules (min_approvers, code-owner "
+                "approval). Consumed by GL-PIPE-011; SLSA Source L4 expects 2+ approvers."
+            ),
+        },
+    }
+
+
 def _azure_templates(attested_at: str) -> dict[str, dict[str, Any]]:
     return {
         "azure-branch-policies.json": {
@@ -274,8 +310,8 @@ def _common_templates(attested_at: str, platform: str) -> dict[str, dict[str, An
 _README_BODY = """# Self-attested evidence
 
 These JSON files are **maintainer-supplied** and are not automatically verified against
-GitHub, Azure, or AWS. They let `release-hardening-*` profiles evaluate declared posture when
-platform signals are not visible in the clone.
+GitHub, GitLab, Azure, or AWS. They let `release-hardening-*` profiles evaluate declared
+posture when platform signals are not visible in the clone.
 
 1. Fill in `attested_by`, dates, and repository/project names.
 2. Adjust `posture` / `protections` booleans to match real configuration.
@@ -304,7 +340,7 @@ def scaffold_evidence_files(
     force: bool = False,
     today: date | None = None,
 ) -> ScaffoldEvidenceResult:
-    """Create `.oss-policy-kit/evidence/` with JSON templates for *platform* (github, azure, aws).
+    """Create `.oss-policy-kit/evidence/` with JSON templates for *platform* (github, gitlab, azure, aws).
 
     Manual evidence mode: generates template JSON files that must be filled in by hand.
     For automatic evidence collection via platform APIs, use ``collect-evidence`` instead.
@@ -327,15 +363,17 @@ def scaffold_evidence_files(
 
 
 def _select_evidence_templates(plat: str, attested: str) -> dict[str, Any]:
-    """Return the JSON evidence templates for a platform (github/azure/aws)."""
+    """Return the JSON evidence templates for a platform (github/gitlab/azure/aws)."""
 
     if plat == "github":
         return {**_github_templates(attested), **_common_templates(attested, "github")}
+    if plat == "gitlab":
+        return {**_gitlab_templates(attested), **_common_templates(attested, "gitlab")}
     if plat == "azure":
         return {**_azure_templates(attested), **_common_templates(attested, "azure-devops")}
     if plat == "aws":
         return {**_aws_templates(attested), **_common_templates(attested, "aws-iam")}
-    raise InvalidInputError("platform must be one of: github, azure, aws")
+    raise InvalidInputError("platform must be one of: github, gitlab, azure, aws")
 
 
 def _write_scaffold_file(dest: Path, text: str, *, force: bool, result: ScaffoldEvidenceResult) -> None:

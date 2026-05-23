@@ -1,0 +1,56 @@
+id: gitlab-release-hardening-2
+title: GitLab release hardening — advisory + evidence (level 2)
+description: >
+  Extends **gitlab-level-2** (advisory; ``GL-PIPE-001..012``) with protected-branch
+  evidence (**PLAT-BRPROT-015**), evidence-freshness (**GOV-EVIDFRESH-054**), the
+  cross-platform release-hygiene controls (**SEC-GITIGNORE-051**,
+  **SEC-PINLOCK-052**), and container image security posture (digest pinning,
+  non-root user, image scanning signals — **CONT-IMAGE-001..003**). Stronger than
+  release-hardening-1 because the OIDC / runner / audit / MR pipeline discipline is
+  already required.
+  **Posture:** release ladder, ``--fail-on degraded`` recommended.
+  **Natural next step:** ``gitlab-release-hardening-3`` for the strictest bundled
+  GitLab release gate.
+  **Framework alignment:** see ``docs/framework-alignment.md`` and
+  ``docs/decisions/adr-003-gitlab-ci-support.md``.
+audience: >
+  GitLab CI teams combining curated ``.gitlab-ci.yml`` posture with protected-branch
+  governance evidence for releases. Keep ``branch-protection.json`` fresh via
+  ``collect-evidence --platform gitlab``.
+controls:
+  # Governance core.
+  - GOV-SEC-001
+  - GOV-CON-002
+  - GOV-COWN-003
+  - GOV-LIC-004
+  - REL-CHANGE-012
+  - GOV-DISC-013
+  - GOV-WAIV-014
+  - GOV-EVIDFRESH-054
+  # Release hygiene (cross-platform).
+  - SEC-GITIGNORE-051
+  - SEC-PINLOCK-052
+  # GitLab CI native (L1).
+  - GL-PIPE-001
+  - GL-PIPE-002
+  - GL-PIPE-003
+  - GL-PIPE-004
+  - GL-PIPE-005
+  - GL-PIPE-006
+  # GitLab CI v6.0.0 additions (L2).
+  - GL-PIPE-007
+  - GL-PIPE-008
+  - GL-PIPE-009
+  - GL-PIPE-010
+  - GL-PIPE-011
+  - GL-PIPE-012
+  # Multi-platform supply chain / release hygiene.
+  - DEP-UPDATE-001
+  - SEC-DEPREV-011
+  - BUILD-SBOM-QUAL-003
+  # Release evidence (platform-agnostic).
+  - PLAT-BRPROT-015
+  # Container image security posture.
+  - CONT-IMAGE-001
+  - CONT-IMAGE-002
+  - CONT-IMAGE-003

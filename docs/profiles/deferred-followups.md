@@ -50,14 +50,16 @@ The three additive extensions originally tracked here have all shipped (non-brea
 
 Tracked in [`../decisions/adr-002-emit-vex-scope.md`](../decisions/adr-002-emit-vex-scope.md).
 
-## GitLab CI support (`gitlab-level-1/2/3` profiles — shipped)
+## GitLab CI support (full first-class family — shipped)
 
-GitLab CI support shipped: the `gitlab-level-1` profile landed in v5.9.0, `gitlab-level-2` in v6.0.0, and `gitlab-level-3` in v6.3.0, with GitLab now a first-class profile family. A dedicated `.gitlab-ci.yml` parser and the `GL-PIPE-*` control family back these profiles — they were **not** composed from GitHub-only controls, preserving the assurance-grade promise. The original work split that landed this:
+GitLab CI support shipped and reached **full parity** with the GitHub / Azure / AWS families: the `gitlab-level-1` profile landed in v5.9.0, `gitlab-level-2` in v6.0.0, `gitlab-level-3` in v6.3.0, and the parallel **`gitlab-release-hardening-1/2/3`** track plus a dedicated **evidence collector** (`collect-evidence --platform gitlab`) and scaffold templates (`scaffold-evidence --platform gitlab`) landed afterwards. A dedicated `.gitlab-ci.yml` parser and the `GL-PIPE-*` control family back these profiles — they were **not** composed from GitHub-only controls, preserving the assurance-grade promise. The work split that landed this:
 
 1. A `.gitlab-ci.yml` parser in `oss_policy_kit/infrastructure/` (mirrors `workflow_parser.py` / `azure_pipeline_parser.py`).
 2. GitLab-prefixed controls (`GL-PIPE-*` family) for permissions, includes, image pinning, secret handling, runner tags, and merge-request rules.
-3. The parser plus the controls populate the bundled `gitlab-level-*` profiles.
-4. Tests parallel to `tests/cli/test_evaluate_*.py` for the GitLab platform.
+3. The parser plus the controls populate the bundled `gitlab-level-*` and `gitlab-release-hardening-*` profiles.
+4. A `GitLabEvidenceCollector` that retrieves `branch-protection`, `gitlab-mr-rules`, and `org-mfa-posture` evidence from the GitLab REST API (`read_api` + group read). See [collector-parity.md](../collector-parity.md).
+5. `recommend-profile`, `init --platform gitlab`, `scaffold-evidence`, and `collect-evidence` all treat GitLab as a first-class platform.
+6. Tests parallel to the other platform families for the GitLab parser, profiles, and collector.
 
 ## GitHub native security platform features (GA-dependent, planned)
 

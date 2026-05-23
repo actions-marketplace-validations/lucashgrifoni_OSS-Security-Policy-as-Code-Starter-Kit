@@ -18,6 +18,7 @@ from oss_policy_kit.application.evidence_scaffold import (
 _SCHEMA_DIR = ROOT / "reports" / "schema"
 _SCHEMA_BY_FILENAME = {
     "branch-protection.json": "evidence-branch-protection.schema.json",
+    "gitlab-mr-rules.json": "evidence-gitlab-mr-rules.schema.json",
     "github-rulesets.json": "evidence-github-rulesets.schema.json",
     "github-environment-protection.json": "evidence-github-environment-protection.schema.json",
     "github-secret-scanning.json": "evidence-github-secret-scanning.schema.json",
@@ -33,7 +34,7 @@ _SCHEMA_BY_FILENAME = {
 }
 
 
-@pytest.mark.parametrize("platform", ["github", "azure", "aws"])
+@pytest.mark.parametrize("platform", ["github", "gitlab", "azure", "aws"])
 def test_scaffold_evidence_validates_against_schema(tmp_path: Path, platform: str) -> None:
     repo = tmp_path / "r"
     repo.mkdir()
@@ -118,6 +119,18 @@ def test_azure_scaffold_includes_wif_proof_fields(tmp_path: Path) -> None:
     assert wif.get("federation_subject")
     assert wif.get("issuer_url")
     assert wif.get("audience")
+
+
+def test_gitlab_scaffold_emits_mr_rules_and_gitlab_mfa(tmp_path: Path) -> None:
+    repo = tmp_path / "r"
+    repo.mkdir()
+    scaffold_evidence_files(repo, "gitlab", force=False)
+    ev = repo / ".oss-policy-kit" / "evidence"
+    mr = json.loads((ev / "gitlab-mr-rules.json").read_text(encoding="utf-8"))
+    assert mr["schema_version"] == "gitlab-mr-rules/v1"
+    assert mr["min_approvers"] >= 1
+    mfa = json.loads((ev / "org-mfa-posture.json").read_text(encoding="utf-8"))
+    assert mfa["platform"] == "gitlab"
 
 
 def test_org_mfa_scaffold_sets_enforcement_scope_all_members(tmp_path: Path) -> None:

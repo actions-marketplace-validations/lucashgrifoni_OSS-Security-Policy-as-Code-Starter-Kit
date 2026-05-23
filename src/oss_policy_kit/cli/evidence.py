@@ -23,6 +23,10 @@ from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
 from oss_policy_kit.infrastructure.collectors.aws_collector import AWSEvidenceCollector
 from oss_policy_kit.infrastructure.collectors.azure_collector import AzureDevOpsEvidenceCollector
 from oss_policy_kit.infrastructure.collectors.github_collector import GitHubEvidenceCollector
+from oss_policy_kit.infrastructure.collectors.gitlab_collector import (
+    GITLAB_DEFAULT_URL,
+    GitLabEvidenceCollector,
+)
 from oss_policy_kit.infrastructure.git_remote import read_github_repo_slug_from_git_config
 
 _COLLECT_PREVIEW: dict[str, list[tuple[str, str]]] = {
@@ -31,6 +35,11 @@ _COLLECT_PREVIEW: dict[str, list[tuple[str, str]]] = {
         ("github-rulesets.json", "GET /repos/{owner}/{repo}/rulesets"),
         ("github-secret-scanning.json", "GET /repos/{owner}/{repo} (security_and_analysis)"),
         ("github-environment-protection.json", "GET /repos/{owner}/{repo}/environments"),
+    ],
+    "gitlab": [
+        ("branch-protection.json", "GET /api/v4/projects/{id}/protected_branches (+ /approvals)"),
+        ("gitlab-mr-rules.json", "GET /api/v4/projects/{id}/approval_rules (+ /approvals)"),
+        ("org-mfa-posture.json", "GET /api/v4/groups/{group} (require_two_factor_authentication)"),
     ],
     "azure": [
         ("azure-branch-policies.json", "GET /{org}/{project}/_apis/policy/configurations?api-version=7.1"),
@@ -44,6 +53,7 @@ _COLLECT_PREVIEW: dict[str, list[tuple[str, str]]] = {
 
 _COLLECT_REQUIRED_ENV: dict[str, list[str]] = {
     "github": ["GITHUB_TOKEN"],
+    "gitlab": ["GITLAB_TOKEN", "GITLAB_URL optional (defaults to https://gitlab.com)"],
     "azure": ["AZURE_DEVOPS_ORG", "AZURE_DEVOPS_TOKEN"],
     "aws": ["AWS credential chain (boto3)", "AWS_CODEBUILD_PROJECT and/or AWS_CODEPIPELINE_NAME optional"],
 }
@@ -52,6 +62,7 @@ _COLLECT_REQUIRED_ENV: dict[str, list[str]] = {
 # operators can confirm their local shell is ready before committing to a live collection.
 _COLLECT_ENV_PROBES: dict[str, tuple[str, ...]] = {
     "github": ("GITHUB_TOKEN",),
+    "gitlab": ("GITLAB_TOKEN", "GITLAB_URL", "GITLAB_PROJECT"),
     "azure": ("AZURE_DEVOPS_ORG", "AZURE_DEVOPS_TOKEN"),
     "aws": (
         "AWS_REGION",
@@ -124,7 +135,7 @@ def scaffold_evidence_cmd(
     platform: str = typer.Option(
         ...,
         "--platform",
-        help="github, azure, or aws -- selects which evidence JSON templates to emit.",
+        help="github, gitlab, azure, or aws -- selects which evidence JSON templates to emit.",
         case_sensitive=False,
     ),
     force: bool = typer.Option(
@@ -184,16 +195,21 @@ def _build_evidence_collector(
     platform: str,
     repo: Path,
     repo_slug: str | None,
-) -> tuple[GitHubEvidenceCollector | AzureDevOpsEvidenceCollector | AWSEvidenceCollector, str]:
+) -> tuple[
+    GitHubEvidenceCollector | GitLabEvidenceCollector | AzureDevOpsEvidenceCollector | AWSEvidenceCollector,
+    str,
+]:
     """Build the platform collector and resolve its repo slug (validates required credentials)."""
 
     if plat == "github":
         return _github_collector(repo, repo_slug)
+    if plat == "gitlab":
+        return _gitlab_collector(repo_slug)
     if plat == "azure":
         return _azure_collector(repo_slug)
     if plat == "aws":
         return _aws_collector(repo_slug)
-    raise InvalidInputError(f"Unsupported --platform {platform!r}; use github, azure, or aws.")
+    raise InvalidInputError(f"Unsupported --platform {platform!r}; use github, gitlab, azure, or aws.")
 
 
 def _github_collector(repo: Path, repo_slug: str | None) -> tuple[GitHubEvidenceCollector, str]:
@@ -209,6 +225,23 @@ def _github_collector(repo: Path, repo_slug: str | None) -> tuple[GitHubEvidence
             "Could not determine GitHub repo slug; pass --repo org/repo or add an origin remote pointing to GitHub."
         )
     return GitHubEvidenceCollector(token), slug
+
+
+def _gitlab_collector(repo_slug: str | None) -> tuple[GitLabEvidenceCollector, str]:
+    token = os.environ.get("GITLAB_TOKEN", "").strip()
+    if not token:
+        raise OSError(
+            "GITLAB_TOKEN is not set. Export a token with read access to the project "
+            "(read_api covers protected branches and approvals; group read is needed for MFA posture)."
+        )
+    base_url = os.environ.get("GITLAB_URL", "").strip() or GITLAB_DEFAULT_URL
+    slug = (repo_slug or "").strip() or os.environ.get("GITLAB_PROJECT", "").strip()
+    if not slug:
+        raise InvalidInputError(
+            "GitLab requires --repo group/project (or a numeric project id), "
+            "or the GITLAB_PROJECT environment variable."
+        )
+    return GitLabEvidenceCollector(token, base_url=base_url), slug
 
 
 def _azure_collector(repo_slug: str | None) -> tuple[AzureDevOpsEvidenceCollector, str]:
@@ -255,7 +288,7 @@ def collect_evidence_cmd(
     platform: str = typer.Option(
         ...,
         "--platform",
-        help="Platform: github, azure, or aws (each requires the matching credentials; see command help).",
+        help="Platform: github, gitlab, azure, or aws (each requires the matching credentials; see command help).",
     ),
     output_dir: Path | None = typer.Option(
         None,
@@ -267,7 +300,8 @@ def collect_evidence_cmd(
         None,
         "--repo",
         help=(
-            "Repository slug: GitHub ``org/repo`` or Azure DevOps ``ProjectName/repoName``. "
+            "Repository slug: GitHub ``org/repo``, GitLab ``group/project`` (or numeric project id), "
+            "or Azure DevOps ``ProjectName/repoName``. "
             "Not required for AWS (set AWS_CODEBUILD_PROJECT and/or AWS_CODEPIPELINE_NAME instead)."
         ),
     ),

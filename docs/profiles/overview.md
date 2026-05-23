@@ -1,6 +1,6 @@
 # Profiles overview
 
-This page summarizes the bundled profile ladder. The v6.3.0 release bundles **53 profiles** in total; the detailed walkthrough below describes the v5.9.0 baseline ladder, and the v6.0.0–v6.3.0 additions (AI/LLM advisory, EU AI Act Annex IV, EU CRA Art.13/14, SLSA Source L1/L2, GitLab L2/L3, OSS publish readiness, AI agent baseline, OSPS Baseline 2026, MCP server, OWASP Agentic ASI) are listed in [controls-catalog.md](../controls-catalog.md) and the CHANGELOG. The v5.9.0 ladder: deterministic ladder profiles per platform (`github-*`, `azure-*`, `aws-*`), two **advisory-only hybrid** profiles, three **regulatory mapping** profiles for the EU Cyber Resilience Act (`cra-eu-reporting-1` for the 2026-09-11 24-hour reporting deadline — new in v5.9.0; `cra-eu-ready-1` for broader CRA preparation; `cra-eu-strict-1` for the 2027-12-11 full-obligations deadline — all three advisory), six **framework alignment** profiles introduced in v5.4.0 (`osps-baseline-1`, `slsa-build-l2-1`, `ssdf-baseline-1`, `cis-supply-chain-1`, `owasp-cicd-top10-1`, `s2c2f-l1-1`), the **AppSec native bundle** `appsec-sast-sca-1` (hard-gate-capable when paired with `scan-sast`; 17 controls including the v5.9.0 SARIF adapters and v6.0.0 EPSS/KEV prioritization), the v5.5.0 **Terraform / OpenTofu IaC baseline** `iac-terraform-baseline-1` (advisory, paired with `scan-iac`), the v5.6.0 **Kubernetes manifest baseline** `kubernetes-baseline-1` (advisory, paired with `scan-k8s`), the v5.6.0 **container hardening baseline** `container-baseline-1` (advisory, clone-visible Dockerfile signals), and the v5.7.0 **webhook receiver hardening** profile `webhook-security-1`. The legacy bundled id `github-release-hardening` was **removed in v5.0.0**; passing it now returns a migration error pointing to the canonical `github-release-hardening-1`. See [docs/v5.0.0-migration-guide.md](../v5.0.0-migration-guide.md).
+This page summarizes the bundled profile ladder. The current release bundles **56 profiles** in total; the detailed walkthrough below describes the v5.9.0 baseline ladder, and the v6.0.0+ additions (AI/LLM advisory, EU AI Act Annex IV, EU CRA Art.13/14, SLSA Source L1/L2, the full GitLab CI family — `gitlab-level-1/2/3` **plus** the `gitlab-release-hardening-1/2/3` track with a `collect-evidence --platform gitlab` collector, OSS publish readiness, AI agent baseline, OSPS Baseline 2026, MCP server, OWASP Agentic ASI) are listed in [controls-catalog.md](../controls-catalog.md) and the CHANGELOG. **GitLab is a first-class family**, mirroring the GitHub / Azure / AWS ladder + release-hardening structure — see [gitlab.md](gitlab.md). The v5.9.0 ladder: deterministic ladder profiles per platform (`github-*`, `azure-*`, `aws-*`), two **advisory-only hybrid** profiles, three **regulatory mapping** profiles for the EU Cyber Resilience Act (`cra-eu-reporting-1` for the 2026-09-11 24-hour reporting deadline — new in v5.9.0; `cra-eu-ready-1` for broader CRA preparation; `cra-eu-strict-1` for the 2027-12-11 full-obligations deadline — all three advisory), six **framework alignment** profiles introduced in v5.4.0 (`osps-baseline-1`, `slsa-build-l2-1`, `ssdf-baseline-1`, `cis-supply-chain-1`, `owasp-cicd-top10-1`, `s2c2f-l1-1`), the **AppSec native bundle** `appsec-sast-sca-1` (hard-gate-capable when paired with `scan-sast`; 17 controls including the v5.9.0 SARIF adapters and v6.0.0 EPSS/KEV prioritization), the v5.5.0 **Terraform / OpenTofu IaC baseline** `iac-terraform-baseline-1` (advisory, paired with `scan-iac`), the v5.6.0 **Kubernetes manifest baseline** `kubernetes-baseline-1` (advisory, paired with `scan-k8s`), the v5.6.0 **container hardening baseline** `container-baseline-1` (advisory, clone-visible Dockerfile signals), and the v5.7.0 **webhook receiver hardening** profile `webhook-security-1`. The legacy bundled id `github-release-hardening` was **removed in v5.0.0**; passing it now returns a migration error pointing to the canonical `github-release-hardening-1`. See [docs/v5.0.0-migration-guide.md](../v5.0.0-migration-guide.md).
 
 > **Hybrid profiles are advisory-only.** `github-aws-level-2` and `github-azure-level-2` combine GitHub SCM signals with AWS or Azure CI signals. They emit JSON `posture: multi_platform_advisory_hybrid`. **Do not use these profiles as a release or PR gate** — use the platform-specific `*-level-3` or `*-release-hardening-3` ladders instead.
 >
@@ -183,7 +183,12 @@ Starting in v5.4.0 the kit also ships **bundled framework alignment profiles** (
 | kubernetes-baseline-1 | 17 | Kubernetes manifest posture (advisory, paired with scan-k8s) | no | 1 / 0 / 16 |
 | container-baseline-1 | 11 | Container hardening posture (advisory) | no | 3 / 8 / 0 |
 | webhook-security-1 | 3 | Webhook receiver security (advisory, paired with the receiver) | no | 1 / 2 / 0 |
-| gitlab-level-1 | 16 | GitLab CI starter ladder | no | see JSON |
+| gitlab-level-1 | 16 | GitLab CI starter ladder | no | 10 / 6 / 0 |
+| gitlab-level-2 | 22 | advisory ladder | no | 10 / 12 / 0 |
+| gitlab-level-3 | 29 | hard-gate ladder (extreme) | **yes** | 11 / 13 / 5 |
+| gitlab-release-hardening-1 | 19 | release ladder | no | 12 / 6 / 1 |
+| gitlab-release-hardening-2 | 29 | release ladder | no | 15 / 13 / 1 |
+| gitlab-release-hardening-3 | 36 | release hard-gate (extreme) | **yes** | 15 / 15 / 6 |
 
 > **Source for counts**: `python -m oss_policy_kit profiles --format json` (`controls` and `assurance_mix`) against the bundled catalog in this revision. Counts evolve as new controls are folded into existing profiles; the JSON output is the canonical source of truth for any given build.
 
@@ -217,7 +222,7 @@ Need AWS or Azure evidence-backed gates?
 
 ## Zero `fail` is not the same as all-pass
 
-In reports, **`summary_by_status.fail == 0`** only means no control ended in **`fail`**. The same run can still contain **`self-attested`**, **`manual-review-required`**, **`not-evaluated`**, **`not-applicable`**, and operational warnings. The bundled `examples/hardened-repo` fixture is intentionally tuned so the **six extreme profiles** reach **zero `fail`** while remaining honest about non-pass rows (especially **AWS/Azure**, which lean more on self-attested evidence than **GitHub** in synthetic setups).
+In reports, **`summary_by_status.fail == 0`** only means no control ended in **`fail`**. The same run can still contain **`self-attested`**, **`manual-review-required`**, **`not-evaluated`**, **`not-applicable`**, and operational warnings. The bundled `examples/hardened-repo` fixture is intentionally tuned so the **six single-platform GitHub/Azure/AWS extreme profiles** reach **zero `fail`** while remaining honest about non-pass rows (especially **AWS/Azure**, which lean more on self-attested evidence than **GitHub** in synthetic setups). The fixture carries no `.gitlab-ci.yml`, so the two **GitLab** extremes (`gitlab-level-3`, `gitlab-release-hardening-3`) are **not** zero-fail there — `GL-PIPE-001` fails on the missing pipeline by design. Run the GitLab gates against a repository that actually uses GitLab CI (and `collect-evidence --platform gitlab`).
 
 ## Fixture representativity (important)
 
@@ -246,7 +251,9 @@ The proportion of evidence-backed controls per extreme profile (source: `python 
 | `aws-level-3` | 25 | 7 | 28.0% |
 | `azure-release-hardening-3` | 30 | 8 | 26.7% |
 | `aws-release-hardening-3` | 29 | 7 | 24.1% |
+| `gitlab-release-hardening-3` | 36 | 6 | 16.7% |
 | `github-release-hardening-3` | 32 | 5 | 15.6% |
+| `gitlab-level-3` | 29 | 5 | 17.2% |
 | `github-level-3` | 33 | 4 | 12.1% |
 
 Operational reading:

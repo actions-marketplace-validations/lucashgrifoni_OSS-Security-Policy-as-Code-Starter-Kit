@@ -97,7 +97,7 @@ oss-policy-kit recommend-profile --target ./my-repo
 ```
 
 This is a **heuristic, not a compliance decision** (the output says so
-itself). Use the suggestion as a starting point. The 53 bundled
+itself). Use the suggestion as a starting point. The 56 bundled
 profiles are documented in [`docs/profiles/overview.md`](profiles/overview.md).
 
 ## 6. Add a waiver if a gap is intentional (1 minute)

@@ -1,0 +1,75 @@
+id: gitlab-release-hardening-3
+title: GitLab release hardening — hard-gate + release signals (level 3)
+description: >
+  Strictest bundled GitLab release profile: the **gitlab-level-3** hard-gate core
+  (governance, ``GL-PIPE-001..012``, protected-branch + org-MFA + evidence-freshness
+  + disclosure-SLA + audit-log streaming + fuzzing + build-provenance evidence)
+  **plus** release-time hardening: cross-platform release hygiene
+  (**SEC-GITIGNORE-051**, **SEC-PINLOCK-052**), container image security posture
+  (**CONT-IMAGE-001..003**), pipeline-AST scan evidence (**SAST-POUTINE-067** — the
+  poutine GitLab CI / GitHub Actions scanner), and release-archive retention
+  (**RELEASE-ARCHIVE-063**).
+  Recomposition only — no new evaluators (ADR-003 ``gitlab-ci-support``).
+  GitHub-specific signals (``GH-PLAT-*``, ``CI-WFCALLSHA-055``) are intentionally
+  excluded.
+  Maturity note: this is the strictest bundled GitLab release gate. Inside this kit
+  GitHub remains the most mature path; use ``github-release-hardening-3`` as the
+  extreme reference until GitLab evidence collection reaches full parity (the GitLab
+  collector retrieves protected-branch, MR-approval, and group-MFA evidence; SBOM /
+  provenance artifact digests stay self-attested / pipeline-emitted).
+  **Posture:** release hard-gate (analogous to ``github-release-hardening-3``).
+  **Recommended `--fail-on`:** ``fail`` (pair with ``collect-evidence --platform gitlab``),
+  or ``degraded`` while building evidence.
+  **Framework alignment:** see ``docs/framework-alignment.md`` and
+  ``docs/decisions/adr-003-gitlab-ci-support.md``.
+audience: >
+  High-assurance GitLab CI teams combining ``gitlab-level-3`` evidence with
+  release-time supply-chain signals. Maintain evidence under
+  ``.oss-policy-kit/evidence/`` and keep it fresh via
+  ``collect-evidence --platform gitlab``.
+controls:
+  # Governance core.
+  - GOV-SEC-001
+  - GOV-CON-002
+  - GOV-COWN-003
+  - GOV-LIC-004
+  - REL-CHANGE-012
+  - GOV-DISC-013
+  - GOV-WAIV-014
+  # Release hygiene (cross-platform).
+  - SEC-GITIGNORE-051
+  - SEC-PINLOCK-052
+  # GitLab CI native (L1).
+  - GL-PIPE-001
+  - GL-PIPE-002
+  - GL-PIPE-003
+  - GL-PIPE-004
+  - GL-PIPE-005
+  - GL-PIPE-006
+  # GitLab CI v6.0.0 additions (L2).
+  - GL-PIPE-007
+  - GL-PIPE-008
+  - GL-PIPE-009
+  - GL-PIPE-010
+  - GL-PIPE-011
+  - GL-PIPE-012
+  # Multi-platform supply chain / release hygiene.
+  - DEP-UPDATE-001
+  - SEC-DEPREV-011
+  - BUILD-SBOM-QUAL-003
+  # Container image security posture.
+  - CONT-IMAGE-001
+  - CONT-IMAGE-002
+  - CONT-IMAGE-003
+  # L3 hard-gate additions (platform-agnostic, evidence-backed).
+  - PLAT-BRPROT-015
+  - ORG-MFA-001
+  - GOV-EVIDFRESH-054
+  - GOV-DISC-065
+  - AUDIT-STREAM-060
+  - SEC-FUZZ-001
+  - PROV-VERIFY-061
+  # Pipeline AST evidence (poutine SARIF — GitLab CI / GitHub Actions scanner).
+  - SAST-POUTINE-067
+  # Release-time retention signal.
+  - RELEASE-ARCHIVE-063

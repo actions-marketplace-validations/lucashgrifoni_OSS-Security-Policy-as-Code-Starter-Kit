@@ -43,13 +43,14 @@ DEFAULT_FALLBACK_PROFILE = "github-level-1"
 #: does not pass ``--profile``.
 DEFAULT_PROFILE_PER_PLATFORM: dict[str, str] = {
     "github": "github-level-1",
+    "gitlab": "gitlab-level-1",
     "azure": "azure-level-1",
     "aws": "aws-level-1",
 }
 
 #: Platforms accepted by ``--platform``. Hybrid and regulatory profiles are
 #: deliberately not auto-selectable here: they require a deliberate choice.
-SUPPORTED_PLATFORMS: frozenset[str] = frozenset({"github", "azure", "aws"})
+SUPPORTED_PLATFORMS: frozenset[str] = frozenset({"github", "gitlab", "azure", "aws"})
 
 #: Allowed values for ``--fail-on``. Mirrors :mod:`oss_policy_kit.cli.common`.
 SUPPORTED_FAIL_ON: frozenset[str] = frozenset({"none", "fail", "degraded"})
@@ -173,7 +174,7 @@ def _validate_platform(value: str | None) -> str | None:
         return None
     if normalized not in SUPPORTED_PLATFORMS:
         raise InvalidInputError(
-            "--platform must be one of: github, azure, aws "
+            "--platform must be one of: github, gitlab, azure, aws "
             "(hybrid and regulatory profiles must be selected via --profile).",
         )
     return normalized
@@ -224,6 +225,8 @@ def _detect_platform_from_signals(signals: list[dict[str, str]]) -> str:
     sig_ids = {s.get("id", "") for s in signals}
     if any(s.startswith("github_") for s in sig_ids):
         return "github"
+    if any(s.startswith("gitlab_") for s in sig_ids):
+        return "gitlab"
     if any(s.startswith("azure_") for s in sig_ids):
         return "azure"
     if any(s.startswith("aws_") for s in sig_ids):

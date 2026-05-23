@@ -27,7 +27,7 @@
     },
     "platform": {
       "type": "string",
-      "enum": ["github", "azure-devops", "aws-iam", "other"],
+      "enum": ["github", "gitlab", "azure-devops", "aws-iam", "other"],
       "description": "Platform where the organization is hosted."
     },
     "mfa_required_for_all_members": {
