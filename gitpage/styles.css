@@ -716,6 +716,12 @@ body {
   overflow: hidden;
   vertical-align: top;
   perspective: 800px;
+  /* Pad the masked box downward so glyph descenders (g, p, y) are not
+     clipped, then pull the extra space back out of layout so line
+     spacing is unchanged. The mask still hides the rising letters,
+     which start ~1.1em below the baseline. */
+  padding-bottom: 0.2em;
+  margin-bottom: -0.2em;
 }
 .split-word > span {
   display: inline-block;

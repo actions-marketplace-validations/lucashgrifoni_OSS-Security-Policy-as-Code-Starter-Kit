@@ -258,7 +258,7 @@ function TerminalReport() {
         </span>
       </div>
 
-      <div className="relative h-[300px] overflow-hidden p-4 font-mono text-[11.5px] leading-relaxed">
+      <div className="relative min-h-[300px] overflow-hidden p-4 font-mono text-[11.5px] leading-relaxed">
         <div className="scanline" />
         <div className="space-y-1">
           {lines.slice(0, shown).map((l, i) => (
