@@ -31,20 +31,22 @@ const SAMPLE_REPORTS = [
     profile: "github-level-1",
     caption: "Same profile against the vulnerable fixture, with multiple failing controls.",
     tone: "red",
-    stats: { pass: 6, fail: 7, review: 1, total: 14 },
+    stats: { pass: 2, fail: 11, review: 1, total: 14 },
     controls: [
       { id: "GOV-SEC-001", status: "fail", reason: "SECURITY.md missing." },
       { id: "GOV-CON-002", status: "fail", reason: "Contributing guide missing." },
       { id: "GOV-COWN-003", status: "fail", reason: "CODEOWNERS file missing." },
-      { id: "GOV-LIC-004", status: "pass", reason: "LICENSE file detected." },
+      { id: "GOV-LIC-004", status: "fail", reason: "No LICENSE file detected at repository root." },
       { id: "CI-WF-005", status: "pass", reason: "Found 1 workflow file." },
       { id: "CI-PERM-006", status: "fail", reason: "Workflow does not declare top-level permissions." },
-      { id: "CI-DANGER-007", status: "fail", reason: "pull_request_target combined with untrusted checkout." },
+      { id: "CI-DANGER-007", status: "fail", reason: "pull_request_target detected in unsafe.yml." },
       { id: "CI-PIN-008", status: "fail", reason: "Third-party actions pinned to mutable tags." },
-      { id: "CI-LEAST-009", status: "fail", reason: "Over-broad workflow permissions detected." },
-      { id: "SEC-CODEQL-010", status: "review", reason: "No CodeQL usage observed; manual review required." },
-      { id: "REL-CHANGE-012", status: "pass", reason: "Changelog detected." },
-      { id: "GOV-WAIV-014", status: "pass", reason: "No waivers required for fixture." },
+      { id: "CI-LEAST-009", status: "pass", reason: "No obviously over-broad workflow permissions detected." },
+      { id: "SEC-CODEQL-010", status: "fail", reason: "No CodeQL or equivalent signal in local workflows." },
+      { id: "SEC-DEPREV-011", status: "fail", reason: "No dependency-review-action detected in workflows." },
+      { id: "REL-CHANGE-012", status: "fail", reason: "No CHANGELOG-style file detected." },
+      { id: "GOV-DISC-013", status: "fail", reason: "Disclosure reporting mechanism not implemented." },
+      { id: "GOV-WAIV-014", status: "review", reason: "No versioned waiver policy file found in repository." },
     ],
   },
 ];
@@ -181,7 +183,7 @@ function SampleOutputSection() {
               </a>
             </div>
 
-            {/* Right: rendered report (no screenshot) */}
+            {/* Right: rendered report from structured text */}
             <div className="overflow-hidden rounded-2xl border border-white/10 bg-ink-deep/70 shadow-floor">
               {/* report header */}
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3 font-mono text-[11px] text-steel">
@@ -243,7 +245,7 @@ const DIFFS = [
   { icon: "layers", title: "Honest trust model", body: "The kit distinguishes clone-visible truth, self-attested evidence, and platform-only reality instead of collapsing them into one confidence claim." },
   { icon: "cpu", title: "Useful command surface", body: "The CLI does more than one demo command: it supports profile discovery, recommendation, batch evaluation, evidence scaffolding, summaries, and CI thresholds." },
   { icon: "zap", title: "Small and inspectable", body: "Controls, profiles, schemas, and parsers live in the repository in plain files, which makes the project easier to audit and easier to fork responsibly." },
-  { icon: "target", title: "Built for adoption", body: "Fixtures, docs, templates, screenshots, and the GitHub Pages site make the kit easier to demo, teach, and operationalize with maintainers." },
+  { icon: "target", title: "Built for adoption", body: "Fixtures, docs, templates, sample reports, and the GitHub Pages site make the kit easier to demo, teach, and operationalize with maintainers." },
   { icon: "sparkles", title: "One output for people and automation", body: "The same evaluation produces narrative Markdown for review and structured JSON for pipelines, integrations, and regression checks." },
 ];
 
@@ -253,7 +255,7 @@ function DifferentiatorsSection() {
       id="differentiators"
       eyebrow="Differentiators"
       title="What makes this project useful is not polish alone, but operational honesty."
-      subtitle="It is designed for real maintainers and AppSec engineers who need evidence they can explain, not just output that looks impressive in a screenshot."
+      subtitle="It is designed for real maintainers and AppSec engineers who need evidence they can explain, not just output that looks impressive out of context."
     >
       <div className="space-y-4 perspective-1800">
         {DIFFS.map((it, i) => (

@@ -16,7 +16,7 @@ Repository entry points:
 
 - [tutorial-first-pr-gate.md](tutorial-first-pr-gate.md) - first-time adopter path from install to a PR gate
 - [quickstart-15-min.md](quickstart-15-min.md) - compact quickstart and compatibility notes
-- [validation-walkthrough.md](validation-walkthrough.md) - full step-by-step demo with screenshots (CLI help, profile discovery, fixture comparison, controls table, CI gating)
+- [validation-walkthrough.md](validation-walkthrough.md) - full step-by-step demo with text output, report artifacts, profile discovery, fixture comparison, controls table, and CI gating
 - [sample-reports/](sample-reports/README.md) - generated hardened and vulnerable example reports
 - [cli-reference.md](cli-reference.md) - full CLI reference (subcommands, flags, exit codes, examples)
 - [results-guide.md](results-guide.md) - how to interpret report statuses (`pass`, `fail`, `manual-review-required`, `self-attested`, ...)

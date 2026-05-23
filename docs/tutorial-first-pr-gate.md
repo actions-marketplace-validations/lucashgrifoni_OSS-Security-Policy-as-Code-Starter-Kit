@@ -56,7 +56,13 @@ Reports written:
 
 Open `./out/evaluation-report.md`. Each non-pass control includes status, reason, remediation, and assurance grade.
 
-![CLI help and command surface](../screenshots/tutorial/step-3-cli-help.png)
+Keep this text evidence instead of an image:
+
+| Evidence | What to confirm |
+|---|---|
+| CLI stdout | The selected profile, control count, status summary, and weighted score are printed. |
+| `evaluation-report.md` | Each non-pass control includes reason, remediation, confidence, and evidence when available. |
+| `evaluation-report.json` | `summary_by_status`, `controls_total`, and per-control records are present for automation. |
 
 ## Step 4 - Fix one, waiver one (5 min)
 
@@ -101,7 +107,12 @@ python -m oss_policy_kit evaluate --target . --profile github-level-1 --waivers 
 
 The report will still show the waiver, including owner, reason, and expiry.
 
-![Hardened example report](../screenshots/tutorial/step-4-hardened-output.png)
+Expected report change after the fix:
+
+| Before | After |
+|---|---|
+| `GOV-SEC-001` is non-pass when `SECURITY.md` is missing. | `GOV-SEC-001` passes once the repository root contains a monitored security policy. |
+| No waiver metadata exists for the planned gap. | The waiver row includes `control_id`, owner, reason, and expiry. |
 
 ## Step 5 - Commit and push (2 min)
 
@@ -122,7 +133,12 @@ In the PR Checks tab:
 
 To intentionally see the failure path, delete `SECURITY.md`, push again, then restore it. The point is to verify that the gate blocks the same kind of issue you saw locally.
 
-![Vulnerable example report](../screenshots/tutorial/step-6-vulnerable-output.png)
+Gate behavior to verify:
+
+| PR state | Expected evidence |
+|---|---|
+| Passing gate | Required check is green, and the report artifact contains no `fail` status for the configured threshold. |
+| Failing gate | Required check is red, the command exits with code `1`, and `evaluation-report.md` explains which controls failed. |
 
 ## Step 7 - Next steps (1 min)
 

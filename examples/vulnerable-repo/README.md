@@ -2,7 +2,7 @@
 
 > **Do not copy this folder as a baseline.** It is intentionally weak so OSS Policy Kit can demonstrate failing controls, fail-on behavior, and remediation messaging.
 
-This minimal repository layout is bundled with the kit purely as a test fixture for `--fail-on fail` runs and for the screenshots used in `docs/validation-walkthrough.md`.
+This minimal repository layout is bundled with the kit purely as a test fixture for `--fail-on fail` runs and for the text-first walkthrough in `docs/validation-walkthrough.md`.
 
 ## What is intentionally weak here
 

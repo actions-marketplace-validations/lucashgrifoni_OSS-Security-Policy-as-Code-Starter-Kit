@@ -204,7 +204,7 @@ The v6.0.0 release (Cycle 1 + Cycle 2). Version `6.0.0` in `pyproject.toml` and 
 - **`docs/at-a-glance.md` / `docs/release-state.md`** — moved detailed snapshot and release-state material out of the root README.
 - **`ROADMAP.md`** — new public Now / Next / Later roadmap with explicit non-goals and no shipped-capability overclaims.
 - **`docs/sample-reports/`** — generated hardened and vulnerable `github-level-1` Markdown/JSON example reports with local paths sanitized for public viewing.
-- **`docs/tutorial-first-pr-gate.md`** — new first-time adopter tutorial from install to pull-request gate, with screenshot references and troubleshooting.
+- **`docs/tutorial-first-pr-gate.md`** — new first-time adopter tutorial from install to pull-request gate, with text evidence references and troubleshooting.
 - **`docs/supply-chain-verification.md`** — new verifier guide for PyPI artifacts, GHCR images, cosign, GitHub Artifact Attestations, and the current non-SLSA-L3 trust model.
 - **`gitpage/`** — removed the runtime Tailwind CDN and Babel standalone dependencies. Tailwind and JSX are now built locally through pinned npm dependencies into committed `site.css` and `bundle.js`, with the build boundary documented in `gitpage/README.md`.
 - **`docs/profiles/ai-agent.md`** — new adopter guide for `ai-agent-baseline-1`, with evidence paths and explicit runtime-enforcement caveats.
@@ -849,7 +849,7 @@ This major release graduates the evaluation report to a stable wire contract (`r
 ### Onboarding, docs, and CI diagnostics
 
 - Reorganized the public documentation surface so onboarding stays in `README.md` while reference material lives in `docs/`. The README is now ~190 lines and links to dedicated pages for the validation walkthrough, the full CLI reference, and how to interpret report statuses
-- Added `docs/validation-walkthrough.md` with the step-by-step demo (CLI help, profile discovery, fixture comparison, controls table, CI gating) preserving the existing screenshots
+- Added `docs/validation-walkthrough.md` with the step-by-step demo (CLI help, profile discovery, fixture comparison, controls table, CI gating) using reproducible command and report evidence
 - Added `docs/cli-reference.md` consolidating the public CLI surface (subcommands, flags, exit codes, examples) in one place
 - Added `docs/results-guide.md` covering result statuses, automation limits, applicability, and the v1.0 report top-level keys
 - Updated `docs/README.md` so the documentation hub points at the new walkthrough/reference/results-guide trio without losing existing entries
@@ -1007,7 +1007,7 @@ This patch release consolidates documentation, release hygiene, and CI hygiene i
 ### Highlights
 
 - Updated public launch documentation to reflect the current release state
-- Added sanitized real CI screenshots for GitHub Actions and Azure Pipelines self-check flows
+- Added sanitized real CI text evidence for GitHub Actions and Azure Pipelines self-check flows
 - Improved workflow self-check commands to use the supported `evaluate` subcommand
 - Refined Azure Pipelines execution hygiene with pip caching and shallow checkout behavior
 - Preserved the existing v4.0.1 release while promoting the current public repository state into v4.0.2
@@ -1016,7 +1016,7 @@ This patch release consolidates documentation, release hygiene, and CI hygiene i
 
 ### Improvements
 
-- Better public release traceability between README, screenshots, CI examples, and repository state
+- Better public release traceability between README, text evidence, CI examples, and repository state
 - Clearer documentation of what is included in the public repository and what remains outside the public repository
 - Improved CI example accuracy through real sanitized pass/fail self-check evidence
 - Cleaner repository hygiene through safer ignore patterns for maintainer-private working notes

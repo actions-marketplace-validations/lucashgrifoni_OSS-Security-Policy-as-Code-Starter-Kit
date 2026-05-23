@@ -32,7 +32,7 @@ tools in the browser.
 - `app.jsx` - top-level React app
 - `parts/*.jsx` - section components (background, header, hero, sections-a/b/c, footer-cta, primitives)
 - `styles.css` - additional custom styles on top of generated Tailwind CSS
-- `screenshots/*.png` - copied public report screenshots used by the Sample Output section
+- `parts/sections-c.jsx` - renders the Sample Output section as structured text and control rows
 
 When changing Tailwind classes or JSX, rebuild the generated static assets:
 
@@ -53,7 +53,7 @@ The site order is:
 2. Problem statement.
 3. Comparison matrix.
 4. Scope and workflow.
-5. Sample output screenshots.
+5. Sample output rendered from text and control metadata.
 6. Quickstart, capabilities, profiles, evaluation states, differentiators, signals.
 7. Roadmap and final CTA.
 

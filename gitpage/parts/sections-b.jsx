@@ -2,7 +2,7 @@
 
 const COMPARISON_ROWS = [
   ["Multi-platform CI/CD", "Partial", "Scanner-specific", "Generic", "Kubernetes", "Yes"],
-  ["Built-in profiles", "Score model", "No", "No", "Policy-dependent", "47 dev / 38 public"],
+  ["Built-in profiles", "Score model", "No", "No", "Policy-dependent", "53 profiles"],
   ["Assurance grading", "No", "No", "No", "Policy-dependent", "Yes"],
   ["Composes SARIF / JSON", "No", "n/a", "No", "No", "Yes"],
   ["Waiver registry", "No", "No", "Adopter writes", "Policy-dependent", "Yes"],
@@ -71,7 +71,7 @@ const CAPABILITIES = [
   { icon: "fileWarn", title: "Markdown + JSON reports", body: "Every run writes artifacts that work for both human review and machine consumption, with structured summaries available on stdout when needed." },
   { icon: "pull", title: "Traceable waivers", body: "Exceptions can be loaded from waivers YAML so non-pass decisions stay visible, reviewable, and time-bounded." },
   { icon: "gauge", title: "Batch evaluation", body: "Immediate child directories can be evaluated in one pass with consolidated batch reports for multi-repo or multi-app roots." },
-  { icon: "fingerprint", title: "Examples, tests, and docs", body: "The repository ships fixtures, screenshots, documentation, and a regression suite so the kit can validate itself publicly." },
+  { icon: "fingerprint", title: "Examples, tests, and docs", body: "The repository ships fixtures, sample reports, documentation, and a regression suite so the kit can validate itself publicly." },
 ];
 
 function CapabilitiesSection() {
@@ -105,7 +105,7 @@ const FRAMEWORKS = [
     name: "GitHub baseline ladder",
     code: "github-level-1..3",
     text: "The most mature path in the kit. It inspects governance files and GitHub Actions posture with increasing strictness.",
-    chips: ["16-22 controls", "clone-visible", "most mature"],
+    chips: ["14-37 controls", "clone-visible", "most mature"],
     accent: "from-signal/30 to-signal/0",
   },
   {
@@ -113,7 +113,7 @@ const FRAMEWORKS = [
     name: "GitHub release hardening",
     code: "github-release-hardening-1..3",
     text: "Extends the baseline with branch protection, rulesets, environments, and secret scanning evidence flows.",
-    chips: ["17-26 controls", "evidence files", "manual review if missing"],
+    chips: ["16-37 controls", "evidence files", "manual review if missing"],
     accent: "from-signal/25 to-signal/0",
   },
   {
@@ -121,7 +121,7 @@ const FRAMEWORKS = [
     name: "Azure tracks",
     code: "azure-level-1..3 · azure-release-hardening-1..3",
     text: "Cover clone-visible Azure Repos and Azure Pipelines signals plus optional evidence.",
-    chips: ["12-17 controls", "clone + evidence", "static parsing"],
+    chips: ["13-34 controls", "clone + evidence", "static parsing"],
     accent: "from-slate/30 to-slate/0",
   },
   {
@@ -129,7 +129,7 @@ const FRAMEWORKS = [
     name: "AWS tracks",
     code: "aws-level-1..3 · aws-release-hardening-1..3",
     text: "Cover CodeBuild, committed CodePipeline artifacts, and optional exported evidence files.",
-    chips: ["11-17 controls", "clone + evidence", "static parsing"],
+    chips: ["12-33 controls", "clone + evidence", "static parsing"],
     accent: "from-slate/30 to-slate/0",
   },
 ];
@@ -140,7 +140,7 @@ function FrameworksSection() {
       id="profiles"
       eyebrow="Bundled profiles"
       title="Profile families let teams start small and harden posture without changing tools."
-      subtitle="The public release line ships the v5 profile set; the v6 development branch has 47 profiles across platform, regulatory, supply-chain, AI, and release-hardening lanes."
+      subtitle="The current release ships 53 profiles across platform, regulatory, supply-chain, AI, IaC, container, and release-hardening lanes."
     >
       <div className="grid gap-5 md:grid-cols-2 perspective-1800">
         {FRAMEWORKS.map((f, i) => (

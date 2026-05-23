@@ -1,13 +1,12 @@
-# Screenshots
+# Deprecated Visual Capture Archive
 
-This directory holds sanitized PNG captures of the OSS Policy Kit CLI and report output. They are used inline by [`docs/validation-walkthrough.md`](../docs/validation-walkthrough.md) so first-time readers can see expected output before running the kit locally.
+Public documentation no longer embeds PNG captures from this directory. Use text output, generated Markdown reports, generated JSON reports, and command transcripts as the source of truth.
 
-All captures show:
+When updating documentation, prefer:
 
-- public CLI commands and flags,
-- bundled `examples/hardened-repo` and `examples/vulnerable-repo` fixtures,
-- public report fields (status, confidence, reason, remediation),
+- command blocks with the exact command to run
+- short stdout excerpts copied from the current revision
+- tables that explain statuses, fields, and interpretation
+- links to generated Markdown or JSON sample reports
 
-with no internal hostnames, tokens, identifiers, or private repository content.
-
-If you regenerate a screenshot, reproduce it against the bundled fixtures with no extra arguments so the output remains reproducible by any reader.
+Do not add new visual captures as a substitute for reproducible text evidence.
