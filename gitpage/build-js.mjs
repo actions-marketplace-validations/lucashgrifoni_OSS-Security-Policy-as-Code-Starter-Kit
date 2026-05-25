@@ -10,6 +10,8 @@ const files = [
   "parts/sections-a.jsx",
   "parts/sections-b.jsx",
   "parts/sections-c.jsx",
+  "parts/catalog-data.jsx",
+  "parts/catalog-explorer.jsx",
   "parts/footer-cta.jsx",
   "app.jsx",
 ];

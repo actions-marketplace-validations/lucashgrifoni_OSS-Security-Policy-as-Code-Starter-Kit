@@ -17,6 +17,7 @@ function App() {
         <QuickstartSection />
         <CapabilitiesSection />
         <FrameworksSection />
+        <ControlCatalogSection />
         <EvaluationStatesSection />
         <DifferentiatorsSection />
         <SignalsSection />

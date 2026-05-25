@@ -10,6 +10,7 @@ const NAV = [
   { id: "quickstart", label: "Quickstart" },
   { id: "capabilities", label: "Capabilities" },
   { id: "profiles", label: "Profiles" },
+  { id: "catalog", label: "Catalog" },
   { id: "states", label: "Evaluation" },
   { id: "differentiators", label: "Why" },
   { id: "examples", label: "Signals" },
