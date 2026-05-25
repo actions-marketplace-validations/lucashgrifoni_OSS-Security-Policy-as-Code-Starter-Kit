@@ -20,7 +20,9 @@
     ".": {
       "package-name": "oss-policy-kit",
       "extra-files": [
-        "src/oss_policy_kit/__init__.py"
+        "src/oss_policy_kit/__init__.py",
+        "README.md",
+        "docs/at-a-glance.md"
       ]
     }
   }
