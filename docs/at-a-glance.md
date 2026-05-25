@@ -6,7 +6,7 @@ This page keeps the detailed capability snapshot out of the root README so the f
 
 | Area | What you get |
 |---|---|
-| Current public release | `v6.5.0` / Python package `oss-policy-kit==6.5.0` |
+| Current public release | `v6.5.1` / Python package `oss-policy-kit==6.5.1` |
 | Runtime | Python 3.12+ |
 | Input | A local repository clone, optional waivers, optional evidence files, optional scanner SARIF/JSON |
 | Output | Markdown, JSON (`reports/1.0` default), optional SARIF 2.1.0, CycloneDX VEX through `emit-vex` |
@@ -14,9 +14,9 @@ This page keeps the detailed capability snapshot out of the root README so the f
 | Exceptions | Waiver registry with owner, reason, and expiry |
 | Assurance model | Controls are labelled `deterministic`, `signal`, or `evidence-backed` |
 
-## v6.5.0 baseline
+## v6.5.1 baseline
 
-| Area | v6.5.0 |
+| Area | v6.5.1 |
 |---|---|
 | Profiles | 56 bundled profiles |
 | Controls | 212 bundled controls |
