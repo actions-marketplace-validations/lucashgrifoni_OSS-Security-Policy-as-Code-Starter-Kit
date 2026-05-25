@@ -1,8 +1,8 @@
 # Positioning — what this kit is, and what it deliberately is not
 
-This page exists because the OSS security tooling landscape has multiple overlapping projects (Scorecard, zizmor, poutine, OSV-Scanner, Harden-Runner, Trivy, Syft) and adopters reasonably ask: *"why use this kit if `<other tool>` already covers part of this?"*
+This page exists because the OSS security tooling landscape has multiple overlapping projects (Scorecard, zizmor, poutine, OSV-Scanner, Harden-Runner, Trivy, Syft) plus general-purpose policy engines (OPA/Conftest, Kyverno) and adopters reasonably ask: *"why use this kit if `<other tool>` already covers part of this?"*
 
-The honest answer is below. This page deliberately does not market the kit; it draws boundaries. Everything described here as **shipped** is verified against the **v6.3.0 build**. The items formerly listed at the end under *Roadmap (v6.0.0 — in development)* have since shipped across the v6.0.0–v6.3.0 line; that section is retained as historical context.
+The honest answer is below. This page deliberately does not market the kit; it draws boundaries. Everything described here as **shipped** is verified against the **v6.4.0 build**. The items formerly listed at the end under *Roadmap (v6.0.0 — in development)* have since shipped across the v6.0.0–v6.4.0 line; that section is retained as historical context.
 
 ---
 
@@ -90,6 +90,28 @@ The kit answers: *"given this commit, this profile, and this evidence, does the 
 
 ---
 
+## Versus general-purpose policy engines (OPA/Conftest, Kyverno)
+
+This is the sharpest question, because this kit *is* "policy-as-code" and so are these. The honest distinction is **generic engine vs. opinionated domain pack**.
+
+| | OPA / Rego + Conftest | Kyverno (+ kyverno-json) | This kit |
+|---|---|---|---|
+| **Category** | General-purpose policy engine; you author Rego against arbitrary JSON/YAML | Kubernetes-native policy engine; primarily in-cluster admission control, plus a CLI for JSON/YAML | Domain-specific policy-as-code pack for OSS repo + CI/CD supply-chain posture |
+| **Primary surface** | Anything you write a query for | Cluster admission (runtime) + manifests | Clone-visible repo governance + GitHub/Azure/AWS/GitLab CI signals |
+| **What you bring** | The entire ruleset — you write and maintain every policy | The policies — you write ClusterPolicies / validating rules | Almost nothing: 212 pre-authored controls + 56 composable profiles ship in the box |
+| **Trust grading** | None built in (a rule passes or fails) | None built in | Every control labelled `deterministic` / `signal` / `evidence-backed`; grade flows into the report |
+| **Evidence model** | You design it | You design it | Built-in trust levels (`static_clone`, `api_collected`, `user_supplied`, …) + per-control collection metadata |
+| **Waivers** | You build the exception mechanism | PolicyException CRD (cluster) | Waiver registry with owner + reason + expiry, integrated into the gate decision |
+| **Output** | Whatever you emit | Admission verdict / CLI report | `reports/1.0` JSON + Markdown + SARIF 2.1.0 + CycloneDX VEX |
+
+**The relationship is complementary, not competitive.** OPA/Conftest and Kyverno are *engines*: maximally flexible, zero opinion, and you own the entire policy library and its maintenance against moving frameworks (Scorecard, SLSA, SSDF, CRA, …). This kit is an *opinionated pack* for one domain — it ships the control catalog, the framework mappings, the trust taxonomy, and the waiver discipline so an adopter gets a defensible OSS-supply-chain gate from `pip install` rather than from months of Rego authoring.
+
+- **Use OPA/Conftest** when you need arbitrary policy over arbitrary config (Terraform plan gating, Kubernetes manifests, custom JSON contracts) and you are willing to own the ruleset. The kit does **not** replace it; the kit's [ROADMAP](../ROADMAP.md) tracks a future **CEL/Rego export** so its verdicts can feed an OPA-based gate.
+- **Use Kyverno** when your enforcement point is **Kubernetes admission at runtime** — that is a different layer (cluster control plane) from this kit's commit-time repo gate. They coexist: this kit gates the source/build posture; Kyverno gates what actually admits to the cluster.
+- **Use this kit** when you want the OSS-supply-chain policy library *already written and trust-graded*, gated as `pass / degraded / fail`, without standing up and maintaining a generic engine's ruleset yourself.
+
+---
+
 ## On scanner trust and defense in depth
 
 Scanner output is not inherently trustworthy. The 2026 supply-chain attack against a major scanner distribution (publicly reported in March 2026, see references at the end) is a reminder that if a scanner itself is tampered with, downstream gates that treat its output as ground truth inherit the compromise.
@@ -128,6 +150,8 @@ References for the 2026 incident and broader scanner-trust context: [GitHub Advi
 - You need an SBOM (or AIBOM) for a target → **Syft**, **Trivy SBOM**, or build-platform-native emitters.
 - You need **cross-source triage and portfolio prioritization** across many repos plus runtime telemetry → **ASPM SaaS** (Apiiro, ArmorCode, Cycode, Snyk AppRisk, etc.). The kit emits the evidence; the ASPM correlates and prioritizes.
 - You need **server-side evidence storage and cross-artifact query** → **Chainloop** or **GUAC**. The kit emits per-commit; those platforms persist and aggregate.
+- You need **arbitrary policy over arbitrary config** (Terraform plans, custom JSON/YAML contracts) and are willing to author the ruleset → **OPA/Conftest** (Rego). The kit is an opinionated OSS-supply-chain pack, not a generic engine; see *Versus general-purpose policy engines* above.
+- You need **Kubernetes admission enforcement at runtime** → **Kyverno** or OPA Gatekeeper. That is the cluster control-plane layer; this kit gates commit-time repo/CI posture and coexists with it.
 - You need **runtime IAST or RASP** → out of scope for this kit (architectural). Datadog AAP, Contrast, and similar are the canonical options.
 - You need a **conformity assessment** for CE-marking under EU CRA or EU AI Act → the kit produces technical alignment evidence; the assessment itself remains with a notified body.
 
@@ -154,7 +178,7 @@ The following items were the v6.0.0 roadmap when this page was written against t
 - **New CLI subcommands**: `emit-insights` (OpenSSF Security Insights 1.0 YAML) and `export-evidence --format chainloop` (experimental).
 - **New report contract**: `reports/2.0` aligned to a five-state vocabulary (`PASS / FAIL / UNKNOWN / NOT_APPLICABLE / ATTESTED`), opt-in via `--report-json-contract=2.0`. `reports/1.0` remains the default through the v6.x line.
 - **`PROV-VERIFY-061` extension**: an optional `verification.source` enum (`npm-trusted-publishing`, `pypi-trusted-publishing`, `rubygems-trusted-publishing`, `crates-trusted-publishing`, `github-attestation`, `sigstore-bundle`, `manual`) to record where a verification came from. Schema is unchanged in v5.9.x.
-- **Doc updates**: `framework-alignment.md` will gain columns for NIST 218A, EU AI Act, and OpenSSF Insights; an `eu-ai-act-readiness.md` page will be added with explicit caveats about conformity assessment being out of scope.
+- **Doc updates**: `framework-alignment.md` gained shipped sections for NIST 218A, EU AI Act, and OpenSSF Insights, and [`eu-ai-act-readiness.md`](eu-ai-act-readiness.md) was added with explicit caveats about conformity assessment being out of scope. (The deterministic per-requirement tables for the non-AI v6.x families — Kubernetes, IaC, GitLab CI, WORM, CRA Art.13/14, SLSA Source L2 — are still pending; see the snapshot notice in `framework-alignment.md`.)
 
 These shipped ahead of the **2026-08-02** EU AI Act Article 11 effective date, so the `cra-eu-ai-act-art11-1` advisory was available before adopters needed it.
 

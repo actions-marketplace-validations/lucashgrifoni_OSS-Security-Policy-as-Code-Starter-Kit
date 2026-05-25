@@ -4,11 +4,17 @@ This page maps the controls and profiles bundled with the kit to the AppSec /
 DevSecOps frameworks operators most often have to defend against. It is a **mapping**, not a
 **certification claim**.
 
-> **⚠️ Snapshot pending refresh.** The per-framework mapping tables below reflect the
-> **v5.9.x catalog (136 controls / 38 profiles)**. As of **v6.4.0** the kit bundles
-> **212 controls / 56 profiles**; the v6.0.0+ families (AI/LLM, EU AI Act, `WORM-*`,
-> MCP, OWASP Agentic ASI, EU CRA Art.13/14, SLSA Source, the full GitLab CI family) are
-> **not yet folded into the mapping tables here**. For the authoritative current control set see
+> **⚠️ Snapshot — partial v6.x refresh (2026-05-25).** As of **v6.4.0** the kit bundles
+> **212 controls / 56 profiles**. The **AI/LLM (NIST 800-218A), AI agent + MCP, OWASP Agentic
+> ASI, EU AI Act, and OpenSSF Security Insights** families are now written as **shipped**
+> capability in the sections below (no longer roadmap). The **deterministic per-requirement
+> mapping tables** for the remaining v6.x families are the known refresh debt and are **not yet
+> folded in here**: Kubernetes (`K-*`), IaC (`IAC-TF/PUL/CFN/BICEP-*`), the full GitLab CI track
+> (`GL-PIPE-*`), WORM publish defense (`WORM-*`), EU CRA Article 13/14 product class
+> (`CRA-ART-*`, `CRA-PRODUCT-*`), SLSA Source L2 (`SLSA-SRC-*`), and the EPSS/KEV/fuzz/merge-queue/egress
+> additions. The general framework tables (Scorecard, OWASP CICD Top 10, SLSA Build, SSDF, S2C2F,
+> CIS SSCS, AWS, Azure, CRA) still reflect their v5.9.x control sets and have not been pruned for
+> v6 control renames. For the authoritative current control set see
 > [controls-catalog.md](controls-catalog.md) and `CHANGELOG.md`. The kit does not assert conformance to any of these frameworks; it
 documents how its honest signals align with each framework's expectations so operators can
 navigate from a framework requirement back to a concrete control or evidence file.
@@ -255,11 +261,11 @@ Regulatory pressure with concrete artifact requirements. Key dates:
 >
 > All three are **advisory regulatory mappings**, not conformity assessments. See [`cra-readiness.md`](cra-readiness.md) for what the kit proves vs what remains with the operator.
 
-## NIST SP 800-218A — AI / Generative AI (out of scope for v5.x)
+## NIST SP 800-218A — AI / Generative AI
 
 NIST finalized SP 800-218A as an SSDF *Community Profile* augmenting SP 800-218 with practices specific to generative AI / dual-use foundation model development (model cards, training-data provenance, prompt-injection / jailbreak testing, dual-use risk).
 
-**Coverage in this kit**: out of scope for the v5.x line. AI-specific evaluators (model card detection from clone, training-data provenance evidence schema, prompt-injection guardrail signal) are real new product surface, not a re-grouping of existing controls. Tracked for v6.0.0 in `docs/profiles/deferred-followups.md`.
+**Coverage in this kit**: **shipped** in v6.0.0 via the advisory profile `appsec-llm-ssdf-218a-1` (`LLM-218A-*` family). The full per-practice mapping table is in the [NIST SP 800-218A — Generative AI SSDF Community Profile](#nist-sp-800-218a--generative-ai-ssdf-community-profile-shipped-in-v600) section below.
 
 ## Decisions taken on this iteration
 
@@ -453,20 +459,22 @@ Multi-platform profile aimed at AppSec teams using the kit as part of pipeline A
 
 ---
 
-# Former roadmap — frameworks that shipped in v6.0.0+
+# AI / regulatory frameworks — shipped in v6.0.0+
 
-The sections below were the v6.0.0 framework roadmap when this page was written
-against the v5.9.x build. These controls, profiles, and CLI subcommands have
-since **shipped** across the v6.0.0–v6.3.0 line; the sections are retained as
-historical design notes. They are not yet folded into the mapping tables above
-(see the snapshot notice near the top). See [`positioning.md`](positioning.md)
-for the broader shipped scope and `CHANGELOG.md` for the authoritative state.
+The sections below were the v6.0.0 framework roadmap when this page was first written
+against the v5.9.x build. These controls, profiles, and CLI subcommands **shipped** across
+the v6.0.0–v6.4.0 line and are **current capability** — the tables below describe what the
+kit does today, not planned work. Tense and "planned/estimate" wording have been corrected to
+present tense (2026-05-25). The deterministic mapping tables for the **non-AI** v6.x families
+(Kubernetes, IaC, GitLab CI, WORM, CRA Art.13/14, SLSA Source L2) are still pending — see the
+snapshot notice near the top. See [`positioning.md`](positioning.md) for the broader shipped
+scope and `CHANGELOG.md` for the authoritative state.
 
 ## NIST SP 800-218A — Generative AI SSDF Community Profile (shipped in v6.0.0)
 
-[NIST SP 800-218A](https://csrc.nist.gov/pubs/sp/800/218/a/final) extends the SSDF (SP 800-218) with controls specific to organizations producing or consuming generative AI systems. v6.0.0 introduces an **advisory** profile `appsec-llm-ssdf-218a-1` with a 7-control family `LLM-218A-*`.
+[NIST SP 800-218A](https://csrc.nist.gov/pubs/sp/800/218/a/final) extends the SSDF (SP 800-218) with controls specific to organizations producing or consuming generative AI systems. v6.0.0 shipped the **advisory** profile `appsec-llm-ssdf-218a-1` with a 7-control family `LLM-218A-*`.
 
-| 218A practice (selected) | Planned kit control | Coverage | Notes |
+| 218A practice (selected) | Kit control | Coverage | Notes |
 |---|---|---|---|
 | **PO.1.2** — Document AI security expectations | `LLM-218A-PO-001` | signal | Presence of "AI Security Considerations" section in `SECURITY.md` or `README.md`. |
 | **PO.5.1** — Maintain prompt / system-instruction registry | `LLM-218A-PO-002` | signal | Directory `prompts/`, `system_prompts/`, or equivalent registry pattern. |
@@ -478,9 +486,9 @@ for the broader shipped scope and `CHANGELOG.md` for the authoritative state.
 
 Also planned: `AIBOM-PRESENT-001` (signal) — detects AIBOM in CycloneDX ML-BOM or SPDX 3.0 AI components format at `.oss-policy-kit/evidence/aibom/*.json` or `aibom/*.json`. Bundled into `appsec-llm-ssdf-218a-1` and `cra-eu-ai-act-art11-1`.
 
-**Coverage estimate at v6.0.0 GA**: 7 advisory controls + 1 AIBOM signal. Profile is advisory (`--fail-on degraded`). The kit does **not** verify the runtime behavior of an AI system — coverage is clone-side / evidence-side only. See [`positioning.md`](positioning.md) and the planned `eu-ai-act-readiness.md` for explicit caveats. ADR-009 documents the design rationale.
+**Coverage (shipped, v6.x)**: 7 advisory controls + 1 AIBOM signal. Profile is advisory (`--fail-on degraded`). The kit does **not** verify the runtime behavior of an AI system — coverage is clone-side / evidence-side only. See [`positioning.md`](positioning.md) and [`eu-ai-act-readiness.md`](eu-ai-act-readiness.md) for explicit caveats. ADR-009 documents the design rationale.
 
-## AI agent / MCP source-side baseline (development branch)
+## AI agent / MCP source-side baseline (shipped in v6.0.0)
 
 `ai-agent-baseline-1` covers repository-side posture for teams building AI
 agents or MCP servers. It is intentionally advisory and does not enforce runtime
@@ -501,15 +509,17 @@ framing.
 | Memory poisoning / context leakage | `AI-AGENT-009` | evidence-backed | Requires `memory-policy.json`. |
 | Model drift | `AI-AGENT-010` | signal | Requires dated or versioned model identifiers. |
 
-**Coverage estimate at v6.0.0 GA**: 10 advisory controls, 7 signal-grade and 3
-evidence-backed. See [`profiles/ai-agent.md`](profiles/ai-agent.md) and
+**Coverage (shipped, v6.x)**: 10 advisory controls, 7 signal-grade and 3
+evidence-backed. Complemented by the `MCP-*` (MCP server security, ADR-023) and
+`AGENT-ASI-*` (OWASP Agentic ASI, ADR-024) families. See
+[`profiles/ai-agent.md`](profiles/ai-agent.md), [`mcp-server-security.md`](mcp-server-security.md), and
 ADR-016.
 
 ## EU AI Act — Article 11 + Annex IV (shipped in v6.0.0)
 
-EU AI Act Article 11 + Annex IV become enforceable on **2026-08-02** and require technical documentation for high-risk AI systems, including the intended purpose, training data summary, risk management documentation, and post-market monitoring plan. v6.0.0 introduces an **advisory** profile `cra-eu-ai-act-art11-1` with a 3-control family `LLM-AI-ACT-*`.
+EU AI Act Article 11 + Annex IV become enforceable on **2026-08-02** and require technical documentation for high-risk AI systems, including the intended purpose, training data summary, risk management documentation, and post-market monitoring plan. v6.0.0 shipped the **advisory** profile `cra-eu-ai-act-art11-1` with a 3-control family `LLM-AI-ACT-*`.
 
-| Annex IV requirement (selected) | Planned kit control | Coverage | Notes |
+| Annex IV requirement (selected) | Kit control | Coverage | Notes |
 |---|---|---|---|
 | **Annex IV §1** — Intended purpose / users / limitations | `LLM-AI-ACT-001` | signal | "Intended Purpose / Users / Limitations" section in `README.md` or `SECURITY.md`. |
 | **Annex IV §3** — Output filtering / content moderation | `LLM-AI-ACT-002` | signal | Pattern match for `output_filter` or `content_moderation` references in test files. |
@@ -517,13 +527,13 @@ EU AI Act Article 11 + Annex IV become enforceable on **2026-08-02** and require
 
 Bundled controls (already in v5.9.x): `GOV-DISC-065`, `REL-CHANGE-001`, `SAST-OSV-068`, plus v6.0.0 newcomers `AIBOM-PRESENT-001` and `LLM-218A-PO-001` / `LLM-218A-PS-001` from the NIST 218A profile above.
 
-**Hard caveat (planned `eu-ai-act-readiness.md`)**: this profile is **not** a conformity assessment under the AI Act. Conformity assessment requires a notified body and is outside the kit's scope. The profile produces a clone-side posture indicator that adopters can use as evidence input; the formal CE-marking process is external. ADR-010 documents the design rationale.
+**Hard caveat (see [`eu-ai-act-readiness.md`](eu-ai-act-readiness.md))**: this profile is **not** a conformity assessment under the AI Act. Conformity assessment requires a notified body and is outside the kit's scope. The profile produces a clone-side posture indicator that adopters can use as evidence input; the formal CE-marking process is external. ADR-010 documents the design rationale.
 
-**Coverage estimate at v6.0.0 GA**: 3 advisory controls + 4 bundled signals. Profile is advisory (`--fail-on degraded`).
+**Coverage (shipped, v6.x)**: 3 advisory controls + 4 bundled signals. Profile is advisory (`--fail-on degraded`). The EU CRA Article 13/14 product-class obligations are covered separately by the `CRA-ART-*` / `CRA-PRODUCT-*` families (ADR-020); a dedicated mapping table for those is pending (see the snapshot notice).
 
 ## OpenSSF Security Insights 1.0 — emit (shipped in v6.0.0)
 
-[OpenSSF Security Insights 1.0](https://security-insights.openssf.org/) is a YAML format that lets a project publish machine-readable security metadata (security contacts, vulnerability disclosure process, build provenance, dependency policy). v6.0.0 introduces an **emit-only** subcommand `oss-policy-kit emit-insights` that produces a valid `security-insights.yml` document by reusing the kit's existing evaluators read-only.
+[OpenSSF Security Insights 1.0](https://security-insights.openssf.org/) is a YAML format that lets a project publish machine-readable security metadata (security contacts, vulnerability disclosure process, build provenance, dependency policy). v6.0.0 shipped the **emit-only** subcommand `oss-policy-kit emit-insights` that produces a valid `security-insights.yml` document by reusing the kit's existing evaluators read-only.
 
 | Insights 1.0 field | Source in the kit | Notes |
 |---|---|---|
@@ -536,7 +546,7 @@ Bundled controls (already in v5.9.x): `GOV-DISC-065`, `REL-CHANGE-001`, `SAST-OS
 | `release.attestation` | provenance evidence file | Mapped from `PROV-VERIFY-061`. |
 | `release.distribution-points` | inferred | Best-effort from CI publish workflows. |
 
-**Coverage estimate at v6.0.0 GA**: emits a YAML document validated against the OpenSSF Insights 1.0 schema via `--validate`. The kit does **not** add new controls for Insights — it re-projects existing controls into the Insights vocabulary. ADR-011 documents the design rationale.
+**Coverage (shipped, v6.x)**: emits a YAML document validated against the OpenSSF Insights 1.0 schema via `--validate`. The kit does **not** add new controls for Insights — it re-projects existing controls into the Insights vocabulary. ADR-011 documents the design rationale.
 
 ---
 
@@ -547,6 +557,7 @@ referenced for the framework summaries is **January 2026**; framework owners sho
 consulted upstream for the current canonical text. Prior framework releases (Scorecard v3,
 SLSA v0.1, SSDF SP 800-218 1.0, etc.) are not listed; only current major-line text is mapped.
 
-The v6.0.0 roadmap sections above will be promoted out of *Roadmap* and into the main
-mapping body once their corresponding PRs land (PR-8 for Insights emit; PR-10 for NIST 218A;
-PR-11 for EU AI Act Art. 11, and the AI agent profile once the v6 branch is tagged).
+The AI / regulatory sections above describe **shipped** capability (v6.0.0–v6.4.0). The
+remaining refresh debt is the deterministic per-requirement mapping tables for the non-AI v6.x
+families (Kubernetes, IaC, GitLab CI, WORM, EU CRA Art.13/14, SLSA Source L2) plus a prune of
+the v5.9.x general tables for v6 control renames — tracked in the snapshot notice at the top.
