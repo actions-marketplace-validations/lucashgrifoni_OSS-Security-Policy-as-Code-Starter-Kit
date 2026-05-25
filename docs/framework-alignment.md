@@ -4,17 +4,18 @@ This page maps the controls and profiles bundled with the kit to the AppSec /
 DevSecOps frameworks operators most often have to defend against. It is a **mapping**, not a
 **certification claim**.
 
-> **⚠️ Snapshot — partial v6.x refresh (2026-05-25).** As of **v6.4.0** the kit bundles
-> **212 controls / 56 profiles**. The **AI/LLM (NIST 800-218A), AI agent + MCP, OWASP Agentic
-> ASI, EU AI Act, and OpenSSF Security Insights** families are now written as **shipped**
-> capability in the sections below (no longer roadmap). The **deterministic per-requirement
-> mapping tables** for the remaining v6.x families are the known refresh debt and are **not yet
-> folded in here**: Kubernetes (`K-*`), IaC (`IAC-TF/PUL/CFN/BICEP-*`), the full GitLab CI track
-> (`GL-PIPE-*`), WORM publish defense (`WORM-*`), EU CRA Article 13/14 product class
-> (`CRA-ART-*`, `CRA-PRODUCT-*`), SLSA Source L2 (`SLSA-SRC-*`), and the EPSS/KEV/fuzz/merge-queue/egress
-> additions. The general framework tables (Scorecard, OWASP CICD Top 10, SLSA Build, SSDF, S2C2F,
-> CIS SSCS, AWS, Azure, CRA) still reflect their v5.9.x control sets and have not been pruned for
-> v6 control renames. For the authoritative current control set see
+> **Snapshot — v6.x refresh complete (2026-05-25).** As of **v6.4.0** the kit bundles
+> **212 controls / 56 profiles**, and the per-framework tables below now map the v6.x families:
+> **AI/LLM (NIST 800-218A), AI agent + MCP, OWASP Agentic ASI, EU AI Act, OpenSSF Security
+> Insights** (the *AI / regulatory frameworks* sections), **GitLab CI** (`GL-PIPE-*` → OWASP CICD
+> Top 10), **Kubernetes** (`K8S-*` → CIS Kubernetes / Pod Security Standards / NSA-CISA), **IaC**
+> (`IAC-*` → CIS cloud benchmarks), **WORM publish defense** (`WORM-*`), **EU CRA Article 13/14 +
+> product class** (`CRA-ART*`, `CRA-PRODUCT-*`), **SLSA Source L2** (`SLSA-SRC-006..008`), and the
+> **EPSS/KEV/fuzz/merge-queue/egress** additions. Framework summaries use the **stated framework
+> text at the January 2026 training cutoff** — consult the upstream framework page for canonical
+> text. Many v6.x controls are `signal` or `evidence-backed` (not `deterministic`); a coverage
+> label of YES often means *YES when the evidence file / enriched SARIF is supplied*, noted per
+> row. For the authoritative current control set see
 > [controls-catalog.md](controls-catalog.md) and `CHANGELOG.md`. The kit does not assert conformance to any of these frameworks; it
 documents how its honest signals align with each framework's expectations so operators can
 navigate from a framework requirement back to a concrete control or evidence file.
@@ -40,8 +41,11 @@ specific evidence each platform collector retrieves see [collector-parity.md](co
 
 ## Frameworks covered
 
-The mapping below covers nine industry references that overlap with the kit's scope (OSS
-governance, CI/CD security, supply-chain assurance). Frameworks the kit deliberately does not
+The table below lists the core industry references that overlap with the kit's scope (OSS
+governance, CI/CD security, supply-chain assurance). Additional v6.x mapping sections follow for
+GitLab CI, CIS Kubernetes / Pod Security Standards, Infrastructure-as-Code posture, WORM
+publish-integrity defense, EU CRA Article 13/14, SLSA Source L2, and the AI / regulatory
+frameworks (NIST 800-218A, EU AI Act, OpenSSF Insights). Frameworks the kit deliberately does not
 attempt to map (because they are out of scope, not because they are unimportant) are listed at
 the end under **Out of scope**.
 
@@ -86,7 +90,7 @@ it, plus a coverage label:
 | Contributors | (none) | OUT | The kit does not analyze commit history or contributor breadth. |
 | Dangerous-Workflow | `CI-DANGER-007`, `GH-WF-019`, `GH-WF-020`, `AZ-PIPE-029` | YES | Multiple deterministic checks against unsafe workflow patterns. |
 | Dependency-Update-Tool | `DEP-UPDATE-001`, `SEC-DEPREV-011` | YES | Detects Dependabot / Renovate config plus dependency-review-action. |
-| Fuzzing | (none) | OUT | The kit does not require fuzzing; Scorecard JSON can surface it. |
+| Fuzzing | `SEC-FUZZ-001` | PARTIAL | `signal` grade — detects OSS-Fuzz / cifuzz / atheris / Scorecard-Fuzzing presence in the repo. Scorecard's own Fuzzing check remains the authoritative runtime signal. |
 | License | `GOV-LIC-004` | YES | LICENSE file presence (deterministic). |
 | Maintained | (none) | OUT | The kit does not infer maintenance from commit cadence. |
 | Packaging | (none) | OUT | Packaging publication signals are not modeled. |
@@ -98,8 +102,9 @@ it, plus a coverage label:
 | Vulnerabilities | `OSS-SCORECARD-001` | INDIRECT | The kit accepts the Scorecard JSON; it does not query OSV directly. |
 | Webhooks | (none) | OUT | Repository-webhook posture is not modeled. |
 
-**Coverage**: 11 YES, 3 PARTIAL, 5 OUT, 0 GAP. The 5 OUT items are intentional design choices,
-documented above.
+**Coverage**: 11 YES, 4 PARTIAL, 4 OUT, 0 GAP. The 4 OUT items are intentional design choices,
+documented above. (`SEC-FUZZ-001`, added in the v6.x line, moved Fuzzing from OUT to a
+`signal`-grade PARTIAL.)
 
 ## OpenSSF OSPS Baseline
 
@@ -128,6 +133,43 @@ already listed under Scorecard above.
 Older releases (v5.0.0) had this as a GAP; the v5.1.0 control closes the audit-log-streaming
 expectation honestly via an evidence schema, with a signal-grade fallback for clone-only repos.
 
+### GitLab CI mapping (`GL-PIPE-*`, v6.x)
+
+The first-class GitLab CI family maps the same OWASP CICD Top 10 risks to `.gitlab-ci.yml`
+artifacts. Most controls are `signal` grade (clone-visible heuristics on GitLab YAML), so PASS
+is directional, not platform-verified.
+
+| Risk | GitLab control(s) | Coverage | Notes |
+|---|---|---|---|
+| CICD-SEC-1: Insufficient Flow Control | `GL-PIPE-010`, `GL-PIPE-011` | PARTIAL | Environment approval rules + merge-request review approvals (signal). |
+| CICD-SEC-2: Inadequate IAM | `GL-PIPE-007` | PARTIAL | OIDC (`id_tokens`) for cloud/registry access preferred over long-lived CI variables (signal). |
+| CICD-SEC-4: Poisoned Pipeline Execution | `GL-PIPE-003`, `GL-PIPE-004`, `GL-PIPE-006` | PARTIAL | No `curl \| sh`, no broad `inherit: secrets: true`, trigger restrictions via `rules:`/`only:`/`except:` (mix of deterministic + signal). |
+| CICD-SEC-5: Insufficient PBAC | `GL-PIPE-010` | PARTIAL | Protected-environment approval rules (signal). |
+| CICD-SEC-6: Insufficient Credential Hygiene | `GL-PIPE-004` | YES | Deterministic: rejects job-level broad `inherit: secrets: true`. |
+| CICD-SEC-7: Insecure System Configuration | `GL-PIPE-008` | PARTIAL | Self-hosted runner usage restricted via tags (signal). |
+| CICD-SEC-8: Ungoverned 3rd-Party Services | `GL-PIPE-002`, `GL-PIPE-005` | PARTIAL | Image references pinned to tag/digest; `include:` does not reference unpinned remote URLs (signal). |
+| CICD-SEC-9: Improper Artifact Integrity | `GL-PIPE-012` | PARTIAL | Artifact retention / signed-release posture documented (signal). |
+| CICD-SEC-10: Insufficient Logging | `GL-PIPE-009` | PARTIAL | Audit-event streaming / external export documented (signal). |
+
+`GL-PIPE-001` (pipeline files present and parseable, deterministic) is the family's structural
+precondition. CICD-SEC-3 (Dependency Chain Abuse) is covered cross-platform by the scanner-SARIF
+adapters (`SAST-OSV-068`, `SCA-KEV-001`, `SCA-EPSS-001`) rather than a GitLab-specific control.
+
+**GitLab coverage**: 1 YES, 8 PARTIAL across nine of the ten risks; gating these at
+`--fail-on fail` is honest only where a deterministic control backs the risk (CICD-SEC-6). The
+`gitlab-level-*` and `gitlab-release-hardening-*` profiles bundle these; see
+[profiles/gitlab.md](profiles/gitlab.md).
+
+### Cross-platform additions (v6.x)
+
+- **`GH-MERGEQ-053`** (signal) — GitHub merge queue / `merge_group` trigger posture. Strengthens
+  **CICD-SEC-1** flow control on GitHub.
+- **`GH-EGRESS-HRN-001`** (signal) — Harden-Runner egress-control presence. Directional evidence
+  for **CICD-SEC-7**; the kit does **not** enforce egress at runtime (that is Harden-Runner's
+  role — see [positioning.md](positioning.md)).
+- **WORM publish-integrity family** (`WORM-*`, signal) — see the dedicated section below; maps to
+  **CICD-SEC-3** / **CICD-SEC-6** (dependency-chain + credential-harvest defense).
+
 ## SLSA v1.0 — Build track
 
 | SLSA item | Kit control(s) | Coverage | Notes |
@@ -152,7 +194,26 @@ SLSA v1.2 reintroduces a **Source Track** alongside the Build Track. It defines 
 | Source L3: Source provenance attestations | (none) | GAP | Verifiable source-history attestations are not yet emitted by mainstream SCMs at scale. Tracked as future work in `docs/profiles/deferred-followups.md`. |
 | Source L4: Two-party review on every merged PR | `PLAT-BRPROT-015` (with `required_approving_review_count >= 2`), `GH-PLAT-024` | PARTIAL | Existing branch-protection evidence accepts an optional `required_approving_review_count` field. When set to ≥2, the result `extra` records L4 alignment; otherwise the `evidence.limitations` array notes "single-reviewer policy; SLSA Source L4 not satisfied." |
 
-**Coverage** (v5.1.0): 1 YES, 2 PARTIAL, 1 GAP. This is the first iteration of Source Track mapping; ranking the remaining items in the post-v5.x backlog.
+**Coverage** (v5.1.0): 1 YES, 2 PARTIAL, 1 GAP. The rows above are the original cross-control
+mapping. The v6.x line adds a **dedicated `SLSA-SRC-*` family** and two bundled profiles
+(`slsa-source-l1-1`, `slsa-source-l2-1`) that express the Source Track directly:
+
+| SLSA-SRC control | Level | Coverage | Notes |
+|---|---|---|---|
+| `SLSA-SRC-001` Version-controlled source | L1 | YES | Deterministic baseline. |
+| `SLSA-SRC-002` Commit-signature signal | L2 | PARTIAL | `signal` — detects a commit-signing posture from clone signals. |
+| `SLSA-SRC-003` Branch protection present | L2 | PARTIAL | `signal`. |
+| `SLSA-SRC-004` Two-party review required | L2 | PARTIAL | `signal`. |
+| `SLSA-SRC-005` Source-change audit log | L2 | PARTIAL | `signal`. |
+| `SLSA-SRC-006` Signed commits required | L2 | YES (with evidence) | `evidence-backed` — consumes platform evidence that signed-commit enforcement is on. |
+| `SLSA-SRC-007` Two-party review threshold enforced | L2 | YES (with evidence) | `evidence-backed` — branch-protection evidence with `required_approving_review_count >= 2`. |
+| `SLSA-SRC-008` Source-change audit log streamed externally | L2 | YES (with evidence) | `evidence-backed` — audit-stream evidence. |
+
+**SLSA Source coverage (v6.x)**: the three `evidence-backed` L2 controls (006–008) reach YES
+when `collect-evidence` populates branch-protection + audit-stream evidence; without evidence
+they return `manual-review-required` (honest gap, not a crash). L3 (verifiable source-provenance
+attestations) remains a **GAP** — mainstream SCMs do not yet emit these at scale. The
+`slsa-source-l2-1` profile is `--fail-on fail`-capable only when its evidence files are filled.
 
 ## NIST SSDF SP 800-218 (Rev 1.1)
 
@@ -175,10 +236,11 @@ The four practice groups in the SSDF (PO, PS, PW, RV) align as follows:
 | PW.8 Test executable code | `CI-WF-005` | PARTIAL | We confirm CI presence; not test outcomes. |
 | PW.9 Configure the software to have secure settings by default | OUT | OUT | Application-runtime concern. |
 | RV.1 Identify and confirm vulnerabilities on an ongoing basis | `OSS-SCORECARD-001`, `SEC-CODEQL-010`, `SEC-SECRETS-050`, `GH-PLAT-026`, `CONT-IMAGE-003`, `AUDIT-STREAM-060` | YES | SAST + secret scanning + container scanning + audit-log streaming for incident detection (v5.1.0). |
-| RV.2 Assess, prioritize, and remediate vulnerabilities | `DEP-UPDATE-001` | PARTIAL | Auto-update tooling; prioritization is process. |
+| RV.2 Assess, prioritize, and remediate vulnerabilities | `DEP-UPDATE-001`, `SCA-KEV-001`, `SCA-EPSS-001` | YES (with SARIF) | Auto-update tooling plus exploit-aware prioritization: `SCA-KEV-001` (evidence-backed) gates on dependency CVEs present in the **CISA KEV** catalog, and `SCA-EPSS-001` (evidence-backed) gates on high-**EPSS** high-severity CVEs, both read from SARIF `kev` / `epss_score` properties (v6.x). Without enriched SARIF these return `manual-review-required`. |
 | RV.3 Analyze vulnerabilities to identify root causes | OUT | OUT | Process, not artifact. |
 
-**Coverage**: 8 YES, 7 PARTIAL, 1 GAP, 2 OUT. SSDF is broader than this kit's scope by design;
+**Coverage**: 9 YES, 6 PARTIAL, 1 GAP, 2 OUT (RV.2 moved PARTIAL → YES in v6.x via the
+KEV/EPSS prioritization controls). SSDF is broader than this kit's scope by design;
 items marked OUT are application/runtime concerns that belong elsewhere in an AppSec program.
 
 ## Microsoft S2C2F (OSS consumption)
@@ -208,8 +270,11 @@ CIS SSCS organizes recommendations into five sections. High-level alignment:
 | Artifacts | YES | `BUILD-SBOM-QUAL-003`, `AZ-ARTSBOM-058`, `AZ-ARTPRV-059`, `AWS-SBOMART-058`, `AWS-PROVART-059` |
 | Deployment | PARTIAL | `GH-DEPLOY-022`, `GH-PLAT-026`, `AZ-WIFEV-057`, `AWS-PIPEIAM-056` |
 
-The Deployment section's PARTIAL grade reflects that runtime infrastructure-as-code review is
-out of scope for this kit (Terraform / Bicep IaC scanning belongs in dedicated tools).
+The Deployment section's PARTIAL grade reflects that **runtime** posture (live accounts,
+admission control) stays out of clone-side scope. Note: since v6.x the kit performs **clone-side
+IaC misconfiguration review** (`IAC-*`) and **Kubernetes manifest review** (`K8S-*`) — see the
+*Infrastructure-as-Code posture* and *CIS Kubernetes Benchmark* sections above. It still does not
+replace a full cloud-posture scanner run against deployed resources.
 
 ## AWS Well-Architected — Security Pillar (DevOps lens)
 
@@ -237,6 +302,70 @@ out of scope for this kit (Terraform / Bicep IaC scanning belongs in dedicated t
 | Avoid persistCredentials true | `AZ-PIPE-029` | YES | Deterministic. |
 | Audit logs / SIEM | `AUDIT-STREAM-060` | YES (since v5.1.0) | Audit-log streaming evidence (Azure DevOps `auditstreams` API) closes this. Older releases had this as a GAP. |
 
+## CIS Kubernetes Benchmark / Pod Security Standards / NSA-CISA Hardening (v6.x)
+
+The `K8S-*` family (v6.x, all `evidence-backed`) reviews Kubernetes / Helm / Kustomize manifests
+that the kit parses from the clone. It aligns with the Kubernetes **Pod Security Standards**
+(Restricted profile), the **CIS Kubernetes Benchmark** workload/RBAC sections, and the
+**NSA/CISA Kubernetes Hardening Guide**. Because the controls parse manifests (not a live
+cluster), PASS proves the declared manifest is hardened, not the running cluster's admission
+posture.
+
+| Concern | Kit control(s) | Aligns with | Notes |
+|---|---|---|---|
+| Privileged / host namespaces / hostPath | `K8S-PSS-001`, `K8S-PSS-002`, `K8S-PSS-003`, `K8S-PSS-004` | PSS Restricted; CIS 5.2; NSA Pod Security | privileged, hostPID, hostNetwork, hostPath. |
+| Capabilities / privilege escalation | `K8S-PSS-005`, `K8S-PSS-007` | PSS Restricted; CIS 5.2 | added Linux capabilities; `allowPrivilegeEscalation` not false. |
+| Run-as-non-root / read-only rootfs | `K8S-PSS-006`, `K8S-PSS-008` | PSS Restricted; NSA Pod Security | `runAsNonRoot`/`runAsUser` not pinned; `readOnlyRootFilesystem` not true. |
+| ServiceAccount token automount | `K8S-PSS-009`, `K8S-RBAC-003` | CIS 5.1.5/5.1.6; NSA | `automountServiceAccountToken` not pinned; default SA in default namespace. |
+| Image tag discipline | `K8S-PSS-010` | CIS 5.x; supply chain | `latest`/unpinned image tag. |
+| RBAC least privilege | `K8S-RBAC-001`, `K8S-RBAC-002`, `K8S-RBAC-004`, `K8S-RBAC-005` | CIS 5.1 RBAC; NSA RBAC | wildcard verb/resource, cluster-admin binding, broad secrets read. |
+| Network segmentation | `K8S-NETPOL-001` | CIS 5.3; NSA Network | namespace with workloads but no NetworkPolicy. |
+
+**Coverage**: 16 evidence-backed controls reaching YES when manifests are present in the clone;
+bundled by `kubernetes-baseline-1`. Runtime admission control (Pod Security Admission, OPA
+Gatekeeper, Kyverno) is **OUT** of scope — see [positioning.md](positioning.md). The kit reviews
+the manifest; it does not enforce at the cluster control plane.
+
+## Infrastructure-as-Code posture (CIS cloud benchmarks / provider Well-Architected) (v6.x)
+
+The `IAC-*` family (v6.x, all `evidence-backed`) reviews Terraform/OpenTofu (`IAC-TF-*`),
+CloudFormation (`IAC-CFN-*`), Pulumi (`IAC-PUL-*`), and Bicep (`IAC-BICEP-*`) declarations parsed
+from the clone. It aligns with the misconfiguration classes in the **CIS AWS/Azure Foundations
+Benchmarks** and provider **Well-Architected — Security** guidance. PASS proves the declaration is
+hardened, not the deployed resource.
+
+| Misconfiguration class | Kit control(s) | Aligns with | Notes |
+|---|---|---|---|
+| Public data exposure | `IAC-TF-001`, `IAC-CFN-001`, `IAC-PUL-001`, `IAC-BICEP-001` | CIS S3/Storage public-access; WA SEC | object/blob storage open to public. |
+| Management port to 0.0.0.0/0 | `IAC-TF-002`, `IAC-CFN-002`, `IAC-PUL-002`, `IAC-BICEP-002` | CIS network; WA SEC | SG/NSG exposes admin port to the world. |
+| Over-privileged IAM | `IAC-TF-003`, `IAC-TF-012`, `IAC-CFN-003`, `IAC-PUL-003`, `IAC-BICEP-003` | CIS IAM least privilege; WA SEC | AdministratorAccess / `Action=*`+`Resource=*` / wildcard principal / Owner-Contributor. |
+| Encryption at rest | `IAC-TF-004`, `IAC-CFN-004`, `IAC-PUL-004`, `IAC-BICEP-004` | CIS encryption; WA SEC | storage/RDS/EBS/SQL/disk without encryption. |
+| Logging / diagnostics | `IAC-TF-005`, `IAC-CFN-005`, `IAC-BICEP-005` | CIS logging; WA SEC | audit/access logging or `diagnosticSettings` disabled. |
+| Network defaults / public IP | `IAC-TF-006`, `IAC-TF-007`, `IAC-CFN-006`, `IAC-PUL-005`, `IAC-PUL-006`, `IAC-BICEP-006` | CIS network; WA SEC | default VPC/SG used; public IP without documented intent. |
+| State / provider / lifecycle hygiene | `IAC-TF-008`, `IAC-TF-009`, `IAC-TF-010`, `IAC-TF-011` | provider IaC hygiene | missing owner/cost tags; unpinned providers; local backend; production data store missing `prevent_destroy`. |
+
+**Coverage**: 30 evidence-backed controls (Terraform 12, CloudFormation 6, Pulumi 6, Bicep 6),
+bundled by `iac-terraform-baseline-1`, `iac-cfn-baseline-1`, `iac-pulumi-baseline-1`,
+`iac-bicep-baseline-1`. This **supersedes** the older "IaC is out of scope" note under CIS
+Software Supply Chain Security Benchmark below — the kit now performs clone-side IaC
+misconfiguration review (it does not replace a full cloud-posture scanner against live accounts).
+
+## WORM publish-integrity defense (supply-chain attack hardening) (v6.x)
+
+The `WORM-*` family (v6.x, all `signal`) hardens the publish path against self-replicating
+package-worm attacks (e.g., the 2025 "Shai-Hulud" npm worm). It aligns with **OWASP
+CICD-SEC-3** (Dependency Chain Abuse), **CICD-SEC-6** (Credential Hygiene), and SLSA build-integrity
+intent.
+
+| Concern | Kit control | Coverage | Notes |
+|---|---|---|---|
+| Malicious `postinstall` credential harvest | `WORM-POSTINSTALL-001` | PARTIAL | `signal` — `package.json` postinstall free of credential-harvest primitives. |
+| Manifest rewritten after lockfile (worm-rewrite) | `WORM-LOCKFILE-DRIFT-001` | PARTIAL | `signal` — manifest not modified more recently than its lockfile. |
+| Unscoped publish workflow | `WORM-PUBLISH-SCOPE-001` | PARTIAL | `signal` — publish restricted to main/release branches with explicit scope. |
+
+**Coverage**: 3 signal-grade controls; see [shai-hulud-defense.md](shai-hulud-defense.md). These are
+directional heuristics, not a guarantee against a determined supply-chain attacker.
+
 ## EU Cyber Resilience Act (CRA)
 
 Regulatory pressure with concrete artifact requirements. Key dates:
@@ -252,6 +381,11 @@ Regulatory pressure with concrete artifact requirements. Key dates:
 | Documented vulnerability handling | `GOV-SEC-001`, `GOV-DISC-013`, `SEC-DEPREV-011`, `DEP-UPDATE-001` | YES | SECURITY.md + responsible disclosure + dependency review/auto-update. |
 | Centralized incident reporting / audit trail | `AUDIT-STREAM-060` | YES (since v5.1.0) | Audit-log streaming evidence is the trail an incident report needs. |
 | Build provenance for shipped artifacts | `GH-PROV-023`, `AZ-ARTPRV-059`, `AWS-PROVART-059`, `PROV-VERIFY-061` | YES (since v5.1.0) | Provenance attestation independently verified. |
+| **Art.13** Security by design | `CRA-ART13-SBD-001` | PARTIAL | `signal` (v6.x) — security-by-design intent declared in repo docs. |
+| **Art.13** Secure-by-default configuration | `CRA-ART13-DEFAULTS-002` | PARTIAL | `signal` (v6.x) — secure-by-default configuration documented. |
+| **Art.14** Coordinated vulnerability disclosure | `CRA-ART14-COORD-002` | PARTIAL | `signal` (v6.x) — CVD policy documented. |
+| **Art.14** Advisory feed (machine-readable) | `CRA-ART14-CSAF-001` | PARTIAL | `signal` (v6.x) — CSAF advisory feed present (reporting readiness). |
+| Product classification (Implementing Reg (EU) 2025/2392) | `CRA-PRODUCT-CLASS-001` | PARTIAL | `signal` (v6.x) — CRA product class declared (default vs important vs critical). Classification drives obligation tier; the kit records the declaration, it does not adjudicate it. |
 
 > **Honesty contract**: this kit does **not** certify CRA compliance. The legal side (notified bodies, market-placement timing, retention storage destinations) is out of scope. Three bundled advisory profiles bundle technical-readiness controls into discovery surfaces:
 >
@@ -466,9 +600,9 @@ against the v5.9.x build. These controls, profiles, and CLI subcommands **shippe
 the v6.0.0–v6.4.0 line and are **current capability** — the tables below describe what the
 kit does today, not planned work. Tense and "planned/estimate" wording have been corrected to
 present tense (2026-05-25). The deterministic mapping tables for the **non-AI** v6.x families
-(Kubernetes, IaC, GitLab CI, WORM, CRA Art.13/14, SLSA Source L2) are still pending — see the
-snapshot notice near the top. See [`positioning.md`](positioning.md) for the broader shipped
-scope and `CHANGELOG.md` for the authoritative state.
+(Kubernetes, IaC, GitLab CI, WORM, CRA Art.13/14, SLSA Source L2) were folded into their
+framework sections in the same 2026-05-25 refresh. See [`positioning.md`](positioning.md) for the
+broader shipped scope and `CHANGELOG.md` for the authoritative state.
 
 ## NIST SP 800-218A — Generative AI SSDF Community Profile (shipped in v6.0.0)
 
@@ -557,7 +691,9 @@ referenced for the framework summaries is **January 2026**; framework owners sho
 consulted upstream for the current canonical text. Prior framework releases (Scorecard v3,
 SLSA v0.1, SSDF SP 800-218 1.0, etc.) are not listed; only current major-line text is mapped.
 
-The AI / regulatory sections above describe **shipped** capability (v6.0.0–v6.4.0). The
-remaining refresh debt is the deterministic per-requirement mapping tables for the non-AI v6.x
-families (Kubernetes, IaC, GitLab CI, WORM, EU CRA Art.13/14, SLSA Source L2) plus a prune of
-the v5.9.x general tables for v6 control renames — tracked in the snapshot notice at the top.
+The AI / regulatory sections above describe **shipped** capability (v6.0.0–v6.4.0). As of the
+2026-05-25 refresh, the non-AI v6.x families (Kubernetes, IaC, GitLab CI, WORM, EU CRA
+Art.13/14, SLSA Source L2, EPSS/KEV/fuzz/merge-queue/egress) are mapped into their framework
+sections above. Residual editorial debt: the v5.9.x general tables still use their original
+control IDs and have not been re-audited for v6 control renames; this is cosmetic, not a
+coverage gap.
