@@ -614,7 +614,7 @@ broader shipped scope and `CHANGELOG.md` for the authoritative state.
 | **PO.5.1** — Maintain prompt / system-instruction registry | `LLM-218A-PO-002` | signal | Directory `prompts/`, `system_prompts/`, or equivalent registry pattern. |
 | **PS.1.1** — Release integrity for AI artifacts (model SHA, eval suite) | `LLM-218A-PS-001` | evidence-backed | `.oss-policy-kit/evidence/llm-release-integrity.json` (schema `llm-release-integrity/v1`). |
 | **PS.2** — Model versioning artifacts | `LLM-218A-PS-002` | signal | Release tags matching `model/*` semver pattern. |
-| **PW.4.4** — Pin LLM SDK dependencies | `LLM-218A-PW-001` | signal | Delegates to `CI-PIN-001` plus presence signal for `transformers`, `openai`, `anthropic`, `langchain`. |
+| **PW.4.4** — Pin LLM SDK dependencies | `LLM-218A-PW-001` | signal | Delegates to `CI-PIN-008` plus presence signal for `transformers`, `openai`, `anthropic`, `langchain`. |
 | **PW.7.1** — Test for prompt injection / adversarial inputs | `LLM-218A-PW-002` | signal | Test files matching `test_*prompt*injection*` or `test_*adversarial*`. |
 | **RV.2.1** — Track LLM dependency advisories | `LLM-218A-RV-001` | signal | Dependabot/Renovate config explicitly lists LLM SDKs. |
 
@@ -659,7 +659,7 @@ EU AI Act Article 11 + Annex IV become enforceable on **2026-08-02** and require
 | **Annex IV §3** — Output filtering / content moderation | `LLM-AI-ACT-002` | signal | Pattern match for `output_filter` or `content_moderation` references in test files. |
 | **Annex IV §5** — Risk management documentation | `LLM-AI-ACT-003` | signal | Presence of `risk-management.md`, `RISKS.md`, or a dedicated section in `SECURITY.md`. |
 
-Bundled controls (already in v5.9.x): `GOV-DISC-065`, `REL-CHANGE-001`, `SAST-OSV-068`, plus v6.0.0 newcomers `AIBOM-PRESENT-001` and `LLM-218A-PO-001` / `LLM-218A-PS-001` from the NIST 218A profile above.
+Bundled controls (already in v5.9.x): `GOV-DISC-065`, `REL-CHANGE-012`, `SAST-OSV-068`, plus v6.0.0 newcomers `AIBOM-PRESENT-001` and `LLM-218A-PO-001` / `LLM-218A-PS-001` from the NIST 218A profile above.
 
 **Hard caveat (see [`eu-ai-act-readiness.md`](eu-ai-act-readiness.md))**: this profile is **not** a conformity assessment under the AI Act. Conformity assessment requires a notified body and is outside the kit's scope. The profile produces a clone-side posture indicator that adopters can use as evidence input; the formal CE-marking process is external. ADR-010 documents the design rationale.
 
@@ -694,6 +694,6 @@ SLSA v0.1, SSDF SP 800-218 1.0, etc.) are not listed; only current major-line te
 The AI / regulatory sections above describe **shipped** capability (v6.0.0–v6.4.0). As of the
 2026-05-25 refresh, the non-AI v6.x families (Kubernetes, IaC, GitLab CI, WORM, EU CRA
 Art.13/14, SLSA Source L2, EPSS/KEV/fuzz/merge-queue/egress) are mapped into their framework
-sections above. Residual editorial debt: the v5.9.x general tables still use their original
-control IDs and have not been re-audited for v6 control renames; this is cosmetic, not a
-coverage gap.
+sections above. The 2026-05-25 refresh also re-audited every backtick-cited control ID against
+`catalog.yaml` and fixed the two stale references left by v6 renames (`CI-PIN-001` → `CI-PIN-008`,
+`REL-CHANGE-001` → `REL-CHANGE-012`). All cited control IDs now resolve.
