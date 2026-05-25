@@ -88,7 +88,7 @@ Full profile guide: [docs/profiles/overview.md](docs/profiles/overview.md).
 ## GitHub Action
 
 ```yaml
-- uses: lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit@v6.3.0
+- uses: lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit@v6.4.0
   with:
     profile: github-level-1
     fail-on: fail
