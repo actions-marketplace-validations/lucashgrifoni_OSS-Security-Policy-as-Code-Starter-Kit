@@ -9,6 +9,11 @@ Released surface (v5.9.0, **v0.2**):
 - Validate output against CycloneDX VEX 1.6 required-field set (`--validate`).
 - Embed advisory URLs from OSV-Scanner rule `helpUri` (`--include-references`).
 
+v6.6.0 adds `--format {cyclonedx,openvex}` (default `cyclonedx`, so existing
+invocations are unchanged): the same data is emittable as **OpenVEX v0.2.0**.
+See [OpenVEX export](#openvex-export-v660) below and
+[ADR-031](decisions/adr-031-openvex-export.md).
+
 ---
 
 ## Why VEX, and why now
@@ -122,6 +127,65 @@ The manufacturer's analysis fields are filled post-hoc. Per the CycloneDX VEX 1.
 | `analysis.response[].type` | `can_not_fix`, `will_not_fix`, `update`, `rollback`, `workaround_available` | What the manufacturer commits to do. |
 
 Edit the JSON directly, then validate against [CycloneDX 1.6 JSON Schema](https://cyclonedx.org/docs/1.6/json/) using `cyclonedx validate --input-file vex.cyclonedx.json`.
+
+---
+
+## OpenVEX export (v6.6.0)
+
+`--format openvex` emits an [OpenVEX](https://github.com/openvex/spec) v0.2.0
+document from the same OSV-Scanner SARIF and waiver inputs. The default remains
+`cyclonedx`, so nothing changes unless you ask for OpenVEX.
+
+```bash
+# OpenVEX with an explicit product identity (recommended)
+python -m oss_policy_kit emit-vex \
+  --format openvex \
+  --product pkg:pypi/your-package@1.2.3 \
+  --waivers waivers/waivers.yaml \
+  --validate \
+  --output vex.openvex.json
+```
+
+### Product identity
+
+OpenVEX requires a product identifier per statement (CycloneDX VEX does not).
+Supply it with `--product` (a [purl](https://github.com/package-url/purl-spec)
+is the conventional value). When omitted, the kit emits the placeholder
+`pkg:generic/UNKNOWN` and prints a warning on stderr — the document is
+structurally valid but **must** have a real product identity set before you
+distribute it.
+
+### Status and justification mapping
+
+The kit's internal model maps to the OpenVEX vocabulary as follows. The status
+map is exact; the justification map is **lossy** (three CycloneDX values collapse
+to one OpenVEX value) because OpenVEX defines fewer justifications.
+
+| Kit `analysis.state` | OpenVEX `status` |
+|---|---|
+| `in_triage` (no waiver) | `under_investigation` |
+| `not_affected` (waiver matched) | `not_affected` |
+
+| CycloneDX `vex_justification` | OpenVEX `justification` |
+|---|---|
+| `code_not_present` | `vulnerable_code_not_present` |
+| `code_not_reachable` | `vulnerable_code_not_in_execute_path` |
+| `requires_configuration` | `vulnerable_code_cannot_be_controlled_by_adversary` |
+| `requires_dependency` | `vulnerable_code_cannot_be_controlled_by_adversary` |
+| `requires_environment` | `vulnerable_code_cannot_be_controlled_by_adversary` |
+| `protected_by_compensating_control` | `inline_mitigations_already_exist` |
+| `inline_mitigations_already_exist` | `inline_mitigations_already_exist` |
+
+When a `not_affected` finding has no mapped justification (the waiver carried no
+`vex_justification`), the free-text waiver justification is emitted as the
+OpenVEX `impact_statement` — satisfying the OpenVEX rule that `not_affected`
+requires either a `justification` or an `impact_statement`.
+
+Validate the output with [`vexctl`](https://github.com/openvex/vexctl):
+`vexctl create --file vex.openvex.json` round-trips, or use any OpenVEX-aware
+consumer. The kit's `--validate` is a lightweight structural check (required
+fields + enums), not full JSON Schema validation — the same posture as the
+CycloneDX path.
 
 ---
 

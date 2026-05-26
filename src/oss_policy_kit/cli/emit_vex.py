@@ -13,6 +13,10 @@ v0.2 surface (v5.9.0):
 - ``--include-references`` embeds OSV / GHSA advisory URLs when the SARIF
   exposes them via rule ``helpUri`` / ``help.text``.
 
+v6.6.0 adds ``--format {cyclonedx,openvex}`` (default ``cyclonedx``): the same
+waiver/exploitability data can be emitted as OpenVEX v0.2.0 alongside CycloneDX
+VEX 1.6. ``--product`` supplies the OpenVEX product identity (see ADR-031).
+
 This subcommand intentionally does **not**:
 
 - Generate an SBOM (use Syft / Trivy / language-native tooling).
@@ -55,6 +59,54 @@ _CDX_JUSTIFICATIONS: frozenset[str] = frozenset(
         "inline_mitigations_already_exist",
     }
 )
+
+# --- OpenVEX (v0.2.0) constants and CycloneDX→OpenVEX mappings --------------
+# See ADR-031 and docs/vex-emission.md for the equivalence rationale.
+
+_OPENVEX_CONTEXT = "https://openvex.dev/ns/v0.2.0"
+_OPENVEX_AUTHOR = "oss-policy-kit emit-vex"
+# Placeholder product @id emitted when --product is omitted (a loud stderr
+# warning accompanies it; the document is structurally valid but the operator
+# must set a real product identifier before distribution).
+_OPENVEX_PRODUCT_PLACEHOLDER = "pkg:generic/UNKNOWN"
+
+_OPENVEX_STATUSES: frozenset[str] = frozenset({"not_affected", "affected", "fixed", "under_investigation"})
+
+_OPENVEX_JUSTIFICATIONS: frozenset[str] = frozenset(
+    {
+        "component_not_present",
+        "vulnerable_code_not_present",
+        "vulnerable_code_not_in_execute_path",
+        "vulnerable_code_cannot_be_controlled_by_adversary",
+        "inline_mitigations_already_exist",
+    }
+)
+
+# CycloneDX analysis.state → OpenVEX status. The kit emits only in_triage and
+# not_affected today; the remaining rows are mapped for forward-compatibility
+# but are not produced speculatively.
+_CDX_STATE_TO_OPENVEX_STATUS: dict[str, str] = {
+    "in_triage": "under_investigation",
+    "not_affected": "not_affected",
+    "exploitable": "affected",
+    "resolved": "fixed",
+    "resolved_with_pedigree": "fixed",
+    "false_positive": "not_affected",
+}
+
+# CycloneDX analysis.justification → OpenVEX justification. Lossy by design:
+# three CycloneDX values collapse to vulnerable_code_cannot_be_controlled_by_adversary.
+_CDX_JUST_TO_OPENVEX: dict[str, str] = {
+    "code_not_present": "vulnerable_code_not_present",
+    "code_not_reachable": "vulnerable_code_not_in_execute_path",
+    "requires_configuration": "vulnerable_code_cannot_be_controlled_by_adversary",
+    "requires_dependency": "vulnerable_code_cannot_be_controlled_by_adversary",
+    "requires_environment": "vulnerable_code_cannot_be_controlled_by_adversary",
+    "protected_by_compensating_control": "inline_mitigations_already_exist",
+    "inline_mitigations_already_exist": "inline_mitigations_already_exist",
+}
+
+_SUPPORTED_VEX_FORMATS: frozenset[str] = frozenset({"cyclonedx", "openvex"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -313,6 +365,149 @@ def _build_vex_document(
     }
 
 
+def _build_openvex_statement(
+    vid: str,
+    *,
+    waiver: _VulnWaiver | None,
+    urls: list[str],
+    product_id: str,
+    source_path: Path,
+) -> dict[str, Any]:
+    """Build one OpenVEX ``statements[]`` entry for vulnerability ``vid``.
+
+    - Without a matching waiver: ``status = under_investigation`` (the OpenVEX
+      equivalent of CycloneDX ``in_triage``) plus a ``status_notes`` pointer.
+    - With a matching waiver: ``status = not_affected``; the waiver's CycloneDX
+      justification (when present) is mapped to the OpenVEX justification enum,
+      and the free-text justification is always copied to ``impact_statement``
+      so the OpenVEX rule "not_affected requires justification or
+      impact_statement" is satisfied either way.
+    - The first advisory URL (when ``--include-references`` collected one) is
+      mapped to ``vulnerability.@id`` (OpenVEX carries a single canonical URI,
+      not a CycloneDX-style advisories array).
+    """
+
+    vuln_obj: dict[str, Any] = {"name": vid}
+    if urls:
+        vuln_obj["@id"] = urls[0]
+    stmt: dict[str, Any] = {
+        "vulnerability": vuln_obj,
+        "products": [{"@id": product_id}],
+    }
+    if waiver is None:
+        stmt["status"] = "under_investigation"
+        stmt["status_notes"] = (
+            f"Imported from {source_path.as_posix()} by oss-policy-kit emit-vex. "
+            "Manufacturer analysis pending; set status, justification, and "
+            "action/impact statements per the OpenVEX vocabulary."
+        )
+    else:
+        stmt["status"] = "not_affected"
+        mapped = _CDX_JUST_TO_OPENVEX.get(waiver.cdx_justification) if waiver.cdx_justification else None
+        if mapped is not None:
+            stmt["justification"] = mapped
+        stmt["impact_statement"] = waiver.justification_text
+    return stmt
+
+
+def _build_openvex_document(
+    vuln_ids: list[str],
+    source_path: Path,
+    *,
+    waivers: dict[str, _VulnWaiver] | None = None,
+    references: dict[str, list[str]] | None = None,
+    product: str | None = None,
+) -> dict[str, Any]:
+    """Construct an OpenVEX (v0.2.0) document from the same inputs as the CycloneDX path.
+
+    When ``product`` is omitted the placeholder ``pkg:generic/UNKNOWN`` is used
+    (the caller is responsible for warning the operator). The ``@id`` and
+    ``timestamp`` are time-derived and non-deterministic by design; golden tests
+    normalize them.
+    """
+
+    waivers = waivers or {}
+    references = references or {}
+    now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    product_id = product if (product and product.strip()) else _OPENVEX_PRODUCT_PLACEHOLDER
+    statements = [
+        _build_openvex_statement(
+            vid,
+            waiver=waivers.get(vid),
+            urls=references.get(vid, []),
+            product_id=product_id,
+            source_path=source_path,
+        )
+        for vid in vuln_ids
+    ]
+    return {
+        "@context": _OPENVEX_CONTEXT,
+        "@id": f"https://openvex.dev/docs/oss-policy-kit/{now}",
+        "author": _OPENVEX_AUTHOR,
+        "timestamp": now,
+        "version": 1,
+        "tooling": f"oss-policy-kit emit-vex {_emit_vex_tool_version()}",
+        "statements": statements,
+    }
+
+
+def _validate_openvex_statement(i: int, s: Any) -> list[str]:
+    """Structural-validation messages for one OpenVEX ``statements[i]`` entry."""
+
+    if not isinstance(s, dict):
+        return [f"statements[{i}] must be an object"]
+    errs: list[str] = []
+    vuln = s.get("vulnerability")
+    if not isinstance(vuln, dict) or not isinstance(vuln.get("name"), str) or not vuln["name"].strip():
+        errs.append(f"statements[{i}].vulnerability.name missing or empty")
+    products = s.get("products")
+    if not isinstance(products, list) or not products:
+        errs.append(f"statements[{i}].products[] missing or empty")
+    else:
+        for j, p in enumerate(products):
+            if not isinstance(p, dict) or not isinstance(p.get("@id"), str) or not p["@id"].strip():
+                errs.append(f"statements[{i}].products[{j}].@id missing or empty")
+    status = s.get("status")
+    if status not in _OPENVEX_STATUSES:
+        errs.append(f"statements[{i}].status={status!r} not in {sorted(_OPENVEX_STATUSES)}")
+    if status == "not_affected":
+        just = s.get("justification")
+        impact = s.get("impact_statement")
+        if just is None and not (isinstance(impact, str) and impact.strip()):
+            errs.append(f"statements[{i}] status=not_affected requires justification or impact_statement")
+        if just is not None and just not in _OPENVEX_JUSTIFICATIONS:
+            errs.append(f"statements[{i}].justification={just!r} not in {sorted(_OPENVEX_JUSTIFICATIONS)}")
+    if status == "affected" and not (isinstance(s.get("action_statement"), str) and s["action_statement"].strip()):
+        errs.append(f"statements[{i}] status=affected requires action_statement")
+    return errs
+
+
+def _validate_openvex_structure(doc: dict[str, Any]) -> list[str]:
+    """Return a list of OpenVEX structural-validation error messages (empty on success).
+
+    Lightweight required-field / enum check against the OpenVEX v0.2.0 shape —
+    parallel to ``_validate_vex_structure`` for CycloneDX. Does not bundle the
+    full OpenVEX JSON Schema.
+    """
+
+    errs: list[str] = []
+    if doc.get("@context") != _OPENVEX_CONTEXT:
+        errs.append(f"@context must be {_OPENVEX_CONTEXT!r}; got {doc.get('@context')!r}")
+    for field in ("@id", "author", "timestamp"):
+        value = doc.get(field)
+        if not isinstance(value, str) or not value.strip():
+            errs.append(f"{field} missing or empty")
+    if doc.get("version") != 1:
+        errs.append(f"version must be 1; got {doc.get('version')!r}")
+    statements = doc.get("statements", [])
+    if not isinstance(statements, list):
+        errs.append("statements[] must be an array")
+        return errs
+    for i, s in enumerate(statements):
+        errs.extend(_validate_openvex_statement(i, s))
+    return errs
+
+
 # CycloneDX VEX 1.6 structural validation errors that --validate surfaces.
 _CDX_ALLOWED_STATES: frozenset[str] = frozenset(
     {"resolved", "resolved_with_pedigree", "exploitable", "in_triage", "false_positive", "not_affected"}
@@ -378,7 +573,14 @@ def _emit_vex_tool_version() -> str:
         return "unknown"
 
 
-def _write_vex_output(payload: str, output: Path, vuln_ids: list[str], vuln_waivers: dict[str, _VulnWaiver]) -> None:
+def _write_vex_output(
+    payload: str,
+    output: Path,
+    vuln_ids: list[str],
+    vuln_waivers: dict[str, _VulnWaiver],
+    *,
+    doc_label: str = "CycloneDX VEX 1.6",
+) -> None:
     """Write the VEX document to ``output`` and report applied / unmatched waivers on stderr."""
 
     try:
@@ -388,7 +590,7 @@ def _write_vex_output(payload: str, output: Path, vuln_ids: list[str], vuln_waiv
         raise InvalidInputError(f"Cannot write to --output '{output}': {exc}") from exc
     applied = sum(1 for vid in vuln_ids if vid in vuln_waivers)
     stderr_console().print(
-        f"[green]Wrote CycloneDX VEX 1.6 document[/green]: "
+        f"[green]Wrote {doc_label} document[/green]: "
         f"{output} ({len(vuln_ids)} vulnerability ID(s), "
         f"{applied} marked not_affected via waivers)."
     )
@@ -415,9 +617,15 @@ def _run_emit_vex(
     *,
     validate_output: bool,
     include_references: bool,
+    output_format: str = "cyclonedx",
+    product: str | None = None,
 ) -> None:
     """Core emit-vex flow shared by the Typer command (raises OssPolicyKitError on bad input)."""
 
+    if output_format not in _SUPPORTED_VEX_FORMATS:
+        raise InvalidInputError(
+            f"Unknown --format {output_format!r}; expected one of {sorted(_SUPPORTED_VEX_FORMATS)}."
+        )
     if not osv_sarif.is_file():
         raise InvalidInputError(
             f"OSV-Scanner SARIF not found at {osv_sarif}. Run "
@@ -430,21 +638,36 @@ def _run_emit_vex(
     vuln_waivers, waiver_warnings = _load_vuln_waivers(waivers)
     for w in waiver_warnings:
         stderr_console().print(f"[yellow]Waiver warning:[/yellow] {w}")
-    doc = _build_vex_document(
-        vuln_ids,
-        osv_sarif,
-        waivers=vuln_waivers or None,
-        references=refs if include_references else None,
-    )
-    if validate_output:
-        errors = _validate_vex_structure(doc)
-        if errors:
-            raise InvalidInputError("CycloneDX VEX 1.6 structural validation failed:\n  - " + "\n  - ".join(errors))
+    refs_arg = refs if include_references else None
+
+    if output_format == "openvex":
+        if not (product and product.strip()):
+            stderr_console().print(
+                f"[yellow]Warning:[/yellow] no --product supplied; emitting placeholder product "
+                f"@id '{_OPENVEX_PRODUCT_PLACEHOLDER}'. The OpenVEX document is structurally valid "
+                "but you must set a real product identifier (e.g. a purl) before distributing it."
+            )
+        doc = _build_openvex_document(
+            vuln_ids, osv_sarif, waivers=vuln_waivers or None, references=refs_arg, product=product
+        )
+        if validate_output:
+            errors = _validate_openvex_structure(doc)
+            if errors:
+                raise InvalidInputError("OpenVEX structural validation failed:\n  - " + "\n  - ".join(errors))
+        doc_label = "OpenVEX"
+    else:
+        doc = _build_vex_document(vuln_ids, osv_sarif, waivers=vuln_waivers or None, references=refs_arg)
+        if validate_output:
+            errors = _validate_vex_structure(doc)
+            if errors:
+                raise InvalidInputError("CycloneDX VEX 1.6 structural validation failed:\n  - " + "\n  - ".join(errors))
+        doc_label = "CycloneDX VEX 1.6"
+
     payload = json.dumps(doc, indent=2, sort_keys=False) + "\n"
     if output is None:
         write_stdout_text(payload)
     else:
-        _write_vex_output(payload, output, vuln_ids, vuln_waivers)
+        _write_vex_output(payload, output, vuln_ids, vuln_waivers, doc_label=doc_label)
 
 
 @app.command("emit-vex", rich_help_panel=CMD_PANEL_EXPORT)
@@ -462,7 +685,25 @@ def emit_vex_cmd(
         None,
         "--output",
         "-o",
-        help="Where to write the CycloneDX VEX document. Omit for stdout.",
+        help="Where to write the VEX document. Omit for stdout.",
+    ),
+    output_format: str = typer.Option(
+        "cyclonedx",
+        "--format",
+        help=(
+            "VEX output format: 'cyclonedx' (CycloneDX VEX 1.6, default) or "
+            "'openvex' (OpenVEX v0.2.0). The default is unchanged for backward "
+            "compatibility."
+        ),
+    ),
+    product: str | None = typer.Option(
+        None,
+        "--product",
+        help=(
+            "Product identifier (e.g. a purl like pkg:pypi/acme@1.2.3) used as the "
+            "OpenVEX statements[].products[].@id. OpenVEX only. When omitted, a "
+            "placeholder @id is emitted with a warning; ignored for --format cyclonedx."
+        ),
     ),
     waivers: Path = typer.Option(
         _DEFAULT_WAIVERS,
@@ -488,13 +729,14 @@ def emit_vex_cmd(
         help=("Embed advisory URLs from OSV-Scanner SARIF rule helpUri into vulnerabilities[].advisories[]."),
     ),
 ) -> None:
-    """Emit a CycloneDX VEX 1.6 document from OSV-Scanner SARIF.
+    """Emit a VEX document from OSV-Scanner SARIF (CycloneDX VEX 1.6 or OpenVEX).
 
-    Findings without a matching waiver are emitted with ``analysis.state:
-    in_triage``. Findings matched by a waiver carrying ``vulnerability_ids:
-    [...]`` get ``state: not_affected`` plus the waiver's justification text
-    (and the CycloneDX ``analysis.justification`` enum value when the waiver
-    supplies ``vex_justification``).
+    Findings without a matching waiver are emitted as ``in_triage``
+    (CycloneDX) / ``under_investigation`` (OpenVEX). Findings matched by a
+    waiver carrying ``vulnerability_ids: [...]`` get ``not_affected`` plus the
+    waiver's justification text, with the ``vex_justification`` enum mapped to
+    the chosen format's vocabulary. ``--format`` defaults to ``cyclonedx``;
+    ``--format openvex`` accepts ``--product`` for the OpenVEX product identity.
     """
 
     try:
@@ -504,6 +746,8 @@ def emit_vex_cmd(
             waivers,
             validate_output=validate_output,
             include_references=include_references,
+            output_format=output_format,
+            product=product,
         )
     except OssPolicyKitError as exc:
         stderr_console().print(f"[red]Error:[/red] {exc.message}")
