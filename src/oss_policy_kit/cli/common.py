@@ -9,9 +9,8 @@ import textwrap
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
-import click
 import typer
 from rich.console import Console
 from typer.core import HAS_RICH, TyperGroup
@@ -37,7 +36,10 @@ from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
 class OssPolicyKitTyperGroup(TyperGroup):
     """Root Click group: prepend the ASCII banner before Typer plain or Rich help."""
 
-    def format_help(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+    # ``ctx``/``formatter`` are typed ``Any``: Typer vendored Click into ``typer._click``
+    # (0.26+), so the base ``format_help`` signature uses private, version-dependent types.
+    # This override only forwards them unchanged to ``super()``/``rich_format_help``.
+    def format_help(self, ctx: Any, formatter: Any) -> None:
         use_rich = bool(HAS_RICH and self.rich_markup_mode is not None)
         if not use_rich:
             terminal_ui.write_cli_banner_to_formatter(formatter)
