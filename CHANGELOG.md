@@ -6,6 +6,27 @@ This changelog follows the same public-facing format used by the GitHub release 
 
 ---
 
+## [6.6.0](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v6.5.1...v6.6.0) (2026-05-27)
+
+
+### Highlights
+
+* **emit-vex:** add OpenVEX v0.2.0 export via --format openvex ([a516107](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/a5161076758723fb738d4eca805b87ae87854b44))
+
+
+### Improvements
+
+* **cli:** restore typer 0.26 compatibility for root help override ([b8d54a0](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/b8d54a06f25302b1a3874d6a681db4c98bd0b77d))
+
+
+### Notes
+
+* **adr:** record v7-v10 horizon ADRs (027-030) ([44a71e5](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/44a71e5ecd20067952bd17f2b7217a827a4a6b17))
+* allow Docker Hub CloudFront blob CDN in actionlint egress policy ([fcd4cb0](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/fcd4cb0b74a731550904c8422a26f495379de128))
+* auto-bump README and at-a-glance version via release-please extra-files ([a36b6ca](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/a36b6ca13fb66d97f8420c885aa74b2fcc9b235a))
+* bump advertised current release to v6.5.1 after publish ([2514925](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/25149254c04e4969368e0d06dbdfaf646e6ee432))
+* single version token in at-a-glance current-release cell for clean auto-bump ([0fccc2e](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/0fccc2e3ebcc744d70e4cbf1e38cc26af9bef9f9))
+
 ## [6.5.1](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v6.5.0...v6.5.1) (2026-05-25)
 
 
