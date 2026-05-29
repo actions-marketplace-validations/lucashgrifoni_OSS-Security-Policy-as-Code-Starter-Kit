@@ -6,6 +6,13 @@ This changelog follows the same public-facing format used by the GitHub release 
 
 ---
 
+## [6.7.0](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v6.6.0...v6.7.0) (2026-05-29)
+
+
+### Highlights
+
+* **ingest-insights:** consume a target's OpenSSF Security Insights file ([6698364](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/6698364476b28dcd610d07aeef1826aa5eea4c7b))
+
 ## [6.6.0](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v6.5.1...v6.6.0) (2026-05-27)
 
 
