@@ -85,3 +85,4 @@ Fields not in the table are either Insights-spec optional (skipped if no signal)
 - ADR-011 — design rationale for the subcommand
 - ADR-002 (`emit-vex` scope) — architectural precedent
 - [`vex-emission.md`](vex-emission.md) — companion page for VEX emission
+- [`insights-ingestion.md`](insights-ingestion.md) — the consumer side (`ingest-insights`, v6.7.0): read + validate + report a target's Security Insights file

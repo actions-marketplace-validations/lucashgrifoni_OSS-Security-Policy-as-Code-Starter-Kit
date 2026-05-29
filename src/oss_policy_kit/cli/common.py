@@ -241,6 +241,7 @@ def prepare_cli_args(args: list[str]) -> list[str]:
         "scan-bicep",
         "emit-vex",
         "emit-insights",
+        "ingest-insights",
         "export-evidence",
     }:
         return args
