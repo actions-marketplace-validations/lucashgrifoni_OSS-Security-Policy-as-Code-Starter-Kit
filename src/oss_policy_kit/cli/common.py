@@ -305,7 +305,7 @@ class EvaluateRequest:
     fail_on: str
     verbose: bool = False
     quiet: bool = False
-    report_json_contract: str = "1.0"
+    report_json_contract: str = "2.0"
     sarif_output: Path | None = None
     include_absolute_path: bool = False
 

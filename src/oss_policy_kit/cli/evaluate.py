@@ -135,9 +135,9 @@ def cli_root(
         rich_help_panel=OPT_PANEL_DIAGNOSTICS,
     ),
     report_json_contract: str = typer.Option(
-        "1.0",
+        "2.0",
         "--report-json-contract",
-        help=("evaluation-report.json contract: 1.0 (default), 2.0, 0.3, or 0.2. '0.1' was removed in v5."),
+        help=("evaluation-report.json contract: 2.0 (default), 1.0, 0.3, or 0.2. '0.1' was removed in v5."),
         case_sensitive=False,
         rich_help_panel=OPT_PANEL_OUTPUT,
     ),
@@ -304,9 +304,9 @@ def evaluate_cmd(
         rich_help_panel=OPT_PANEL_DIAGNOSTICS,
     ),
     report_json_contract: str = typer.Option(
-        "1.0",
+        "2.0",
         "--report-json-contract",
-        help=("evaluation-report.json contract: 1.0 (default), 2.0, 0.3, or 0.2. '0.1' was removed in v5."),
+        help=("evaluation-report.json contract: 2.0 (default), 1.0, 0.3, or 0.2. '0.1' was removed in v5."),
         case_sensitive=False,
         rich_help_panel=OPT_PANEL_OUTPUT,
     ),

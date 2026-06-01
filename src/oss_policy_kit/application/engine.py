@@ -122,14 +122,16 @@ def report_json_schema_url(contract: str) -> str:
     """Return the full ``schema_version`` URL for an evaluation JSON report contract.
 
     v5.0.0 default: ``1.0``. Selectable: ``1.0``, ``0.3``, ``0.2``. Removed: ``0.1``.
-    v6.0.0 (PR-16, V6-05): ``2.0`` selectable; planned default in a future v6.x.
+    v6.0.0 (PR-16, V6-05): ``2.0`` selectable, opt-in.
+    v7.0.0 (ADR-027, BREAKING): ``2.0`` is now the **default** (empty contract maps to
+    ``2.0``); ``1.0`` remains explicitly selectable for one minor cycle, then deprecates.
     """
 
     c = contract.strip().lower().removeprefix("v")
-    if c in {"", "1.0"}:
-        return REPORT_JSON_SCHEMA_URL_V1_0
-    if c == "2.0":
+    if c in {"", "2.0"}:
         return REPORT_JSON_SCHEMA_URL_V2_0
+    if c == "1.0":
+        return REPORT_JSON_SCHEMA_URL_V1_0
     if c == "0.3":
         return REPORT_JSON_SCHEMA_URL_V0_3
     if c == "0.2":
