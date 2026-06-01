@@ -1,9 +1,20 @@
 # ADR-027 - Flip the default report contract to reports/2.0 (v7.0.0)
 
-- **Status**: proposed (targets v7.0.0, BREAKING) — pending maintainer ratification (roadmap plan §11.1)
-- **Date**: 2026-05-25
+- **Status**: accepted (targets v7.0.0, BREAKING) — ratified by maintainer 2026-06-01
+- **Date**: 2026-05-25 (proposed); 2026-06-01 (accepted)
 - **Context window**: v7.x roadmap horizon — "Contract modernization & ecosystem interoperability"
-- **Related**: ADR-013 (reports/2.0 contract), ADR-008 (schema URL), `docs/reports-contract-v2.0.md`, `scripts/migrate-1.0-to-2.0.py`, `ROADMAP.md`
+- **Related**: ADR-013 (reports/2.0 contract), ADR-008 (schema URL), ADR-033/034/035/036 (v7.0.0 bundle companions), `docs/reports-contract-v2.0.md`, `scripts/migrate-1.0-to-2.0.py`, `ROADMAP.md`
+
+> **Ratification note (2026-06-01).** This supersedes the roadmap plan §11.1 decision
+> (2026-05-26) that deferred the flip for "one more opt-in cycle". The maintainer elected to
+> stop deferring and ship the flip as the defining change of **v7.0.0**, bundled with the
+> remaining v7.x interop additives (SPDX/CEL-Rego/OSCAL+in-toto exporters — ADR-034/035/036)
+> and the ingest-insights control-evidence wiring (ADR-033). The bundle's stacked-risk is
+> **accepted by the owner**; mitigation is internal phase ordering (flip + additive exporters
+> + wiring sequenced so golden fixtures are regenerated once per phase, not interleaved). The
+> hard gate from roadmap §8 — RX-05 (`docs/reports-contract-v2.0.md` factually correct) — is
+> **resolved**: the stale "removed in v6.1.0" claim was already corrected (the doc now states
+> no removal shipped). See `melhorias` execution plan `roadmap-v7.0.0-execution-plan-2026-06-01.md`.
 
 ## Context
 
