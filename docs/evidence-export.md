@@ -26,20 +26,21 @@ The subcommand:
 3. **Writes the output** to the path specified by `--output` (default depends on format).
 4. **Exits 0** on successful export, **1** on contract validation failure, **2** on usage errors.
 
-## Formats supported in v6.0.0
+## Formats supported
 
 | Format | Stability | Output |
 |---|---|---|
 | `chainloop` | experimental | Chainloop attestation envelope (JSON) wrapping the kit's report + SARIF. |
 | `sarif` | stable | Re-export of the SARIF the `evaluate` subcommand already produces. Provided for parity with the registry pattern. |
+| `spdx` | GA (v7.0.0) | SPDX 2.3 JSON **evidence projection** — one package (the evaluated repo) with one annotation per control. **Not** a dependency/component SBOM of the target (the kit is a clone-only evaluator, not a dependency resolver). See ADR-034. |
+| `oscal` | GA (v7.0.0) | OSCAL 1.1 `assessment-results` JSON — each control result becomes an observation. Unsigned. See ADR-036. |
+| `in-toto-bundle` | GA (v7.0.0) | **Unsigned** in-toto v1 statement with a custom policy-evaluation predicate. Signing (cosign/Sigstore) is the v8 ATTESTED track; this statement is its input. See ADR-036. |
 
-Planned for a future release (not yet shipped as of v6.4.0):
+Planned for a future release (not yet shipped):
 
 | Format | Notes |
 |---|---|
-| `guac` | [GUAC](https://guac.sh/) ingest format. Audience is graph-database supply-chain tooling. Will land if adopter demand surfaces. |
-| `oscal` | OSCAL-aligned compliance evidence. Heavier; depends on stabilizing OSCAL's component-definition shape. |
-| `in-toto-bundle` | in-toto Attestation Bundle v1. Smaller scope; may be a Chainloop sub-format rather than a peer. |
+| `guac` | [GUAC](https://guac.sh/) ingest format. Audience is graph-database supply-chain tooling. Deferred until adopter demand surfaces (avoids duplicating Chainloop's graph integration). |
 
 ## Why "experimental" for `chainloop`
 
@@ -76,5 +77,8 @@ Adopters running `export-evidence --format chainloop` in production should pin t
 
 - [Chainloop repo](https://github.com/chainloop-dev/chainloop) + [Chainloop docs](https://chainloop.dev/)
 - ADR-012 — design rationale, experimental-label justification, format registry
+- ADR-034 — SPDX 2.3 evidence export (evidence projection, not a dependency SBOM)
+- ADR-036 — OSCAL + in-toto-bundle (unsigned) GA promotion; `guac` deferred
+- [SPDX 2.3](https://spdx.github.io/spdx-spec/v2.3/) · [OSCAL assessment-results](https://pages.nist.gov/OSCAL/) · [in-toto attestation](https://github.com/in-toto/attestation)
 - ADR-002 (`emit-vex` scope) and ADR-011 (`emit-insights`) — same emit-only pattern
 - [`positioning.md`](positioning.md) → *Composition with Chainloop*

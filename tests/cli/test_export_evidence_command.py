@@ -84,8 +84,55 @@ def test_export_with_explicit_report(tmp_path: Path) -> None:
 
 def test_export_bad_format(tmp_path: Path) -> None:
     _report_at(tmp_path)
-    res = runner.invoke(app, ["export-evidence", "--target", str(tmp_path), "--format", "spdx"])
+    # ``guac`` is intentionally still unsupported (deferred; see ADR-036). ``spdx``/``oscal``/
+    # ``in-toto-bundle`` were promoted to GA in v7.0.0, so they are no longer "bad" formats.
+    res = runner.invoke(app, ["export-evidence", "--target", str(tmp_path), "--format", "guac"])
     assert res.exit_code != 0
+
+
+def test_export_spdx(tmp_path: Path) -> None:
+    _report_at(tmp_path)
+    out = tmp_path / "ev.spdx.json"
+    res = runner.invoke(
+        app, ["export-evidence", "--target", str(tmp_path), "--format", "spdx", "--output", str(out), "--validate"]
+    )
+    assert res.exit_code == 0, res.output
+    doc = json.loads(out.read_text(encoding="utf-8"))
+    assert doc["spdxVersion"] == "SPDX-2.3"
+    assert doc["packages"][0]["annotations"]  # one annotation per control
+
+
+def test_export_oscal(tmp_path: Path) -> None:
+    _report_at(tmp_path)
+    out = tmp_path / "ev.oscal.json"
+    res = runner.invoke(
+        app, ["export-evidence", "--target", str(tmp_path), "--format", "oscal", "--output", str(out), "--validate"]
+    )
+    assert res.exit_code == 0, res.output
+    doc = json.loads(out.read_text(encoding="utf-8"))
+    assert doc["assessment-results"]["results"][0]["observations"]
+
+
+def test_export_intoto_bundle(tmp_path: Path) -> None:
+    _report_at(tmp_path)
+    out = tmp_path / "ev.intoto.json"
+    res = runner.invoke(
+        app,
+        [
+            "export-evidence",
+            "--target",
+            str(tmp_path),
+            "--format",
+            "in-toto-bundle",
+            "--output",
+            str(out),
+            "--validate",
+        ],
+    )
+    assert res.exit_code == 0, res.output
+    doc = json.loads(out.read_text(encoding="utf-8"))
+    assert doc["_type"] == "https://in-toto.io/Statement/v1"
+    assert doc["predicate"]["signed"] is False
 
 
 def test_export_bad_target(tmp_path: Path) -> None:
