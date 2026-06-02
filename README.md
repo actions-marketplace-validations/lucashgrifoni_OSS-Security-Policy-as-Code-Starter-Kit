@@ -98,10 +98,11 @@ Action reference: [docs/github-action.md](docs/github-action.md). Starter workfl
 
 ## Reports and Contracts
 
-By default, `evaluate` writes `reports/1.0` JSON. Older compatibility contracts and opt-in `reports/2.0` are documented here:
+By default, `evaluate` writes `reports/2.0` JSON (the default flipped from `reports/1.0` in v7.0.0 — ADR-027). `reports/1.0` stays selectable via `--report-json-contract=1.0` for one minor cycle, then deprecates. Contracts and migration:
 
-- [docs/reports-contract-v1.0.md](docs/reports-contract-v1.0.md)
-- [docs/reports-contract-v2.0.md](docs/reports-contract-v2.0.md)
+- [docs/reports-contract-v2.0.md](docs/reports-contract-v2.0.md) — current default
+- [docs/reports-contract-v1.0.md](docs/reports-contract-v1.0.md) — previous default (still selectable)
+- [docs/v7.0.0-migration-guide.md](docs/v7.0.0-migration-guide.md) — upgrading across the flip
 - [docs/sample-reports/](docs/sample-reports/README.md)
 
 Exit codes:

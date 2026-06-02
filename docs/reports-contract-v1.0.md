@@ -1,6 +1,8 @@
 # Evaluation report contract `reports/1.0`
 
-`reports/1.0` is the default JSON contract for `evaluation-report.json` starting in **v5.0.0**.
+> **No longer the default since v7.0.0.** `reports/1.0` was the default contract from **v5.0.0** through the v6.x line. In **v7.0.0** the default flipped to [`reports/2.0`](reports-contract-v2.0.md) (ADR-027); `reports/1.0` remains explicitly selectable via `--report-json-contract=1.0` for one minor cycle, then deprecates. See the [v7.0.0 migration guide](v7.0.0-migration-guide.md).
+
+`reports/1.0` was the default JSON contract for `evaluation-report.json` from **v5.0.0** through v6.x.
 
 It is decoupled from the Python package version: contract `1.0` describes wire stability for downstream tooling, not the release-track stability of the package itself (the package classifier remains independent).
 
@@ -19,7 +21,7 @@ python -m oss_policy_kit evaluate --target . --profile github-level-1 \
   --output-dir ./out --report-json-contract 1.0
 ```
 
-`1.0` is the default in v5; the flag is shown for clarity only.
+Since v7.0.0 the default is `2.0`, so this flag is now **required** to select `1.0` explicitly (omitting it yields `reports/2.0`).
 
 ## Compatibility with `0.3` and `0.2`
 

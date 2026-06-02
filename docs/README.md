@@ -53,6 +53,7 @@ Repository entry points:
 
 Most recent first; older guides are kept for adopters upgrading across several versions.
 
+- [v7.0.0](v7.0.0-migration-guide.md)
 - [v6.0.0](v6.0.0-migration-guide.md)
 - [v5.9.0](v5.9.0-migration-guide.md)
 - [v5.2.0](v5.2.0-migration-guide.md)

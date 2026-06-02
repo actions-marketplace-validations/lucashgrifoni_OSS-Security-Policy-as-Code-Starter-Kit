@@ -100,4 +100,5 @@ For each consumer of `evaluation-report.json`:
 - ADR-013 — design rationale, breaking-change justification, deprecation timeline
 - [Scorecard v6 result vocabulary](https://github.com/ossf/scorecard) (the alignment source for the five states)
 - Existing `reports/1.0` schema: `src/oss_policy_kit/data/schema/evaluation-report-v1.schema.json`
-- [`v6.0.0-migration-guide.md`](v6.0.0-migration-guide.md) — the migration guide that wraps this contract change plus M-003 (ADR-008)
+- [`v7.0.0-migration-guide.md`](v7.0.0-migration-guide.md) — the migration guide for the v7.0.0 default flip (ADR-027)
+- [`v6.0.0-migration-guide.md`](v6.0.0-migration-guide.md) — earlier guide that documented this contract's introduction (ADR-013) plus M-003 (ADR-008)
