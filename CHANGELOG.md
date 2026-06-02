@@ -6,6 +6,26 @@ This changelog follows the same public-facing format used by the GitHub release 
 
 ---
 
+## [7.0.0](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v6.7.0...v7.0.0) (2026-06-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **reports:** unpinned consumers of evaluation-report.json now receive reports/2.0 (five-state PASS/FAIL/UNKNOWN/NOT_APPLICABLE/ATTESTED with the controls key) instead of reports/1.0 (results key). Pin --report-json-contract=1.0 to defer, or migrate with scripts/migrate-1.0-to-2.0.py.
+
+### Highlights
+
+* **evaluate:** consume Security Insights as opt-in self-attested evidence (ADR-033) ([823a867](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/823a867b468cfe112f858277ef82def926698601))
+* **export-evidence:** add SPDX, OSCAL, and in-toto-bundle GA exporters ([b83576d](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/b83576dba65529649c610162a1852af0a1caa4c3))
+* **export-policy:** render profiles to OPA/Rego and CEL skeletons (ADR-035) ([10e9eda](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/10e9edae31cc786c6d0166a6595ada8a0a81e6d9))
+* **reports:** make reports/2.0 the default report contract ([62ad07f](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/62ad07f708f89f7f19a11b5b40fad820f4825490))
+
+
+### Notes
+
+* **decisions:** ratify ADR-027 and add ADR-033..036 for the v7.0.0 bundle ([93d67ad](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/93d67ad79ccae59f41b004646c646eb115e46a1b))
+* **reports:** flip contract docs to reports/2.0 default + add v7.0.0 migration guide ([0b3e8fb](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/0b3e8fba2a990ed8a65bcde334b3580f7bad08c0))
+
 ## [6.7.0](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v6.6.0...v6.7.0) (2026-05-29)
 
 
