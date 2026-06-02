@@ -45,7 +45,7 @@ from oss_policy_kit.application.loader import (
 )
 from oss_policy_kit.cli.common import app, stderr_console, write_stdout_text
 from oss_policy_kit.cli.help_text import CMD_PANEL_EXPORT
-from oss_policy_kit.domain.errors import InvalidInputError
+from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
 
 _SUPPORTED_FORMATS: tuple[str, ...] = ("rego", "cel")
 
@@ -226,6 +226,32 @@ def _validate(text: str, fmt: str) -> list[str]:
     return validator(text) if validator is not None else []
 
 
+def _run_export_policy(profile: str, fmt: str, output: Path | None, kit_root: Path | None, validate: bool) -> None:
+    fmt_norm = fmt.lower().strip()
+    if fmt_norm not in _RENDERERS:
+        raise InvalidInputError(f"Unsupported --format {fmt!r}. Supported: {', '.join(_SUPPORTED_FORMATS)}.")
+
+    root = merge_kit_root(kit_root)
+    catalog = load_catalog(root / "controls" / "catalog.yaml")
+    prof = load_profile_by_id(root, profile)
+    rendered = _RENDERERS[fmt_norm](prof, catalog)
+
+    if validate:
+        errs = _validate(rendered, fmt_norm)
+        if errs:
+            c = stderr_console()
+            for e in errs:
+                c.print(f"[red]export-policy validation error:[/red] {e}")
+            raise typer.Exit(code=1)
+
+    out_path = output if output is not None else _DEFAULT_OUTPUT_BY_FORMAT[fmt_norm]
+    out_path.write_text(rendered, encoding="utf-8")
+    control_count = len(_sorted_profile_control_ids(prof))
+    write_stdout_text(
+        f"export-policy: wrote {out_path} (format={fmt_norm}, profile={prof.id}, controls={control_count})\n"
+    )
+
+
 @app.command("export-policy", rich_help_panel=CMD_PANEL_EXPORT)
 def export_policy_cmd(
     profile: str = typer.Option(
@@ -262,26 +288,13 @@ def export_policy_cmd(
     ``evaluation-report.json`` (reports/2.0); it does not re-implement the kit's
     evaluators. See the fidelity-boundary header in the generated file.
     """
-    fmt_norm = fmt.lower().strip()
-    if fmt_norm not in _RENDERERS:
-        raise InvalidInputError(f"Unsupported --format {fmt!r}. Supported: {', '.join(_SUPPORTED_FORMATS)}.")
-
-    root = merge_kit_root(kit_root)
-    catalog = load_catalog(root / "controls" / "catalog.yaml")
-    prof = load_profile_by_id(root, profile)
-    rendered = _RENDERERS[fmt_norm](prof, catalog)
-
-    if validate:
-        errs = _validate(rendered, fmt_norm)
-        if errs:
-            c = stderr_console()
-            for e in errs:
-                c.print(f"[red]export-policy validation error:[/red] {e}")
-            raise typer.Exit(code=1)
-
-    out_path = output if output is not None else _DEFAULT_OUTPUT_BY_FORMAT[fmt_norm]
-    out_path.write_text(rendered, encoding="utf-8")
-    control_count = len(_sorted_profile_control_ids(prof))
-    write_stdout_text(
-        f"export-policy: wrote {out_path} (format={fmt_norm}, profile={prof.id}, controls={control_count})\n"
-    )
+    try:
+        _run_export_policy(profile, fmt, output, kit_root, validate)
+    except OssPolicyKitError as exc:
+        stderr_console().print(f"[red]Error:[/red] {exc.message}")
+        raise typer.Exit(code=2) from exc
+    except typer.Exit:
+        raise
+    except Exception as exc:  # noqa: BLE001 - last-resort user message, no traceback leak
+        stderr_console().print(f"[red]Unexpected error:[/red] {exc}")
+        raise typer.Exit(code=3) from exc
