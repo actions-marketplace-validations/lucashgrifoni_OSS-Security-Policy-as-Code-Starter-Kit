@@ -9,6 +9,7 @@ from oss_policy_kit.application.evaluators._shared import (
     _read_first_existing,
     _scan_readme_for_section,
     contextlib,
+    insights_self_attested_outcome,
     json,
 )
 
@@ -122,6 +123,13 @@ def eval_cra_art14_coord_002(ctx: EvalContext) -> EvalOutcome:
             evidence_sources=[str(section.resolve())],
             confidence="medium",
         )
+    lifted = insights_self_attested_outcome(
+        ctx,
+        control_label="Coordinated vulnerability disclosure policy (CRA Art. 14, CRA-ART14-COORD-002)",
+        remediation="Document a coordinated disclosure policy (CRA Article 14). See docs/cra-readiness.md.",
+    )
+    if lifted is not None:
+        return lifted
     return EvalOutcome(
         status=ControlStatus.MANUAL_REVIEW_REQUIRED,
         reason="No coordinated vulnerability disclosure policy found in SECURITY.md or disclosure-policy.json.",

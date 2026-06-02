@@ -50,6 +50,10 @@ class EvalOutcome:
     confidence: str
     evidence_collection_method: EvidenceCollectionMethod = EvidenceCollectionMethod.STATIC
     operational_warnings: tuple[str, ...] = ()
+    #: Optional per-control metadata projected onto ``ControlResult.extra`` (e.g.
+    #: ``{"provenance": "self-reported"}`` for ADR-033 Insights-derived verdicts).
+    #: Default empty so existing evaluators are unaffected.
+    extra: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)

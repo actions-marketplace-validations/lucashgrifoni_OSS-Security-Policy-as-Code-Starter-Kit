@@ -21,6 +21,7 @@ from oss_policy_kit.application.cli_output import FailOnPolicy, fail_on_violated
 from oss_policy_kit.application.config_loader import load_project_config_for_target
 from oss_policy_kit.application.engine import evaluate_repository
 from oss_policy_kit.application.input_limits import MAX_EVIDENCE_BYTES, oversize_reason
+from oss_policy_kit.application.insights_evidence import load_insights_evidence
 from oss_policy_kit.application.loader import (
     load_catalog,
     load_profile_by_id,
@@ -309,6 +310,9 @@ class EvaluateRequest:
     report_json_contract: str = "2.0"
     sarif_output: Path | None = None
     include_absolute_path: bool = False
+    #: ADR-033: opt-in consumption of a target's SECURITY-INSIGHTS.yml as self-attested
+    #: evidence for the disclosure-control allowlist. Default off (additive evaluation).
+    use_insights_evidence: bool = False
 
 
 def _resolve_eval_target(req: EvaluateRequest) -> Path:
@@ -482,6 +486,7 @@ def _run_evaluate(req: EvaluateRequest) -> None:
         control_ids=set(prof.control_ids),
         machine_stdout=(fmt == "json"),
     )
+    insights_evidence = load_insights_evidence(repo_root) if req.use_insights_evidence else None
     report = evaluate_repository(
         repo_root=repo_root,
         profile=prof,
@@ -491,6 +496,7 @@ def _run_evaluate(req: EvaluateRequest) -> None:
         external_waiver_path=ext_waiver,
         verbose_emit=_make_verbose_emit(req.verbose),
         report_json_contract=req.report_json_contract,
+        insights_evidence=insights_evidence,
     )
     out = req.output_dir.resolve()
     json_path, md_path = _write_eval_reports(report, req, out)

@@ -38,6 +38,7 @@ REPORTS_V2_STATUS_MAP: dict[str, tuple[str, str | None]] = {
     "skipped": ("UNKNOWN", "skipped-by-flag"),
     "error": ("UNKNOWN", "evaluator-error"),
     "attested": ("ATTESTED", None),
+    "self-attested": ("SELF_ATTESTED", None),  # ADR-033: opt-in Insights self-reported evidence
     "waived": ("UNKNOWN", "waived"),
 }
 

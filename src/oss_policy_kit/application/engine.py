@@ -13,6 +13,7 @@ from oss_policy_kit.adapters.scorecard_json import ScorecardBundle
 from oss_policy_kit.application.clock import report_generated_at
 from oss_policy_kit.application.evaluators import EVALUATOR_REGISTRY, EvalContext
 from oss_policy_kit.application.evidence_placeholders import has_placeholder_values
+from oss_policy_kit.application.insights_evidence import InsightsEvidence
 from oss_policy_kit.application.loader import ControlSpec, ProfileSpec
 from oss_policy_kit.application.waivers import WaiverParseOutcome
 from oss_policy_kit.domain.errors import LoadError
@@ -102,6 +103,7 @@ REPORTS_V2_STATUS_MAP: dict[str, tuple[str, str | None]] = {
     "skipped": ("UNKNOWN", "skipped-by-flag"),
     "error": ("UNKNOWN", "evaluator-error"),
     "attested": ("ATTESTED", None),  # reserved for evidence-backed PROV-VERIFY-061 PASS in v6.0.0
+    "self-attested": ("SELF_ATTESTED", None),  # ADR-033: opt-in Insights self-reported evidence
 }
 
 
@@ -309,6 +311,7 @@ def _evaluate_control(
         evidence_collection_method=outcome.evidence_collection_method.value,
         deprecation_note=spec.deprecation_note,
         weight=spec.weight,
+        extra=dict(outcome.extra),
     )
 
 
@@ -328,8 +331,14 @@ def evaluate_repository(
     # function from new code paths.
     report_json_contract: str = "0.3",
     live_collection: LiveCollectionMetadata | None = None,
+    insights_evidence: InsightsEvidence | None = None,
 ) -> ExecutionReport:
-    """Run all profile controls against a local repository clone."""
+    """Run all profile controls against a local repository clone.
+
+    ``insights_evidence`` (ADR-033) is the opt-in, self-reported Security Insights
+    contribution. It is ``None`` unless the caller passed ``--use-insights-evidence``;
+    when ``None`` no control consumes self-reported signals (clone-only verdicts stand).
+    """
 
     workflows = analyze_workflows(repo_root)
     azure_pipelines = analyze_azure_pipelines(repo_root)
@@ -344,6 +353,7 @@ def evaluate_repository(
         scorecard=scorecard,
         verbose_emit=verbose_emit,
         gitlab_ci=gitlab_ci,
+        insights_evidence=insights_evidence,
     )
 
     waivers = waiver_outcome.by_control if waiver_outcome else {}

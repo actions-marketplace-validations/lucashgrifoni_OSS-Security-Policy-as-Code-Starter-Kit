@@ -42,6 +42,7 @@ from oss_policy_kit.application.evaluators_common import (
 from oss_policy_kit.application.evidence_loading import load_evidence_schema
 from oss_policy_kit.application.evidence_placeholders import has_placeholder_values, is_placeholder_digest
 from oss_policy_kit.application.input_limits import MAX_SARIF_BYTES, oversize_reason
+from oss_policy_kit.application.insights_evidence import InsightsEvidence
 from oss_policy_kit.domain.models import ControlStatus, EvalOutcome, EvidenceCollectionMethod
 from oss_policy_kit.infrastructure.aws_ci_parser import AwsCiAnalysis
 from oss_policy_kit.infrastructure.azure_pipeline_parser import AzurePipelineAnalysis
@@ -204,6 +205,47 @@ class EvalContext:
     #: GitLab CI pipeline analysis (v5.9.0). Default empty so existing call sites and
     #: test fixtures stay valid without an explicit constructor argument.
     gitlab_ci: GitLabCiAnalysis = field(default_factory=GitLabCiAnalysis)
+    #: Parsed, structurally validated Security Insights evidence for the target (ADR-033).
+    #: Default None: only populated when ``evaluate --use-insights-evidence`` is set. When
+    #: None, no control consumes self-reported Insights signals (clone-only verdicts stand).
+    insights_evidence: InsightsEvidence | None = None
+
+
+def insights_self_attested_outcome(
+    ctx: EvalContext,
+    *,
+    control_label: str,
+    remediation: str,
+) -> EvalOutcome | None:
+    """Lift a clone-only ``manual-review-required`` disclosure verdict to a
+    ``SELF_ATTESTED`` PASS when the target's Security Insights file self-declares an
+    inbound vulnerability-reporting channel (ADR-033, opt-in via ``--use-insights-evidence``).
+
+    Returns ``None`` when the wiring is off (no evidence in ``ctx``) or the file
+    declares no channel — the caller then keeps its clone-only verdict.
+
+    Call this ONLY on a ``manual-review-required`` path. A self-report must never
+    override a deterministic ``FAIL`` and must never relabel an evidence-backed
+    ``PASS``; the allowlisted controls (GOV-DISC-013, CRA-ART14-COORD-002,
+    GOV-DISC-065) consult it only where the clone yields no signal.
+    """
+
+    evidence = ctx.insights_evidence
+    if evidence is None or not evidence.declares_vulnerability_reporting_channel():
+        return None
+    return EvalOutcome(
+        status=ControlStatus.SELF_ATTESTED,
+        reason=(
+            f"{control_label} self-attested via the project's Security Insights file "
+            f"({evidence.source_rel}): accepts-vulnerability-reports is declared with a "
+            "reporting channel. Provenance: self-reported — NOT independently verified from "
+            "the clone, consumed only because --use-insights-evidence is set."
+        ),
+        remediation=remediation,
+        evidence_sources=[f"{evidence.source_rel} (self-reported)"],
+        confidence="low",
+        extra={"provenance": "self-reported", "insights_source": evidence.source_rel},
+    )
 
 
 def _exists_ci_readme(repo: Path) -> bool:
@@ -2083,6 +2125,7 @@ __all__ = [
     "field",
     "has_placeholder_values",
     "importlib",
+    "insights_self_attested_outcome",
     "is_placeholder_digest",
     "json",
     "load_evidence_schema",

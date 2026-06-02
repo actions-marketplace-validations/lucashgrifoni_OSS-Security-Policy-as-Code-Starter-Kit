@@ -6,12 +6,17 @@ subcommand *consumes* one that the target repository already publishes, reads it
 as the project's own **self-reported** security posture, structurally validates
 it, and summarizes the recognized signals.
 
+The discover/parse/validate/extract logic lives in
+:mod:`oss_policy_kit.application.insights_evidence` (the single source of truth,
+shared with the ADR-033 control-evidence wiring); this module shapes the
+report and renders it.
+
 This subcommand intentionally does **not**:
 
 - Change ``evaluate``. No control verdict changes because a
-  ``SECURITY-INSIGHTS.yml`` exists. Wiring Insights fields into specific controls
-  as a ``self-attested`` evidence source is a deliberate follow-up increment
-  (ADR-032 assurance fence), not part of this command.
+  ``SECURITY-INSIGHTS.yml`` exists *for this read-only command*. Wiring Insights
+  fields into specific controls as a ``self-attested`` evidence source is the
+  opt-in ``evaluate --use-insights-evidence`` path (ADR-033), not this command.
 - Treat self-reported claims as proof. Output provenance is always
   ``self-reported``; the kit does not independently verify the assertions.
 - Fetch external data or mutate the target. Clone-local, read-only.
@@ -27,32 +32,29 @@ from pathlib import Path
 from typing import Any
 
 import typer
-import yaml
 
 from oss_policy_kit import __version__ as _KIT_VERSION
-from oss_policy_kit.application.input_limits import MAX_EVIDENCE_BYTES, read_text_capped
+from oss_policy_kit.application.insights_evidence import (
+    INSIGHTS_SCHEMA_VERSION as _INSIGHTS_SCHEMA_VERSION,
+)
+from oss_policy_kit.application.insights_evidence import (
+    discover_insights_file as _discover_insights_file,
+)
+from oss_policy_kit.application.insights_evidence import (
+    extract_signals as _extract_signals,
+)
+from oss_policy_kit.application.insights_evidence import (
+    load_insights_file as _load_insights_file,
+)
+from oss_policy_kit.application.insights_evidence import (
+    validate_ingest_structure as _validate_ingest_structure,
+)
 from oss_policy_kit.cli.common import app, stderr_console, write_stdout_text
-from oss_policy_kit.cli.emit_insights import _INSIGHTS_SCHEMA_VERSION
 from oss_policy_kit.cli.help_text import CMD_PANEL_EXPORT
 from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
 
 _PROVENANCE = "self-reported"
 _TOOL_NAME = "oss-policy-kit ingest-insights"
-
-#: Conventional locations for an OpenSSF Security Insights file, in lookup order.
-#: Covers the spec-canonical ``SECURITY-INSIGHTS.yml`` (root and ``.github/``) and
-#: the kit's own lowercase ``emit-insights`` default name.
-_INGEST_CANDIDATES: tuple[str, ...] = (
-    "SECURITY-INSIGHTS.yml",
-    "SECURITY-INSIGHTS.yaml",
-    ".github/SECURITY-INSIGHTS.yml",
-    ".github/SECURITY-INSIGHTS.yaml",
-    "security-insights.yml",
-    "security-insights.yaml",
-    ".github/security-insights.yml",
-    ".github/security-insights.yaml",
-    "docs/SECURITY-INSIGHTS.yml",
-)
 
 
 def _relpath(path: Path, root: Path) -> str:
@@ -64,16 +66,6 @@ def _relpath(path: Path, root: Path) -> str:
         return path.name
 
 
-def _discover_insights_file(root: Path) -> Path | None:
-    """Return the first existing Security Insights file under *root*, or None."""
-
-    for rel in _INGEST_CANDIDATES:
-        p = root / rel
-        if p.is_file():
-            return p
-    return None
-
-
 def _resolve_input(target_path: Path, input_path: Path | None) -> Path | None:
     """Resolve the file to ingest: an explicit ``--input`` (must exist) or auto-discovery."""
 
@@ -83,109 +75,6 @@ def _resolve_input(target_path: Path, input_path: Path | None) -> Path | None:
     if not chosen.is_file():
         raise InvalidInputError(f"--input {chosen} is not a file.")
     return chosen
-
-
-def _load_insights_file(path: Path) -> tuple[dict[str, Any] | None, str | None]:
-    """Read + parse a Security Insights YAML file.
-
-    Returns ``(doc, None)`` on success, or ``(None, error_message)`` when the file
-    is unreadable, not valid YAML, or not a YAML mapping. Oversize files raise
-    :class:`InvalidInputError` (CLI exit 2) via ``read_text_capped``.
-    """
-
-    try:
-        raw = read_text_capped(path, MAX_EVIDENCE_BYTES, label="Security Insights", errors="replace")
-    except OSError as exc:
-        return None, f"Security Insights file is unreadable: {exc}"
-    try:
-        doc = yaml.safe_load(raw)
-    except yaml.YAMLError as exc:
-        return None, f"Security Insights file is not valid YAML: {exc}"
-    if not isinstance(doc, dict):
-        return None, "Security Insights file root must be a YAML mapping (object)."
-    return doc, None
-
-
-def _validate_ingest_structure(doc: dict[str, Any]) -> tuple[list[str], list[str]]:
-    """Return ``(errors, warnings)`` for a parsed Security Insights document.
-
-    Errors (exit 1) are missing required structure per the OpenSSF Security
-    Insights 1.0 shape the kit knows. A declared ``schema-version`` other than the
-    supported one is a *warning* (still summarizable), not an error — ingestion
-    consumes third-party files and should not hard-fail a newer upstream version.
-    """
-
-    errors: list[str] = []
-    warnings: list[str] = []
-    if "project-lifecycle" not in doc:
-        errors.append("top-level field missing: project-lifecycle")
-    header = doc.get("header")
-    if not isinstance(header, dict):
-        errors.append("top-level field missing or not an object: header")
-        return errors, warnings
-    if "schema-version" not in header:
-        errors.append("header.schema-version missing")
-    if "last-updated" not in header:
-        errors.append("header.last-updated missing")
-    lifecycle = doc.get("project-lifecycle")
-    if isinstance(lifecycle, dict) and "status" not in lifecycle:
-        errors.append("project-lifecycle.status missing")
-    sv = header.get("schema-version")
-    if isinstance(sv, str) and sv != _INSIGHTS_SCHEMA_VERSION:
-        warnings.append(
-            f"declared schema-version {sv!r} differs from the supported {_INSIGHTS_SCHEMA_VERSION!r}; "
-            "signals are summarized best-effort."
-        )
-    return errors, warnings
-
-
-def _str_or_none(value: Any) -> str | None:
-    return value if isinstance(value, str) and value else None
-
-
-def _security_contacts(doc: dict[str, Any]) -> list[str]:
-    """Collect self-reported security contacts (security-contacts[].value + email-contact)."""
-
-    out: list[str] = []
-    contacts = doc.get("security-contacts")
-    if isinstance(contacts, list):
-        for c in contacts:
-            if isinstance(c, dict):
-                v = _str_or_none(c.get("value"))
-                if v and v not in out:
-                    out.append(v)
-    vr = doc.get("vulnerability-reporting")
-    if isinstance(vr, dict):
-        email = _str_or_none(vr.get("email-contact"))
-        if email and email not in out:
-            out.append(email)
-    return out
-
-
-def _distribution_points(doc: dict[str, Any]) -> list[str]:
-    dp = doc.get("distribution-points")
-    if not isinstance(dp, list):
-        return []
-    return [d for d in dp if isinstance(d, str) and d]
-
-
-def _extract_signals(doc: dict[str, Any]) -> dict[str, Any]:
-    """Project the recognized self-reported fields into a flat signal summary."""
-
-    lifecycle = doc.get("project-lifecycle")
-    vr = doc.get("vulnerability-reporting")
-    cp = doc.get("contribution-policy")
-    return {
-        "project_lifecycle_status": (_str_or_none(lifecycle.get("status")) if isinstance(lifecycle, dict) else None),
-        "accepts_vulnerability_reports": (
-            bool(vr.get("accepts-vulnerability-reports")) if isinstance(vr, dict) else None
-        ),
-        "security_policy_url": (_str_or_none(vr.get("security-policy")) if isinstance(vr, dict) else None),
-        "security_contacts": _security_contacts(doc),
-        "accepts_pull_requests": (bool(cp.get("accepts-pull-requests")) if isinstance(cp, dict) else None),
-        "has_dependency_automation_policy": "dependencies" in doc,
-        "distribution_points": _distribution_points(doc),
-    }
 
 
 def _base_result(*, found: bool, input_path: str | None) -> dict[str, Any]:

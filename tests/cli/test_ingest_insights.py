@@ -15,7 +15,7 @@ from typing import Any
 import yaml
 from typer.testing import CliRunner
 
-from oss_policy_kit.cli import ingest_insights as ii
+from oss_policy_kit.application import insights_evidence as ie
 from oss_policy_kit.cli.main import app
 
 runner = CliRunner()
@@ -236,7 +236,7 @@ def test_emit_then_ingest_roundtrip(tmp_path: Path) -> None:
 
 
 def test_validate_ingest_structure_accepts_minimal() -> None:
-    errors, warnings = ii._validate_ingest_structure(
+    errors, warnings = ie.validate_ingest_structure(
         {"header": {"schema-version": "1.0.0", "last-updated": "x"}, "project-lifecycle": {"status": "active"}}
     )
     assert errors == []
@@ -244,14 +244,14 @@ def test_validate_ingest_structure_accepts_minimal() -> None:
 
 
 def test_validate_ingest_structure_flags_missing_header() -> None:
-    errors, _warnings = ii._validate_ingest_structure({"project-lifecycle": {"status": "active"}})
+    errors, _warnings = ie.validate_ingest_structure({"project-lifecycle": {"status": "active"}})
     assert any("header" in e for e in errors)
 
 
 def test_discover_prefers_canonical_over_github(tmp_path: Path) -> None:
     _write_insights(tmp_path, _valid_doc(), rel="SECURITY-INSIGHTS.yml")
     _write_insights(tmp_path, _valid_doc(), rel=".github/SECURITY-INSIGHTS.yml")
-    found = ii._discover_insights_file(tmp_path)
+    found = ie.discover_insights_file(tmp_path)
     assert found is not None and found.name == "SECURITY-INSIGHTS.yml"
     assert found.parent == tmp_path
 
@@ -261,11 +261,11 @@ def test_security_contacts_dedupes_email_contact() -> None:
         "security-contacts": [{"type": "email", "value": "a@example.com"}],
         "vulnerability-reporting": {"email-contact": "a@example.com"},
     }
-    assert ii._security_contacts(doc) == ["a@example.com"]
+    assert ie._security_contacts(doc) == ["a@example.com"]
 
 
 def test_extract_signals_tolerates_missing_sections() -> None:
-    signals = ii._extract_signals({"header": {"schema-version": "1.0.0"}})
+    signals = ie.extract_signals({"header": {"schema-version": "1.0.0"}})
     assert signals["project_lifecycle_status"] is None
     assert signals["accepts_vulnerability_reports"] is None
     assert signals["security_contacts"] == []

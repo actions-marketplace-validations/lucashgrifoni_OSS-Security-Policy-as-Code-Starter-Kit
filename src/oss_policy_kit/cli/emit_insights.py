@@ -40,6 +40,7 @@ from typing import Any
 import typer
 import yaml
 
+from oss_policy_kit.application.insights_evidence import INSIGHTS_SCHEMA_VERSION as _INSIGHTS_SCHEMA_VERSION
 from oss_policy_kit.cli.common import app, stderr_console, write_stdout_text
 from oss_policy_kit.cli.help_text import CMD_PANEL_EXPORT
 from oss_policy_kit.domain.errors import InvalidInputError
@@ -47,7 +48,6 @@ from oss_policy_kit.domain.errors import InvalidInputError
 _GITHUB_DIR = ".github"
 
 _DEFAULT_OUTPUT = Path("security-insights.yml")
-_INSIGHTS_SCHEMA_VERSION = "1.0.0"
 
 
 def _now_iso8601_z() -> str:
