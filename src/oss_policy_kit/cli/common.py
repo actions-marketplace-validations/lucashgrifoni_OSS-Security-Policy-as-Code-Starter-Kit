@@ -243,6 +243,7 @@ def prepare_cli_args(args: list[str]) -> list[str]:
         "emit-insights",
         "ingest-insights",
         "export-evidence",
+        "export-policy",
     }:
         return args
     if first in ("--help", "-h", "--version", "-V"):

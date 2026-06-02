@@ -126,6 +126,7 @@ max-complexity = 12
 "src/oss_policy_kit/cli/emit_insights.py" = ["B008"]
 "src/oss_policy_kit/cli/ingest_insights.py" = ["B008"]
 "src/oss_policy_kit/cli/export_evidence.py" = ["B008"]
+"src/oss_policy_kit/cli/export_policy.py" = ["B008"]
 
 [tool.mypy]
 python_version = "3.12"
