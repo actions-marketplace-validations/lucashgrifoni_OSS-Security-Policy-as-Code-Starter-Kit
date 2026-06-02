@@ -52,6 +52,7 @@ from oss_policy_kit.application.evaluators._shared import (
     checks_as_map,
     contextlib,
     datetime,
+    insights_self_attested_outcome,
     json,
 )
 
@@ -197,6 +198,13 @@ def eval_gov_disc_013(ctx: EvalContext) -> EvalOutcome:
             confidence="low",
             operational_warnings=(_SUPPLEMENTAL_SIGNAL_WARN,),
         )
+    lifted = insights_self_attested_outcome(
+        ctx,
+        control_label="Responsible disclosure channel documented (GOV-DISC-013)",
+        remediation="Document how researchers should report issues privately before public disclosure.",
+    )
+    if lifted is not None:
+        return lifted
     return EvalOutcome(
         status=ControlStatus.MANUAL_REVIEW_REQUIRED,
         reason="SECURITY.md present but no explicit private reporting channel detected by heuristics.",
@@ -929,6 +937,18 @@ def _disclosure_signal_outcome(ctx: EvalContext) -> EvalOutcome:
             confidence="low",
             operational_warnings=(_KEYWORD_CI_SIGNAL_WARN,),
         )
+    lifted = insights_self_attested_outcome(
+        ctx,
+        control_label="Disclosure channel SLA documented (GOV-DISC-065)",
+        remediation=(
+            "Add an acknowledgement SLA to SECURITY.md (e.g. 'we will acknowledge "
+            "within 72 hours') or attach "
+            ".oss-policy-kit/evidence/disclosure-policy.json per "
+            "evidence-disclosure-policy.schema.json."
+        ),
+    )
+    if lifted is not None:
+        return lifted
     return EvalOutcome(
         status=ControlStatus.MANUAL_REVIEW_REQUIRED,
         reason=(

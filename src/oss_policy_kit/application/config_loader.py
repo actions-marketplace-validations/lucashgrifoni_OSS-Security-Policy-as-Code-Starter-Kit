@@ -145,7 +145,7 @@ def load_project_config(path: Path) -> ProjectConfig:
         )
 
     output_dir = _require_str(payload, "output_dir", where=path)
-    report_contract = _optional_str(payload, "report_json_contract") or "1.0"
+    report_contract = _optional_str(payload, "report_json_contract") or "2.0"
 
     detected = payload.get("detected", {}) or {}
     if not isinstance(detected, dict):

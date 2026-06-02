@@ -33,10 +33,11 @@ def test_resolver_accepts_2_0() -> None:
     assert report_json_schema_url("2.0") == REPORT_JSON_SCHEMA_URL_V2_0
 
 
-def test_resolver_default_remains_1_0() -> None:
-    """Default contract stays at 1.0 in this PR to avoid breaking snapshot tests.
-    The default-switch to 2.0 is deferred to PR-18 (release prep) or a v6.x point release."""
-    assert report_json_schema_url("") == REPORT_JSON_SCHEMA_URL_V1_0
+def test_resolver_default_is_2_0() -> None:
+    """v7.0.0 (ADR-027) flipped the default report contract to reports/2.0: an empty
+    contract now resolves to 2.0. reports/1.0 stays explicitly selectable for one cycle."""
+    assert report_json_schema_url("") == REPORT_JSON_SCHEMA_URL_V2_0
+    assert report_json_schema_url("1.0") == REPORT_JSON_SCHEMA_URL_V1_0
 
 
 def test_resolver_unknown_mentions_2_0_in_error() -> None:

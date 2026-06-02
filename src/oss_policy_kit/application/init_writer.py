@@ -98,7 +98,7 @@ def _render_config_yaml(plan: InitPlan) -> str:
         f"profile_source: {plan.profile_source}",
         f"fail_on: {plan.fail_on}",
         f'output_dir: "{plan.output_dir}"',
-        'report_json_contract: "1.0"',
+        'report_json_contract: "2.0"',
         "",
         "detected:",
         f"  platform: {plan.platform}",

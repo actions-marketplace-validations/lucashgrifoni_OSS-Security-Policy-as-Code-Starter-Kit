@@ -8,11 +8,15 @@ from pathlib import Path
 import pytest
 
 from oss_policy_kit.cli.export_evidence import (
+    _INTOTO_PREDICATE_TYPE,
     _RENDERERS,
     _SUPPORTED_FORMATS,
     _load_evaluation_report,
     _render_chainloop,
+    _render_intoto_bundle,
+    _render_oscal,
     _render_sarif,
+    _render_spdx,
     _validate,
 )
 from oss_policy_kit.domain.errors import InvalidInputError
@@ -100,3 +104,63 @@ def test_chainloop_format_is_marked_experimental() -> None:
     out = _render_chainloop(_sample_report())
     assert out.get("experimental") is True
     assert "experimental_note" in out
+
+
+# --- v7.0.0 GA formats: spdx / oscal / in-toto-bundle (ADR-034, ADR-036) -------------
+
+
+def test_spdx_and_oscal_and_intoto_are_registered() -> None:
+    for fmt in ("spdx", "oscal", "in-toto-bundle"):
+        assert fmt in _SUPPORTED_FORMATS
+        assert fmt in _RENDERERS
+    # guac stays deferred (ADR-036): must NOT be registered.
+    assert "guac" not in _SUPPORTED_FORMATS
+
+
+def test_render_spdx_shape_and_validation() -> None:
+    out = _render_spdx(_sample_report())
+    assert out["spdxVersion"] == "SPDX-2.3"
+    assert out["SPDXID"] == "SPDXRef-DOCUMENT"
+    assert out["packages"][0]["name"] == "examples/hardened-repo"
+    # one annotation per control
+    assert len(out["packages"][0]["annotations"]) == 2
+    # honesty caveat: explicitly not a dependency SBOM
+    assert "NOT a dependency" in out["creationInfo"]["comment"]
+    assert _validate(out, "spdx") == []
+
+
+def test_render_spdx_validation_catches_missing_fields() -> None:
+    errs = _validate({"spdxVersion": "SPDX-2.2"}, "spdx")
+    assert any("spdxVersion" in e for e in errs)
+    assert any("packages" in e for e in errs)
+
+
+def test_render_oscal_shape_and_validation() -> None:
+    out = _render_oscal(_sample_report())
+    ar = out["assessment-results"]
+    assert ar["metadata"]["oscal-version"] == "1.1.2"
+    assert len(ar["results"][0]["observations"]) == 2
+    assert _validate(out, "oscal") == []
+
+
+def test_render_oscal_validation_catches_missing_results() -> None:
+    errs = _validate({"assessment-results": {"metadata": {}}}, "oscal")
+    assert any("results" in e for e in errs)
+
+
+def test_render_intoto_bundle_shape_and_validation() -> None:
+    out = _render_intoto_bundle(_sample_report())
+    assert out["_type"] == "https://in-toto.io/Statement/v1"
+    assert out["predicateType"] == _INTOTO_PREDICATE_TYPE
+    assert out["subject"][0]["name"] == "examples/hardened-repo"
+    # subject is name-only: no fabricated digest (honest provenance)
+    assert "digest" not in out["subject"][0]
+    # unsigned in v7.0.0; signing is the v8 ATTESTED track
+    assert out["predicate"]["signed"] is False
+    assert _validate(out, "in-toto-bundle") == []
+
+
+def test_render_intoto_validation_catches_bad_type() -> None:
+    errs = _validate({"_type": "wrong", "subject": [], "predicate": {}}, "in-toto-bundle")
+    assert any("_type" in e for e in errs)
+    assert any("subject" in e for e in errs)

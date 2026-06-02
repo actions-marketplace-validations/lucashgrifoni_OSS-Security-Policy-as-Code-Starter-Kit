@@ -7,9 +7,10 @@ v0.1 surface (v6.0.0; ``chainloop`` format is **experimental**):
   result into the requested external format.
 - Format registry pattern: ``chainloop`` (Chainloop attestation envelope)
   and ``sarif`` (re-export of the SARIF the ``evaluate`` subcommand
-  produces) are both registered so the registry shape is exercised on
-  day one. Future formats (``guac``, ``oscal``, ``in-toto-bundle``) plug
-  in without changing the CLI shape.
+  produces) shipped day one. ``spdx`` (SPDX 2.3 evidence projection),
+  ``oscal`` (OSCAL 1.1 assessment-results), and ``in-toto-bundle``
+  (unsigned in-toto v1 statement) were promoted from "future" to GA in
+  v7.0.0 (ADR-034, ADR-036). ``guac`` stays deferred until adopter demand.
 - ``--validate`` runs lightweight structural validation on the rendered
   output before writing. Exit 1 on validation failure.
 
@@ -29,6 +30,7 @@ design rationale (including the experimental-label justification).
 from __future__ import annotations
 
 import json
+import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -44,8 +46,13 @@ _DEFAULT_OUTPUT = Path("evidence-export.json")
 _DEFAULT_REPORT = Path("out/evaluation-report.json")
 
 # Stable subcommand surface. The chainloop format itself is experimental
-# in v6.0.0 (see ADR-012); the surface is not.
-_SUPPORTED_FORMATS: tuple[str, ...] = ("chainloop", "sarif")
+# in v6.0.0 (see ADR-012); the surface is not. ``spdx``/``oscal``/``in-toto-bundle``
+# were promoted from "future" to GA in v7.0.0 (ADR-034, ADR-036); ``guac`` stays
+# deferred until an adopter needs it (its backlog stub gates promotion on demand).
+_SUPPORTED_FORMATS: tuple[str, ...] = ("chainloop", "sarif", "spdx", "oscal", "in-toto-bundle")
+
+# Custom predicate type for the in-toto policy-evaluation statement (ADR-036).
+_INTOTO_PREDICATE_TYPE = "https://oss-policy-kit/attestations/policy-evaluation/v0.1"
 
 
 def _now_iso8601_z() -> str:
@@ -164,27 +171,246 @@ def _render_sarif(report: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _kit_version(report: dict[str, Any]) -> str:
+    """Resolve the kit version: prefer the report's own ``kit_version``, else the source constant."""
+    v = report.get("kit_version")
+    if isinstance(v, str) and v.strip():
+        return v.strip()
+    from oss_policy_kit import __version__
+
+    return __version__
+
+
+def _profile_id(report: dict[str, Any]) -> str | None:
+    prof = report.get("profile")
+    return prof.get("id") if isinstance(prof, dict) else None
+
+
+def _render_spdx(report: dict[str, Any]) -> dict[str, Any]:
+    """Render the evaluation report as an SPDX 2.3 JSON evidence document (ADR-034).
+
+    This is a *policy-evaluation evidence projection* expressed in SPDX, **not** a
+    dependency/component SBOM of the target: the kit is a clone-only evaluator, not a
+    dependency resolver (a real SBOM is a scanner's job — see README non-goals). The
+    document describes exactly one package (the evaluated repository) and attaches each
+    control result as an SPDX annotation. SPDX 3.0 (linked-data) is deferred to a later
+    additive cycle on GA + demand.
+    """
+    now = _now_iso8601_z()
+    version = _kit_version(report)
+    target = str(report.get("target", "unknown"))
+    profile_id = _profile_id(report)
+    creator = f"Tool: oss-policy-kit-{version}"
+    annotations = [
+        {
+            "annotationType": "OTHER",
+            "annotator": creator,
+            "annotationDate": now,
+            "comment": json.dumps(
+                {
+                    "control": c.get("id", "UNKNOWN"),
+                    "status": c.get("status", "unknown"),
+                    "reason": c.get("reason", ""),
+                },
+                sort_keys=True,
+            ),
+        }
+        for c in (report.get("controls", []) or [])
+        if isinstance(c, dict)
+    ]
+    pkg_id = "SPDXRef-Package-target"
+    return {
+        "spdxVersion": "SPDX-2.3",
+        "dataLicense": "CC0-1.0",
+        "SPDXID": "SPDXRef-DOCUMENT",
+        "name": f"oss-policy-kit-evidence-{profile_id or 'evaluation'}",
+        "documentNamespace": f"https://oss-policy-kit/spdx/{profile_id or 'evaluation'}/{now}",
+        "creationInfo": {
+            "created": now,
+            "creators": [creator],
+            "comment": (
+                "Policy-evaluation evidence projection expressed in SPDX 2.3. NOT a "
+                "dependency/component SBOM of the target; the kit is a clone-only evaluator, "
+                "not a dependency resolver. See ADR-034."
+            ),
+        },
+        "packages": [
+            {
+                "SPDXID": pkg_id,
+                "name": target,
+                "downloadLocation": "NOASSERTION",
+                "filesAnalyzed": False,
+                "copyrightText": "NOASSERTION",
+                "licenseConcluded": "NOASSERTION",
+                "licenseDeclared": "NOASSERTION",
+                "annotations": annotations,
+            }
+        ],
+        "relationships": [
+            {
+                "spdxElementId": "SPDXRef-DOCUMENT",
+                "relationshipType": "DESCRIBES",
+                "relatedSpdxElement": pkg_id,
+            }
+        ],
+    }
+
+
+def _render_oscal(report: dict[str, Any]) -> dict[str, Any]:
+    """Render the evaluation report as an OSCAL 1.1 assessment-results document (ADR-036).
+
+    The kit produces *assessment* output (pass/fail/observations), which maps to the OSCAL
+    ``assessment-results`` model (not ``component-definition``). Each control result becomes
+    an OSCAL observation. GA v0.1: structurally valid, unsigned.
+    """
+    now = _now_iso8601_z()
+    version = _kit_version(report)
+    profile_id = _profile_id(report)
+    observations = [
+        {
+            "uuid": str(uuid.uuid4()),
+            "title": str(c.get("id", "UNKNOWN")),
+            "description": f"{c.get('id', 'UNKNOWN')}: {c.get('status', 'unknown')} — {c.get('reason', '')}",
+            "methods": ["TEST"],
+            "collected": now,
+        }
+        for c in (report.get("controls", []) or [])
+        if isinstance(c, dict)
+    ]
+    return {
+        "assessment-results": {
+            "uuid": str(uuid.uuid4()),
+            "metadata": {
+                "title": f"oss-policy-kit assessment results ({profile_id or 'evaluation'})",
+                "last-modified": now,
+                "version": version,
+                "oscal-version": "1.1.2",
+            },
+            "import-ap": {"href": "#oss-policy-kit-evaluation"},
+            "results": [
+                {
+                    "uuid": str(uuid.uuid4()),
+                    "title": "oss-policy-kit clone-only policy evaluation",
+                    "description": "Clone-only policy evaluation results projected into OSCAL assessment-results.",
+                    "start": now,
+                    "observations": observations,
+                }
+            ],
+        }
+    }
+
+
+def _render_intoto_bundle(report: dict[str, Any]) -> dict[str, Any]:
+    """Render the evaluation report as an UNSIGNED in-toto v1 statement (ADR-036).
+
+    Signing (cosign/Sigstore) is the v8 ATTESTED track; this statement is the input that the
+    signing step later consumes. The subject is a name-only ResourceDescriptor (the kit does
+    not compute a repo digest, so none is fabricated — honest provenance).
+    """
+    now = _now_iso8601_z()
+    version = _kit_version(report)
+    target = str(report.get("target", "unknown"))
+    summary = report.get("summary_by_status", {}) if isinstance(report.get("summary_by_status"), dict) else {}
+    return {
+        "_type": "https://in-toto.io/Statement/v1",
+        "subject": [{"name": target}],
+        "predicateType": _INTOTO_PREDICATE_TYPE,
+        "predicate": {
+            "evaluatedAt": now,
+            "kit": "oss-policy-kit",
+            "kit_version": version,
+            "profile": _profile_id(report),
+            "summary": summary,
+            "controls": report.get("controls", []),
+            "signed": False,
+            "note": ("Unsigned in-toto statement; signing (cosign/Sigstore) is the v8 ATTESTED track. See ADR-036."),
+        },
+    }
+
+
 _RENDERERS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "chainloop": _render_chainloop,
     "sarif": _render_sarif,
+    "spdx": _render_spdx,
+    "oscal": _render_oscal,
+    "in-toto-bundle": _render_intoto_bundle,
+}
+
+
+def _validate_chainloop(doc: dict[str, Any]) -> list[str]:
+    errs: list[str] = []
+    if not doc.get("attestation_type"):
+        errs.append("chainloop: attestation_type missing")
+    if not isinstance(doc.get("subject"), dict):
+        errs.append("chainloop: subject must be an object")
+    if not isinstance(doc.get("predicate"), dict):
+        errs.append("chainloop: predicate must be an object")
+    return errs
+
+
+def _validate_sarif(doc: dict[str, Any]) -> list[str]:
+    errs: list[str] = []
+    if doc.get("version") != "2.1.0":
+        errs.append("sarif: version must be '2.1.0'")
+    if not isinstance(doc.get("runs"), list):
+        errs.append("sarif: runs must be an array")
+    return errs
+
+
+def _validate_spdx(doc: dict[str, Any]) -> list[str]:
+    errs: list[str] = []
+    if doc.get("spdxVersion") != "SPDX-2.3":
+        errs.append("spdx: spdxVersion must be 'SPDX-2.3'")
+    if doc.get("SPDXID") != "SPDXRef-DOCUMENT":
+        errs.append("spdx: SPDXID must be 'SPDXRef-DOCUMENT'")
+    if not isinstance(doc.get("creationInfo"), dict):
+        errs.append("spdx: creationInfo must be an object")
+    if not doc.get("documentNamespace"):
+        errs.append("spdx: documentNamespace missing")
+    pkgs = doc.get("packages")
+    if not isinstance(pkgs, list) or not pkgs:
+        errs.append("spdx: packages must be a non-empty array")
+    return errs
+
+
+def _validate_oscal(doc: dict[str, Any]) -> list[str]:
+    ar = doc.get("assessment-results")
+    if not isinstance(ar, dict):
+        return ["oscal: assessment-results must be an object"]
+    errs: list[str] = []
+    if not isinstance(ar.get("metadata"), dict):
+        errs.append("oscal: assessment-results.metadata must be an object")
+    if not isinstance(ar.get("results"), list) or not ar.get("results"):
+        errs.append("oscal: assessment-results.results must be a non-empty array")
+    return errs
+
+
+def _validate_intoto(doc: dict[str, Any]) -> list[str]:
+    errs: list[str] = []
+    if doc.get("_type") != "https://in-toto.io/Statement/v1":
+        errs.append("in-toto-bundle: _type must be 'https://in-toto.io/Statement/v1'")
+    if not isinstance(doc.get("subject"), list) or not doc.get("subject"):
+        errs.append("in-toto-bundle: subject must be a non-empty array")
+    if not doc.get("predicateType"):
+        errs.append("in-toto-bundle: predicateType missing")
+    if not isinstance(doc.get("predicate"), dict):
+        errs.append("in-toto-bundle: predicate must be an object")
+    return errs
+
+
+_VALIDATORS: dict[str, Callable[[dict[str, Any]], list[str]]] = {
+    "chainloop": _validate_chainloop,
+    "sarif": _validate_sarif,
+    "spdx": _validate_spdx,
+    "oscal": _validate_oscal,
+    "in-toto-bundle": _validate_intoto,
 }
 
 
 def _validate(doc: dict[str, Any], fmt: str) -> list[str]:
-    errs: list[str] = []
-    if fmt == "chainloop":
-        if not doc.get("attestation_type"):
-            errs.append("chainloop: attestation_type missing")
-        if not isinstance(doc.get("subject"), dict):
-            errs.append("chainloop: subject must be an object")
-        if not isinstance(doc.get("predicate"), dict):
-            errs.append("chainloop: predicate must be an object")
-    elif fmt == "sarif":
-        if doc.get("version") != "2.1.0":
-            errs.append("sarif: version must be '2.1.0'")
-        if not isinstance(doc.get("runs"), list):
-            errs.append("sarif: runs must be an array")
-    return errs
+    """Dispatch structural validation to the per-format validator (empty list = valid)."""
+    validator = _VALIDATORS.get(fmt)
+    return validator(doc) if validator is not None else []
 
 
 @app.command("export-evidence", rich_help_panel=CMD_PANEL_EXPORT)

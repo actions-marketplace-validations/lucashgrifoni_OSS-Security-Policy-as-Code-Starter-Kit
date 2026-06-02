@@ -9,6 +9,7 @@ from oss_policy_kit.application.engine import (
     REPORT_JSON_SCHEMA_URL_V0_2,
     REPORT_JSON_SCHEMA_URL_V0_3,
     REPORT_JSON_SCHEMA_URL_V1_0,
+    REPORT_JSON_SCHEMA_URL_V2_0,
     report_json_schema_url,
 )
 from oss_policy_kit.application.reporting import report_to_dict
@@ -55,8 +56,10 @@ def _report(schema_version: str) -> ExecutionReport:
     )
 
 
-def test_default_v5_contract_is_1_0() -> None:
-    assert report_json_schema_url("") == REPORT_JSON_SCHEMA_URL_V1_0
+def test_default_contract_is_2_0_since_v7() -> None:
+    # v7.0.0 (ADR-027): empty/default contract now resolves to reports/2.0.
+    assert report_json_schema_url("") == REPORT_JSON_SCHEMA_URL_V2_0
+    # reports/1.0 remains explicitly selectable for one deprecation cycle.
     assert report_json_schema_url("1.0") == REPORT_JSON_SCHEMA_URL_V1_0
 
 

@@ -20,6 +20,7 @@ from oss_policy_kit.cli import (  # noqa: F401  (import side-effects: command re
     evaluate,
     evidence,
     export_evidence,
+    export_policy,
     ingest_insights,
     init,
     profiles,
@@ -59,6 +60,7 @@ _COMMAND_DISPLAY_ORDER: tuple[str, ...] = (
     "emit-insights",
     "ingest-insights",
     "export-evidence",
+    "export-policy",
 )
 
 

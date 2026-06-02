@@ -135,9 +135,9 @@ def cli_root(
         rich_help_panel=OPT_PANEL_DIAGNOSTICS,
     ),
     report_json_contract: str = typer.Option(
-        "1.0",
+        "2.0",
         "--report-json-contract",
-        help=("evaluation-report.json contract: 1.0 (default), 2.0, 0.3, or 0.2. '0.1' was removed in v5."),
+        help=("evaluation-report.json contract: 2.0 (default), 1.0, 0.3, or 0.2. '0.1' was removed in v5."),
         case_sensitive=False,
         rich_help_panel=OPT_PANEL_OUTPUT,
     ),
@@ -156,6 +156,16 @@ def cli_root(
         "-q",
         help="Suppress operational warning lines on stderr while keeping normal stdout output.",
         rich_help_panel=OPT_PANEL_DIAGNOSTICS,
+    ),
+    use_insights_evidence: bool = typer.Option(
+        False,
+        "--use-insights-evidence",
+        help=(
+            "Opt-in (ADR-033): treat a target's SECURITY-INSIGHTS.yml as self-attested evidence "
+            "for disclosure controls GOV-DISC-013, CRA-ART14-COORD-002, GOV-DISC-065. "
+            "Self-reported only; never overrides a deterministic fail. Default off."
+        ),
+        rich_help_panel=OPT_PANEL_EVIDENCE,
     ),
     debug: bool = typer.Option(
         False,
@@ -208,6 +218,7 @@ def cli_root(
             sarif_output=sarif_output,
             quiet=quiet,
             report_json_contract=report_json_contract.strip().lower().removeprefix("v"),
+            use_insights_evidence=use_insights_evidence,
         )
     )
 
@@ -304,9 +315,9 @@ def evaluate_cmd(
         rich_help_panel=OPT_PANEL_DIAGNOSTICS,
     ),
     report_json_contract: str = typer.Option(
-        "1.0",
+        "2.0",
         "--report-json-contract",
-        help=("evaluation-report.json contract: 1.0 (default), 2.0, 0.3, or 0.2. '0.1' was removed in v5."),
+        help=("evaluation-report.json contract: 2.0 (default), 1.0, 0.3, or 0.2. '0.1' was removed in v5."),
         case_sensitive=False,
         rich_help_panel=OPT_PANEL_OUTPUT,
     ),
@@ -337,6 +348,16 @@ def evaluate_cmd(
             "publicly with absolute paths leaks the auditor's home directory or username."
         ),
         rich_help_panel=OPT_PANEL_OUTPUT,
+    ),
+    use_insights_evidence: bool = typer.Option(
+        False,
+        "--use-insights-evidence",
+        help=(
+            "Opt-in (ADR-033): treat a target's SECURITY-INSIGHTS.yml as self-attested evidence "
+            "for disclosure controls GOV-DISC-013, CRA-ART14-COORD-002, GOV-DISC-065. "
+            "Self-reported only; never overrides a deterministic fail. Default off."
+        ),
+        rich_help_panel=OPT_PANEL_EVIDENCE,
     ),
 ) -> None:
     """Evaluate a local repository clone against a bundled profile.
@@ -372,5 +393,6 @@ def evaluate_cmd(
             report_json_contract=report_json_contract.strip().lower().removeprefix("v"),
             sarif_output=sarif_output,
             include_absolute_path=include_absolute_path,
+            use_insights_evidence=use_insights_evidence,
         )
     )
