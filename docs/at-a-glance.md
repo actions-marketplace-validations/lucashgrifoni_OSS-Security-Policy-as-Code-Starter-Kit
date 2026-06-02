@@ -9,7 +9,7 @@ This page keeps the detailed capability snapshot out of the root README so the f
 | Current public release | `v7.0.0` (PyPI package `oss-policy-kit`) <!-- x-release-please-version --> |
 | Runtime | Python 3.12+ |
 | Input | A local repository clone, optional waivers, optional evidence files, optional scanner SARIF/JSON |
-| Output | Markdown, JSON (`reports/1.0` default), optional SARIF 2.1.0, CycloneDX VEX through `emit-vex` |
+| Output | Markdown, JSON (`reports/2.0` default), optional SARIF 2.1.0, CycloneDX VEX through `emit-vex` |
 | Core scope | Clone-visible governance and GitHub/Azure/AWS/GitLab CI/CD signals |
 | Exceptions | Waiver registry with owner, reason, and expiry |
 | Assurance model | Controls are labelled `deterministic`, `signal`, or `evidence-backed` |
