@@ -40,7 +40,7 @@ import typer
 
 from oss_policy_kit.cli.common import app, stderr_console, write_stdout_text
 from oss_policy_kit.cli.help_text import CMD_PANEL_EXPORT
-from oss_policy_kit.domain.errors import InvalidInputError
+from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
 
 _DEFAULT_OUTPUT = Path("evidence-export.json")
 _DEFAULT_REPORT = Path("out/evaluation-report.json")
@@ -446,6 +446,19 @@ def export_evidence_cmd(
     PR-17 (Onda 4, V6-04). The ``chainloop`` format is experimental in
     v6.0.0; the subcommand surface itself is stable.
     """
+    try:
+        _run_export_evidence(target, fmt, output, report, validate)
+    except OssPolicyKitError as exc:
+        stderr_console().print(f"[red]Error:[/red] {exc.message}")
+        raise typer.Exit(code=2) from exc
+    except typer.Exit:
+        raise
+    except Exception as exc:  # noqa: BLE001 - last-resort user message, no traceback leak
+        stderr_console().print(f"[red]Unexpected error:[/red] {exc}")
+        raise typer.Exit(code=3) from exc
+
+
+def _run_export_evidence(target: Path, fmt: str, output: Path, report: Path | None, validate: bool) -> None:
     target_path = target.resolve()
     if not target_path.is_dir():
         raise InvalidInputError(f"--target {target_path} is not a directory.")

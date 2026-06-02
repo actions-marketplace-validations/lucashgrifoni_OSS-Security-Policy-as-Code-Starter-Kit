@@ -87,7 +87,7 @@ def test_export_bad_format(tmp_path: Path) -> None:
     # ``guac`` is intentionally still unsupported (deferred; see ADR-036). ``spdx``/``oscal``/
     # ``in-toto-bundle`` were promoted to GA in v7.0.0, so they are no longer "bad" formats.
     res = runner.invoke(app, ["export-evidence", "--target", str(tmp_path), "--format", "guac"])
-    assert res.exit_code != 0
+    assert res.exit_code == 2  # clean OssPolicyKitError -> Exit(2), not an uncaught traceback
 
 
 def test_export_spdx(tmp_path: Path) -> None:
@@ -138,14 +138,14 @@ def test_export_intoto_bundle(tmp_path: Path) -> None:
 def test_export_bad_target(tmp_path: Path) -> None:
     missing = tmp_path / "nope"
     res = runner.invoke(app, ["export-evidence", "--target", str(missing), "--format", "sarif"])
-    assert res.exit_code != 0
+    assert res.exit_code == 2  # clean OssPolicyKitError -> Exit(2)
 
 
 def test_export_unparseable_report(tmp_path: Path) -> None:
     rep = tmp_path / "broken.json"
     rep.write_text("{not json", encoding="utf-8")
     res = runner.invoke(app, ["export-evidence", "--target", str(tmp_path), "--format", "sarif", "--report", str(rep)])
-    assert res.exit_code != 0
+    assert res.exit_code == 2  # clean OssPolicyKitError -> Exit(2)
 
 
 def test_render_helpers_directly() -> None:

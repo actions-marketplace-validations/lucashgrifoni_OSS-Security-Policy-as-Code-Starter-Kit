@@ -28,6 +28,7 @@ from typer.testing import CliRunner
 from oss_policy_kit.application.loader import bundled_kit_root, load_catalog, load_profile_by_id
 from oss_policy_kit.cli import export_policy as ep
 from oss_policy_kit.cli.main import app
+from oss_policy_kit.domain.errors import InvalidInputError
 
 runner = CliRunner()
 
@@ -135,12 +136,15 @@ def test_format_is_case_insensitive(tmp_path: Path) -> None:
 
 def test_bad_format() -> None:
     res = runner.invoke(app, ["export-policy", "--profile", _PROFILE, "--format", "yaml"])
-    assert res.exit_code != 0
+    # Clean OssPolicyKitError -> Exit(2), not an uncaught InvalidInputError traceback (exit 1).
+    assert res.exit_code == 2
+    assert not isinstance(res.exception, InvalidInputError)
 
 
 def test_unknown_profile() -> None:
     res = runner.invoke(app, ["export-policy", "--profile", "does-not-exist-profile"])
-    assert res.exit_code != 0
+    assert res.exit_code == 2
+    assert not isinstance(res.exception, InvalidInputError)
 
 
 # --- Renderer / validator units ---------------------------------------------
