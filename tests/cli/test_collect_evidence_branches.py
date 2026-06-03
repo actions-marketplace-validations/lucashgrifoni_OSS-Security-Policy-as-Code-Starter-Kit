@@ -49,6 +49,15 @@ def test_collect_dry_run_with_env_probe(tmp_path: Path, monkeypatch: pytest.Monk
     assert "ghp_secretvalue" not in res.output  # value never echoed
 
 
+def test_collect_dry_run_rejects_unknown_platform(tmp_path: Path) -> None:
+    """A typo'd platform must fail validation (exit 2) even under --dry-run, instead of
+    printing a misleading empty preview at exit 0. Regression for the dry-run branch that
+    short-circuited before platform validation."""
+    res = runner.invoke(app, ["collect-evidence", "--target", str(tmp_path), "--platform", "githhub", "--dry-run"])
+    assert res.exit_code == 2, res.output
+    assert "collect-evidence dry-run" not in res.output  # never reached the preview
+
+
 def test_env_probe_status(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("X_PROBE", "v")
     assert ev._env_probe_status("X_PROBE") == "set"

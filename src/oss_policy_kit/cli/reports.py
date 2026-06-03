@@ -17,6 +17,11 @@ from oss_policy_kit.cli.common import (
 from oss_policy_kit.cli.help_text import CMD_PANEL_EVALUATE, DIFF_REPORTS_EPILOG
 from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
 
+# Formats accepted by render_drift_report. Validated here (consistent with the other
+# subcommands) so a typo like ``--format markdwn`` fails loudly with exit 2 instead of
+# silently falling back to the Rich table and corrupting a CI artifact.
+_DIFF_FORMATS: tuple[str, ...] = ("table", "json", "markdown", "md")
+
 
 @app.command("diff-reports", epilog=DIFF_REPORTS_EPILOG, rich_help_panel=CMD_PANEL_EVALUATE)
 def diff_reports_cmd(
@@ -38,6 +43,8 @@ def diff_reports_cmd(
     """Compare two evaluation reports and show posture drift."""
 
     try:
+        if fmt.strip().lower() not in _DIFF_FORMATS:
+            raise InvalidInputError(f"--format must be one of: {', '.join(_DIFF_FORMATS)} (got {fmt!r}).")
         if not before.is_file():
             raise InvalidInputError(f"--before not found: {before}")
         if not after.is_file():

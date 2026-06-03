@@ -78,9 +78,15 @@ def _load_evaluation_report(target: Path, explicit_report: Path | None) -> dict[
     for c in candidates:
         if c.is_file():
             try:
-                return dict(json.loads(c.read_text(encoding="utf-8")))
+                parsed = json.loads(c.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:
                 raise InvalidInputError(f"Failed to parse {c}: {exc}") from exc
+            if not isinstance(parsed, dict):
+                raise InvalidInputError(
+                    f"Evaluation report {c} must be a JSON object, got {type(parsed).__name__}. "
+                    "Pass a report produced by `oss-policy-kit evaluate`, or a correct --report path."
+                )
+            return parsed
     tried = ", ".join(str(c) for c in candidates)
     raise InvalidInputError(
         "No evaluation report found. Run `oss-policy-kit evaluate --target <repo>` first, "

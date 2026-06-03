@@ -30,6 +30,12 @@ from oss_policy_kit.infrastructure.collectors.gitlab_collector import (
 )
 from oss_policy_kit.infrastructure.git_remote import read_github_repo_slug_from_git_config
 
+# Single source of truth for the platforms collect-evidence supports. Used to reject
+# unknown --platform values early — including under --dry-run, which previously skipped
+# validation and printed a misleading empty preview (exit 0) for a typo like "githhub",
+# even though a real run would reject it with exit 2.
+_COLLECT_PLATFORMS: tuple[str, ...] = ("github", "gitlab", "azure", "aws")
+
 _COLLECT_PREVIEW: dict[str, list[tuple[str, str]]] = {
     "github": [
         ("branch-protection.json", "GET /repos/{owner}/{repo}/branches/{default}/protection"),
@@ -320,6 +326,8 @@ def collect_evidence_cmd(
 
     try:
         plat = platform.strip().lower()
+        if plat not in _COLLECT_PLATFORMS:
+            raise InvalidInputError(f"Unsupported --platform {platform!r}; use {', '.join(_COLLECT_PLATFORMS)}.")
         if dry_run:
             # Dry-run never touches the filesystem; do not require the target to exist.
             preview_target = Path(str(target)).expanduser().resolve()

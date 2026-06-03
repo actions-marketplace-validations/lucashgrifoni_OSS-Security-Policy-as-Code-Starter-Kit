@@ -77,8 +77,8 @@ jobs:
 
       - name: Property-based tests
         # Append property-test coverage and enforce the combined floor
-        # (fail_under=72 in pyproject; stated explicitly here as the gate).
-        run: python -m pytest tests/property/ -v --hypothesis-show-statistics --cov=oss_policy_kit --cov-append --cov-report=term-missing --cov-fail-under=72
+        # (fail_under=88 in pyproject; stated explicitly here as the gate).
+        run: python -m pytest tests/property/ -v --hypothesis-show-statistics --cov=oss_policy_kit --cov-append --cov-report=term-missing --cov-fail-under=88
 
       - name: CLI help smoke
         run: |
