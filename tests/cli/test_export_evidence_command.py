@@ -148,6 +148,19 @@ def test_export_unparseable_report(tmp_path: Path) -> None:
     assert res.exit_code == 2  # clean OssPolicyKitError -> Exit(2)
 
 
+def test_export_non_object_report(tmp_path: Path) -> None:
+    """A report that is valid JSON but not an object is a load error (Exit 2), not an
+    uncaught internal crash (Exit 3). Regression: ``dict([1,2,3])`` raised TypeError."""
+    for payload in ("[1, 2, 3]", '"a string"', "42", "null"):
+        rep = tmp_path / "notobj.json"
+        rep.write_text(payload, encoding="utf-8")
+        res = runner.invoke(
+            app, ["export-evidence", "--target", str(tmp_path), "--format", "sarif", "--report", str(rep)]
+        )
+        assert res.exit_code == 2, f"payload {payload!r} -> {res.exit_code}\n{res.output}"
+        assert "Unexpected error" not in res.output, f"payload {payload!r} leaked an internal traceback path"
+
+
 def test_render_helpers_directly() -> None:
     chain = ee._render_chainloop(_REPORT)
     assert chain["subject"]["profile"] == "github-level-1"
