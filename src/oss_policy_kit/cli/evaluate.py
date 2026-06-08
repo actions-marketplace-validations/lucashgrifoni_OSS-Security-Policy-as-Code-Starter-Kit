@@ -167,6 +167,16 @@ def cli_root(
         ),
         rich_help_panel=OPT_PANEL_EVIDENCE,
     ),
+    applicability_engine: bool = typer.Option(
+        False,
+        "--applicability-engine/--no-applicability-engine",
+        help=(
+            "Opt-in (ADR-028): resolve controls that declare a precondition to NOT_APPLICABLE "
+            "consistently when it is unmet, instead of per-evaluator ad-hoc handling. Default off; "
+            "enabling it never changes a control whose precondition is met."
+        ),
+        rich_help_panel=OPT_PANEL_EVIDENCE,
+    ),
     debug: bool = typer.Option(
         False,
         "--debug",
@@ -219,6 +229,7 @@ def cli_root(
             quiet=quiet,
             report_json_contract=report_json_contract.strip().lower().removeprefix("v"),
             use_insights_evidence=use_insights_evidence,
+            applicability_engine=applicability_engine,
         )
     )
 
@@ -359,6 +370,16 @@ def evaluate_cmd(
         ),
         rich_help_panel=OPT_PANEL_EVIDENCE,
     ),
+    applicability_engine: bool = typer.Option(
+        False,
+        "--applicability-engine/--no-applicability-engine",
+        help=(
+            "Opt-in (ADR-028): resolve controls that declare a precondition to NOT_APPLICABLE "
+            "consistently when it is unmet, instead of per-evaluator ad-hoc handling. Default off; "
+            "enabling it never changes a control whose precondition is met."
+        ),
+        rich_help_panel=OPT_PANEL_EVIDENCE,
+    ),
 ) -> None:
     """Evaluate a local repository clone against a bundled profile.
 
@@ -394,5 +415,6 @@ def evaluate_cmd(
             sarif_output=sarif_output,
             include_absolute_path=include_absolute_path,
             use_insights_evidence=use_insights_evidence,
+            applicability_engine=applicability_engine,
         )
     )

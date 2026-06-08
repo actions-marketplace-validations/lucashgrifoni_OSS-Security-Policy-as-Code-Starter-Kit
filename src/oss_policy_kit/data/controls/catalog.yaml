@@ -435,6 +435,17 @@ controls:
     lifecycle: stable
     assurance: deterministic
     weight: 2
+    # ADR-028 applicability pilot: this control only applies when a container build
+    # file exists. The evaluator already returns NOT_APPLICABLE without one; declaring
+    # the precondition makes it inspectable and consistent (consulted only with the
+    # opt-in applicability engine; default runs are unchanged).
+    applicability:
+      requires_any_files:
+        - "**/Dockerfile"
+        - "**/Dockerfile.*"
+        - "**/*.Dockerfile"
+        - "**/Containerfile"
+        - "**/Containerfile.*"
   - id: CONT-IMAGE-002
     title: Dockerfile declares non-root USER
     category: ci_cd
@@ -442,6 +453,13 @@ controls:
     lifecycle: stable
     assurance: deterministic
     weight: 2
+    applicability:
+      requires_any_files:
+        - "**/Dockerfile"
+        - "**/Dockerfile.*"
+        - "**/*.Dockerfile"
+        - "**/Containerfile"
+        - "**/Containerfile.*"
   - id: CONT-IMAGE-003
     title: Container image scanning signal in CI
     category: vulnerability_management
@@ -449,6 +467,13 @@ controls:
     lifecycle: stable
     assurance: signal
     weight: 1
+    applicability:
+      requires_any_files:
+        - "**/Dockerfile"
+        - "**/Dockerfile.*"
+        - "**/*.Dockerfile"
+        - "**/Containerfile"
+        - "**/Containerfile.*"
   - id: ORG-MFA-001
     title: Organization MFA enforcement posture evidenced
     category: platform

@@ -37,6 +37,19 @@ _ASSURANCE_VALUES = frozenset({"deterministic", "signal", "evidence-backed"})
 
 
 @dataclass(frozen=True, slots=True)
+class ApplicabilitySpec:
+    """Declared, inspectable precondition for a control (ADR-028).
+
+    ``requires_any_files`` is a list of glob patterns (relative to the repo root);
+    the control is applicable when at least one pattern matches a real file. The
+    predicate is purely filesystem-inspectable — no code execution. Empty means
+    "always applicable" (equivalent to no precondition).
+    """
+
+    requires_any_files: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class ControlSpec:
     """Catalog entry for a control."""
 
@@ -48,6 +61,9 @@ class ControlSpec:
     assurance: str = "signal"
     deprecation_note: str | None = None
     weight: int = 1
+    #: Optional declared precondition (ADR-028). Only consulted when the
+    #: applicability engine is enabled (opt-in); otherwise ignored.
+    applicability: ApplicabilitySpec | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +81,34 @@ def bundled_kit_root() -> Path:
     """Directory containing packaged `controls/` and `profiles/`."""
 
     return Path(__file__).resolve().parent.parent / "data"
+
+
+_APPLICABILITY_KEYS = frozenset({"requires_any_files"})
+
+
+def _parse_applicability(cid: str, raw: object) -> ApplicabilitySpec | None:
+    """Parse and validate an optional ``applicability`` block (ADR-028); fail-closed on typos.
+
+    Returns ``None`` when no block is declared. Raises :class:`LoadError` for a
+    malformed block so a typo cannot silently disable a precondition.
+    """
+
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise LoadError(f"Control {cid}: 'applicability' must be a mapping.")
+    unknown = set(raw) - _APPLICABILITY_KEYS
+    if unknown:
+        raise LoadError(
+            f"Control {cid}: unknown applicability key(s) {sorted(unknown)}; expected {sorted(_APPLICABILITY_KEYS)}."
+        )
+    files = raw.get("requires_any_files", [])
+    if not isinstance(files, list) or not files:
+        raise LoadError(f"Control {cid}: applicability.requires_any_files must be a non-empty list of glob strings.")
+    patterns = tuple(str(p).strip() for p in files if str(p).strip())
+    if not patterns:
+        raise LoadError(f"Control {cid}: applicability.requires_any_files contains no usable glob patterns.")
+    return ApplicabilitySpec(requires_any_files=patterns)
 
 
 def load_catalog(controls_yaml: Path) -> dict[str, ControlSpec]:
@@ -107,6 +151,7 @@ def load_catalog(controls_yaml: Path) -> dict[str, ControlSpec]:
             assurance=raw_assurance,
             deprecation_note=dep_s,
             weight=weight,
+            applicability=_parse_applicability(cid, item.get("applicability")),
         )
     if not out:
         raise LoadError("Catalog contains no controls")

@@ -10,6 +10,7 @@ from typing import Any
 
 import oss_policy_kit
 from oss_policy_kit.adapters.scorecard_json import ScorecardBundle
+from oss_policy_kit.application.applicability import resolve_applicability
 from oss_policy_kit.application.clock import report_generated_at
 from oss_policy_kit.application.evaluators import EVALUATOR_REGISTRY, EvalContext
 from oss_policy_kit.application.evidence_placeholders import has_placeholder_values
@@ -260,6 +261,26 @@ def _collect_parse_warnings(workflows: Any, azure_pipelines: Any, aws_ci: Any, g
     return out
 
 
+def _not_applicable_result(cid: str, spec: ControlSpec, profile: ProfileSpec, reason: str) -> ControlResult:
+    """Build a NOT_APPLICABLE result for a control whose declared precondition is unmet (ADR-028)."""
+
+    return ControlResult(
+        control_id=cid,
+        title=spec.title,
+        category=spec.category,
+        status=ControlStatus.NOT_APPLICABLE,
+        profile=profile.id,
+        evidence_sources=[],
+        confidence="high",
+        reason=reason,
+        remediation="No action required while the declared precondition is unmet.",
+        lifecycle=spec.lifecycle,
+        assurance=spec.assurance,
+        deprecation_note=spec.deprecation_note,
+        weight=spec.weight,
+    )
+
+
 def _evaluate_control(
     cid: str,
     ctx: EvalContext,
@@ -267,12 +288,25 @@ def _evaluate_control(
     catalog: dict[str, ControlSpec],
     waivers: dict[str, Any],
     operational_warnings: list[str],
+    *,
+    applicability_engine: bool = False,
 ) -> ControlResult:
-    """Run one control's evaluator, apply any waiver, and build its :class:`ControlResult`."""
+    """Run one control's evaluator, apply any waiver, and build its :class:`ControlResult`.
+
+    When *applicability_engine* is enabled (ADR-028, opt-in) and the control declares a
+    precondition, an unmet precondition resolves to ``NOT_APPLICABLE`` consistently and the
+    evaluator is not run. Default off → unchanged behavior.
+    """
 
     if cid not in catalog:
         raise LoadError(f"Profile references unknown control '{cid}'")
     spec = catalog[cid]
+    if applicability_engine and spec.applicability is not None:
+        applicable, na_reason = resolve_applicability(spec.applicability, ctx.repo_root)
+        if not applicable:
+            if ctx.verbose_emit is not None:
+                ctx.verbose_emit(f"[dim]→ {cid} ({spec.title}) — not applicable (precondition unmet)[/dim]")
+            return _not_applicable_result(cid, spec, profile, na_reason or "Not applicable.")
     evaluator = EVALUATOR_REGISTRY.get(cid)
     if evaluator is None:
         raise LoadError(f"No evaluator implemented for control '{cid}'")
@@ -334,6 +368,7 @@ def evaluate_repository(
     report_json_contract: str = "0.3",
     live_collection: LiveCollectionMetadata | None = None,
     insights_evidence: InsightsEvidence | None = None,
+    applicability_engine: bool = False,
 ) -> ExecutionReport:
     """Run all profile controls against a local repository clone.
 
@@ -363,7 +398,10 @@ def evaluate_repository(
     operational_warnings.extend(_collect_parse_warnings(workflows, azure_pipelines, aws_ci, gitlab_ci))
 
     results = [
-        _evaluate_control(cid, ctx, profile, catalog, waivers, operational_warnings) for cid in profile.control_ids
+        _evaluate_control(
+            cid, ctx, profile, catalog, waivers, operational_warnings, applicability_engine=applicability_engine
+        )
+        for cid in profile.control_ids
     ]
 
     generated_at = report_generated_at()

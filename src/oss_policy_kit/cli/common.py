@@ -313,6 +313,9 @@ class EvaluateRequest:
     #: ADR-033: opt-in consumption of a target's SECURITY-INSIGHTS.yml as self-attested
     #: evidence for the disclosure-control allowlist. Default off (additive evaluation).
     use_insights_evidence: bool = False
+    #: ADR-028: opt-in applicability engine. When True, controls that declare a
+    #: precondition resolve to NOT_APPLICABLE consistently when it is unmet. Default off.
+    applicability_engine: bool = False
 
 
 def _resolve_eval_target(req: EvaluateRequest) -> Path:
@@ -497,6 +500,7 @@ def _run_evaluate(req: EvaluateRequest) -> None:
         verbose_emit=_make_verbose_emit(req.verbose),
         report_json_contract=req.report_json_contract,
         insights_evidence=insights_evidence,
+        applicability_engine=req.applicability_engine,
     )
     out = req.output_dir.resolve()
     json_path, md_path = _write_eval_reports(report, req, out)
