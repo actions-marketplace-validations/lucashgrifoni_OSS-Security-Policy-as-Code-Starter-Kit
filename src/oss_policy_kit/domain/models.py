@@ -15,6 +15,11 @@ class ControlStatus(StrEnum):
     FAIL = "fail"
     MANUAL_REVIEW_REQUIRED = "manual-review-required"
     SELF_ATTESTED = "self-attested"
+    # ATTESTED (ADR-028, v8.x): a passing verdict anchored on a *verified* attestation
+    # (in-toto + cosign keyless), distinct from SELF_ATTESTED (maintainer self-claim) and
+    # from a deterministic PASS. Defined as a first-class state here; no bundled evaluator
+    # emits it yet — emission lands in the v8.x applicability/attestation work (opt-in).
+    ATTESTED = "attested"
     NOT_EVALUATED = "not-evaluated"
     NOT_OBSERVABLE = "not-observable"
     NOT_APPLICABLE = "not-applicable"

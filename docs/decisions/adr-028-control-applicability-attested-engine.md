@@ -1,7 +1,7 @@
 # ADR-028 - Formalize the applicability engine and activate the ATTESTED state (v8.0.0)
 
-- **Status**: proposed (targets v8.0.0, BREAKING) — pending maintainer ratification (roadmap plan §11.2, §11.3)
-- **Date**: 2026-05-25
+- **Status**: accepted (2026-06-08) — targets v8.x; staged opt-in first, the default flip is the v8.0.0 BREAKING step (gated, §D6 below). Ratified per roadmap plan §11.2–§11.3.
+- **Date**: 2026-05-25 (proposed); 2026-06-08 (accepted)
 - **Context window**: v8.x roadmap horizon — "Gemara & OSPS conformance alignment"
 - **Related**: ADR-013 (reports/2.0 five-state vocabulary), ADR-027 (default flip), ADR-018 (OSPS Baseline 2026 / Scorecard v6), ADR-017 (source-built container release / cosign), `ROADMAP.md`
 
@@ -52,6 +52,35 @@ In **v8.0.0**, formalize applicability and activate `ATTESTED`:
 
 Assurance honesty (a core non-goal guard) is preserved: `ATTESTED` requires a verified
 attestation, never a self-claim; `NOT_APPLICABLE` never inflates a pass.
+
+## Ratified decisions (2026-06-08)
+
+The maintainer ratified the following, resolving the open questions from §11.2–§11.3:
+
+- **D1 — `ATTESTED` is a distinct domain state.** `ControlStatus.ATTESTED` is added, separate
+  from `SELF_ATTESTED` (maintainer self-claim, low assurance) and from a deterministic `PASS`.
+  The three are never collapsed.
+- **D2 — Scoring.** `ATTESTED` counts as **passing** (in `_PASSING_STATUSES`) but keeps its **own
+  line** in `summary_by_status`; existing `PASS` controls are **not** migrated, so activating the
+  state causes **zero score inflation**. At the CI-gate dimension it rolls up under
+  `passed_observation` (the assurance distinction is carried by the per-control status field).
+- **D3 — Precondition form.** Applicability is a declared, inspectable `applicability` block in
+  control metadata (predicates over the clone, e.g. `requires_files`/`requires_stack`); no arbitrary
+  code execution; schema-validated at load. (Engine wiring is PR2.)
+- **D4 — Attestation path.** `ATTESTED` is produced only via a verified in-toto + cosign-keyless
+  attestation (reusing ADR-017), **fail-closed**: absent/invalid attestation falls back to the base
+  status, never a self-claim. (PR3.)
+- **D5 — Rollout flag.** Applicability engine + `ATTESTED` emission ship **opt-in, default off**, for
+  ≥1 minor cycle.
+- **D6 — Default-flip gate.** The breaking flip to default (v8.0.0) is gated on Scorecard v6 / OSPS
+  conformance reaching **GA** (today `ossf/scorecard#4952` is a PR/draft); until then, opt-in only.
+
+**Increment shipped under this ADR — PR1 (2026-06-08, additive):** `ControlStatus.ATTESTED` added as
+a first-class state and wired end-to-end (scoring per D2, `gate_role` mapping, `reports/1.0` JSON
+schema enum, `reports/2.0` status map, CLI table rendering, status ordering). **No bundled evaluator
+emits it yet**, so current outputs are unchanged. PR2 (applicability engine, opt-in), PR3 (verified
+attestation → `ATTESTED`), PR4 (impact diff + migration guide), and PR5 (the gated default flip) follow
+per the local execution plan `melhorias/ativos/planos/v8.0.0-control-states-applicability-attested-plan-2026-06-08.md`.
 
 ## Alternatives considered
 

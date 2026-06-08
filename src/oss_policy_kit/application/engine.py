@@ -102,7 +102,7 @@ REPORTS_V2_STATUS_MAP: dict[str, tuple[str, str | None]] = {
     "not-applicable": ("NOT_APPLICABLE", None),
     "skipped": ("UNKNOWN", "skipped-by-flag"),
     "error": ("UNKNOWN", "evaluator-error"),
-    "attested": ("ATTESTED", None),  # reserved for evidence-backed PROV-VERIFY-061 PASS in v6.0.0
+    "attested": ("ATTESTED", None),  # ADR-028: verified-attestation pass (in-toto+cosign); distinct from PASS
     "self-attested": ("SELF_ATTESTED", None),  # ADR-033: opt-in Insights self-reported evidence
 }
 
@@ -173,7 +173,9 @@ def _summarize(results: list[ControlResult]) -> dict[str, int]:
     return dict(sorted(counts.items()))
 
 
-_PASSING_STATUSES = frozenset({ControlStatus.PASS, ControlStatus.SELF_ATTESTED, ControlStatus.WAIVED})
+_PASSING_STATUSES = frozenset(
+    {ControlStatus.PASS, ControlStatus.ATTESTED, ControlStatus.SELF_ATTESTED, ControlStatus.WAIVED}
+)
 _SCORING_EXCLUDED = frozenset({ControlStatus.NOT_APPLICABLE, ControlStatus.NOT_EVALUATED})
 
 

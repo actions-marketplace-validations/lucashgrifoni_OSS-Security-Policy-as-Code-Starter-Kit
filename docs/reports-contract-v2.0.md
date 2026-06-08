@@ -35,7 +35,7 @@
 | `not-applicable` | `NOT_APPLICABLE` | Direct. |
 | `skipped` | `UNKNOWN` with `reason: "skipped-by-flag"` | Promoted into `UNKNOWN` with reason; consumers that branched on `skipped` should branch on `reason`. |
 | `error` | `UNKNOWN` with `reason: "evaluator-error"` | Errors are not failures of the target; they are gaps in the kit's ability to evaluate. |
-| (new) | `ATTESTED` | New state. Reserved for controls anchored on a verified attestation. Only `PROV-VERIFY-061` returns `ATTESTED` in v6.0.0. |
+| (new) | `ATTESTED` | Defined state for controls anchored on a verified attestation. It is a first-class state in the vocabulary, but **no bundled evaluator emits it yet** — activation (resolving a verified in-toto + cosign attestation to `ATTESTED`) is the v8.x applicability/attestation work, opt-in (ADR-028). |
 
 ## Selecting a contract
 
@@ -89,7 +89,7 @@ For each consumer of `evaluation-report.json`:
 2. **Update the contract identifier check**. `reports/2.0` advertises `"contract_version": "reports/2.0"` at the top.
 3. **Re-map status switches**. Use the mapping table above. The most common gotcha: `degraded` is now `FAIL` with `degraded: true`; consumers that treated `degraded` as PASS-ish must switch to the explicit flag.
 4. **Handle `UNKNOWN.reason`** for any logic that previously branched on `manual-review-required`, `skipped`, or `error`. All three converge under `UNKNOWN` with distinct `reason` values.
-5. **Optional**: enable `ATTESTED` highlighting. The new state is opt-in; consumers that ignore it still see PASS-shaped behavior because the underlying control is also `PASS`-grade.
+5. **Optional**: prepare for `ATTESTED` highlighting. The state is defined but not yet emitted by any bundled evaluator (activation is the v8.x opt-in work, ADR-028); when enabled it scores as a pass, so consumers that ignore it still see pass-shaped gate behavior.
 
 ## Why ATTESTED is its own state
 

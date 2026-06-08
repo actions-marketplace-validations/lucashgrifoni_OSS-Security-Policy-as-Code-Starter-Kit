@@ -116,7 +116,9 @@ def compute_summary_by_gate_role(summary_by_status: dict[str, int]) -> dict[str,
     out = {
         "ci_blocking_fail": _n("fail"),
         "human_review_gate": _n("manual-review-required"),
-        "passed_observation": _n("pass"),
+        # ATTESTED (ADR-028) rolls up under passed_observation at the gate dimension; the
+        # standalone "attested" count stays visible in summary_by_status.
+        "passed_observation": _n("pass") + _n("attested"),
         "self_attested_declarative": _n("self-attested"),
         "not_evaluated_limit": _n("not-evaluated"),
         "waived": _n("waived"),

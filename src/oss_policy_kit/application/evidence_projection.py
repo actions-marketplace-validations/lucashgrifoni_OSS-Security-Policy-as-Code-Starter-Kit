@@ -209,6 +209,9 @@ def _trust_level(
 def _gate_role(status: ControlStatus) -> str:
     return {
         ControlStatus.PASS: "passed_observation",
+        # ATTESTED (ADR-028) is a pass at the CI-gate dimension (does not block); the
+        # assurance distinction vs. plain PASS is carried by the per-control status field.
+        ControlStatus.ATTESTED: "passed_observation",
         ControlStatus.FAIL: "ci_blocking_fail",
         ControlStatus.MANUAL_REVIEW_REQUIRED: "human_review_gate",
         ControlStatus.SELF_ATTESTED: "self_attested_declarative",

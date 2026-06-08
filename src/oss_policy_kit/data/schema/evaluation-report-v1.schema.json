@@ -230,6 +230,7 @@
             "fail",
             "manual-review-required",
             "self-attested",
+            "attested",
             "not-evaluated",
             "not-observable",
             "not-applicable",

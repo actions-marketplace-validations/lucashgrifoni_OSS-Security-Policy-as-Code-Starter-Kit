@@ -240,6 +240,7 @@ def render_eval_results_table(report: ExecutionReport, *, unicode_icons: bool = 
 
     status_colors: dict[str, str] = {
         "pass": "green",
+        "attested": "green",
         "self-attested": "green",
         "fail": "red",
         "not-applicable": "dim",
@@ -252,6 +253,7 @@ def render_eval_results_table(report: ExecutionReport, *, unicode_icons: bool = 
     if unicode_icons:
         status_icons = {
             "pass": "✓",
+            "attested": "★",
             "self-attested": "✓",
             "fail": "✗",
             "not-applicable": "—",
@@ -263,6 +265,7 @@ def render_eval_results_table(report: ExecutionReport, *, unicode_icons: bool = 
     else:
         status_icons = {
             "pass": "+",
+            "attested": "A",
             "self-attested": "+",
             "fail": "x",
             "not-applicable": "-",

@@ -20,6 +20,7 @@ OutputFormat = Literal["human", "json"]
 FailOnPolicy = Literal["none", "fail", "degraded"]
 STATUS_ORDER: tuple[str, ...] = (
     "pass",
+    "attested",
     "fail",
     "manual-review-required",
     "self-attested",
