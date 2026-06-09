@@ -33,6 +33,7 @@ Repository entry points:
 - [sigstore-rekor-v2.md](sigstore-rekor-v2.md) - Sigstore Rekor v2 tile-based transparency-log notes
 - [scorecard-mapping.md](scorecard-mapping.md) - how Scorecard fits as supplemental evidence
 - [osps-mapping.md](osps-mapping.md) - mapping notes between this kit and OSS baseline concepts
+- [osps-baseline-2026-coverage.md](osps-baseline-2026-coverage.md) - generated, advisory per-criterion + per-level (L1/L2/L3) coverage of OSPS Baseline v2026.02.19, with honest gaps
 
 ## For Maintainers
 

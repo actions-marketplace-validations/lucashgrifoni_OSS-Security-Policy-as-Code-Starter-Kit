@@ -12,6 +12,11 @@ S2C2F, CIS SSCS, AWS Well-Architected, Azure DevOps Security), see
 
 ## OSPS maturity ladder ↔ kit profile ladder
 
+> For the **per-criterion, snapshot-pinned** view (every `OSPS-AC-01`-style criterion of OSPS
+> Baseline v2026.02.19, its L1/L2/L3 levels, the bundled control that signals it, and the honest
+> gaps), see the generated [osps-baseline-2026-coverage.md](osps-baseline-2026-coverage.md)
+> (ADR-037). The ladder below stays as a higher-level narrative.
+
 OSPS organizes expectations into three levels — **starter / advanced / mature** — that align
 roughly with the kit's `*-level-1` / `*-level-2` / `*-level-3` ladder. The kit's
 `release-hardening-*` track adds release-discipline expectations on top of each ladder step.

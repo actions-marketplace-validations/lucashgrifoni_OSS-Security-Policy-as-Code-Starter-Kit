@@ -42,3 +42,13 @@ rather than a false PASS.
 The `osps-baseline-2026-1` profile maps existing controls to the four OSPS
 Baseline areas: Access Control, Build & Release, Documentation, and Quality &
 Security Assessment. See the profile definition for the per-area control list.
+
+## Per-criterion + per-level coverage (generated)
+
+For the **honest, per-criterion** view — every OSPS Baseline v2026.02.19
+criterion (`OSPS-AC-01` …), its maturity levels, the bundled control that
+provides a clone-visible signal toward it (with assurance), and the real gaps —
+see the generated [`osps-baseline-2026-coverage.md`](osps-baseline-2026-coverage.md)
+(source of truth: `src/oss_policy_kit/data/frameworks/osps-baseline-2026.yaml`;
+regenerate with `python scripts/generate-osps-coverage.py`). That table is
+advisory and is **not** a conformance certification; see ADR-037.
