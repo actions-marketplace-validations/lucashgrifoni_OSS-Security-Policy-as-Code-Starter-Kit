@@ -49,8 +49,12 @@ verification verdict.
 3. **Auto-collect via API now.** Deferred — org Actions policy needs an org-admin token; release
    attestation via API is a follow-up. Evidence-file-driven first, exactly as `GH-PROV-023` shipped
    before `PROV-VERIFY-061`.
-4. **Resolve the release attestation to `ATTESTED` (ADR-028).** Deferred — cryptographic verification of
-   the release attestation is a separate, opt-in attestation path; these controls stay PASS/FAIL for now.
+4. **Resolve the release attestation to `ATTESTED` (ADR-028).** **Implemented** (opt-in,
+   fail-closed): when `--enable-attested` is set and `github-release-immutability.json` carries a
+   `verification` block with transparency-log inclusion and a fresh `verified_at`, `GH-IMMUTREL-070`
+   resolves to `ATTESTED` instead of `PASS` (mirrors `PROV-VERIFY-061`). Any verification gap keeps the
+   historical `PASS` — never a false `ATTESTED`. The crypto verification runs in CI; the kit validates
+   the record. `ORG-ACTPOL-071` stays PASS/FAIL (org config posture is not an attestable artifact).
 
 ## Consequences
 

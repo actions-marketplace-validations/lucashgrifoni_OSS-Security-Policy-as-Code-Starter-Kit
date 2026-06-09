@@ -7,6 +7,7 @@ Both controls are evidence-backed: absent -> manual review (NOT_EVALUATED), pres
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 from oss_policy_kit.application.evaluators import EVALUATOR_REGISTRY
@@ -19,7 +20,7 @@ from oss_policy_kit.infrastructure.azure_pipeline_parser import AzurePipelineAna
 from oss_policy_kit.infrastructure.workflow_parser import WorkflowAnalysis
 
 
-def _ctx(tmp_path: Path) -> gh.EvalContext:
+def _ctx(tmp_path: Path, *, enable_attested: bool = False) -> gh.EvalContext:
     return gh.EvalContext(
         repo_root=tmp_path,
         profile_id="github-release-hardening-3",
@@ -27,7 +28,16 @@ def _ctx(tmp_path: Path) -> gh.EvalContext:
         azure_pipelines=AzurePipelineAnalysis(),
         aws_ci=AwsCiAnalysis(),
         scorecard=None,
+        enable_attested=enable_attested,
     )
+
+
+def _fresh_verification(*, transparency: bool = True) -> dict:
+    return {
+        "method": "gh-attestation-verify",
+        "verified_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "transparency_log_inclusion": transparency,
+    }
 
 
 def _ev(tmp_path: Path, name: str, payload: dict) -> None:
@@ -95,6 +105,52 @@ def test_immutrel_fail_both_off(tmp_path: Path) -> None:
 def test_immutrel_malformed_is_fail(tmp_path: Path) -> None:
     _ev(tmp_path, "github-release-immutability.json", {"schema_version": "wrong", "posture": {}})
     assert gh.eval_gh_immutrel_070(_ctx(tmp_path)).status == ControlStatus.FAIL
+
+
+# --------------------------------------------------------------------------- #
+# GH-IMMUTREL-070 ATTESTED upgrade (ADR-028, opt-in, fail-closed)
+# --------------------------------------------------------------------------- #
+
+
+def _immutrel_attested_ev(verification: dict) -> dict:
+    payload = _immutrel_ev({"immutable_releases_enabled": True, "release_attestation_present": True})
+    payload["verification"] = verification
+    return payload
+
+
+def test_immutrel_attested_when_enabled_and_verified(tmp_path: Path) -> None:
+    _ev(tmp_path, "github-release-immutability.json", _immutrel_attested_ev(_fresh_verification()))
+    out = gh.eval_gh_immutrel_070(_ctx(tmp_path, enable_attested=True))
+    assert out.status == ControlStatus.ATTESTED
+
+
+def test_immutrel_pass_not_attested_when_flag_off(tmp_path: Path) -> None:
+    # Valid verification present, but --enable-attested is off -> stays PASS (default behavior).
+    _ev(tmp_path, "github-release-immutability.json", _immutrel_attested_ev(_fresh_verification()))
+    out = gh.eval_gh_immutrel_070(_ctx(tmp_path, enable_attested=False))
+    assert out.status == ControlStatus.PASS
+
+
+def test_immutrel_failclosed_without_verification(tmp_path: Path) -> None:
+    # enable_attested on, but no verification record -> fail-closed to PASS, never ATTESTED.
+    _ev(
+        tmp_path,
+        "github-release-immutability.json",
+        _immutrel_ev({"immutable_releases_enabled": True, "release_attestation_present": True}),
+    )
+    out = gh.eval_gh_immutrel_070(_ctx(tmp_path, enable_attested=True))
+    assert out.status == ControlStatus.PASS
+
+
+def test_immutrel_failclosed_without_transparency(tmp_path: Path) -> None:
+    # Verification present but transparency_log_inclusion=false -> fail-closed to PASS.
+    _ev(
+        tmp_path,
+        "github-release-immutability.json",
+        _immutrel_attested_ev(_fresh_verification(transparency=False)),
+    )
+    out = gh.eval_gh_immutrel_070(_ctx(tmp_path, enable_attested=True))
+    assert out.status == ControlStatus.PASS
 
 
 # --------------------------------------------------------------------------- #

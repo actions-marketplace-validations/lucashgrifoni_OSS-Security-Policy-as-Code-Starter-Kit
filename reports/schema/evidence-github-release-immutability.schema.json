@@ -20,6 +20,22 @@
         "attestation_subject_digest_recorded": { "type": "boolean" }
       }
     },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "verified_at", "transparency_log_inclusion"],
+      "description": "Optional. Records that the release attestation was independently verified (in CI). Consumed by GH-IMMUTREL-070's ATTESTED upgrade (opt-in --enable-attested).",
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": ["gh-attestation-verify", "cosign-verify-bundle", "cosign-verify-attestation", "in-toto-verify", "other"]
+        },
+        "verified_at": { "type": "string", "format": "date-time" },
+        "transparency_log_inclusion": { "type": "boolean" },
+        "issuer": { "type": "string" },
+        "source": { "type": "string" }
+      }
+    },
     "collection": {
       "type": "object",
       "additionalProperties": false,

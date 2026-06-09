@@ -21,6 +21,7 @@ from oss_policy_kit.application.evaluators._shared import (
     _secret_scanning_schema,
     _self_hosted_workflow_paths,
     _validate_json_evidence,
+    _verification_freshness_status,
     _workflow_text,
     _workflow_text_has_long_lived_cloud_secret,
     contextlib,
@@ -441,6 +442,24 @@ def eval_gh_plat_024(ctx: EvalContext) -> EvalOutcome:
     )
 
 
+def _immutrel_attested_ok(verification: object, *, max_age_days: int) -> bool:
+    """True iff the release-attestation verification record is complete + fresh (fail-closed).
+
+    Mirrors PROV-VERIFY-061: requires transparency-log inclusion and a fresh ``verified_at``.
+    Any missing/invalid/stale field returns False, so the control never upgrades to ATTESTED
+    on an incomplete record.
+    """
+
+    if not isinstance(verification, dict):
+        return False
+    if not verification.get("transparency_log_inclusion"):
+        return False
+    verified_at = verification.get("verified_at")
+    if not isinstance(verified_at, str) or not verified_at.strip():
+        return False
+    return _verification_freshness_status(verified_at, max_age_days=max_age_days) == "fresh"
+
+
 def eval_gh_immutrel_070(ctx: EvalContext) -> EvalOutcome:
     """GH-IMMUTREL-070: GitHub immutable releases / release attestation via explicit evidence.
 
@@ -501,6 +520,26 @@ def eval_gh_immutrel_070(ctx: EvalContext) -> EvalOutcome:
             ),
             evidence_sources=[str(evidence.resolve())],
             confidence="medium",
+            evidence_collection_method=ecm,
+        )
+    # ADR-028 ATTESTED upgrade (opt-in --enable-attested): when the release attestation is
+    # present AND a fresh, transparency-log-confirmed verification record exists, resolve to
+    # ATTESTED instead of PASS. Fail-closed — any verification gap keeps the historical PASS.
+    if (
+        ctx.enable_attested
+        and posture.get("release_attestation_present")
+        and _immutrel_attested_ok(data.get("verification"), max_age_days=ctx.evidence_max_age_days)
+    ):
+        return EvalOutcome(
+            status=ControlStatus.ATTESTED,
+            reason=(
+                "Release attestation independently verified (transparency-log inclusion confirmed, "
+                f"verified_at within {ctx.evidence_max_age_days}-day freshness window). The kit validated "
+                "the CI-produced verification record; it did not itself re-verify the signature."
+            ),
+            remediation="Re-verify the release attestation on each release to keep verified_at fresh.",
+            evidence_sources=[str(evidence.resolve())],
+            confidence="high",
             evidence_collection_method=ecm,
         )
     return EvalOutcome(
