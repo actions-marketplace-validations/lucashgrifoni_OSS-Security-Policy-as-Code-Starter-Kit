@@ -9,9 +9,14 @@ controls (CONT-IMAGE-*), enabling the engine produces the *same* result as today
 from __future__ import annotations
 
 import dataclasses
+import os
+import re
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
+from tests.conftest import ROOT
 from typer.testing import CliRunner
 
 from oss_policy_kit.application.applicability import resolve_applicability
@@ -28,6 +33,7 @@ from oss_policy_kit.domain.errors import LoadError
 from oss_policy_kit.domain.models import ControlStatus
 
 runner = CliRunner()
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 _CATALOG = load_catalog(bundled_kit_root() / "controls" / "catalog.yaml")
 _CONT = ("CONT-IMAGE-001", "CONT-IMAGE-002", "CONT-IMAGE-003")
@@ -174,7 +180,31 @@ def test_cli_applicability_engine_flag(tmp_path: Path) -> None:
 
 
 def test_cli_help_lists_applicability_flag() -> None:
-    # Wide terminal so Rich does not wrap/truncate the long option name.
-    res = runner.invoke(app, ["evaluate", "--help"], env={"COLUMNS": "200"})
-    assert res.exit_code == 0
-    assert "--applicability-engine" in res.output
+    # Run in a real subprocess with a deterministic wide terminal. In-process
+    # CliRunner does not reliably propagate COLUMNS to Rich under CI, so Rich
+    # truncates the long option name (`--applicability-e…`) and the test flakes.
+    # A subprocess honors COLUMNS; we strip ANSI and collapse all whitespace so
+    # the substring assertion survives any wrap/render difference.
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.pathsep.join([str(ROOT / "src"), str(ROOT)])
+    env["NO_COLOR"] = "1"
+    env["TERM"] = "dumb"
+    env["COLUMNS"] = "200"
+    env["LINES"] = "40"
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
+    proc = subprocess.run(
+        [sys.executable, "-m", "oss_policy_kit", "evaluate", "--help"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=env,
+        stdin=subprocess.DEVNULL,
+        timeout=120,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr + proc.stdout
+    no_ansi = _ANSI_RE.sub("", proc.stdout + proc.stderr)
+    assert "--applicability-engine" in "".join(no_ansi.split()), no_ansi
