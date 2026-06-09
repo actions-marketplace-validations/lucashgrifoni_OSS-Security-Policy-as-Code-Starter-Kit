@@ -145,3 +145,107 @@ def test_collect_wraps_network_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(httpx, "Client", boom)
     with pytest.raises(CollectionNetworkError):
         GitHubEvidenceCollector("tok").collect("o/r")
+
+
+# --------------------------------------------------------------------------- #
+# v7.3.0: release immutability (GH-IMMUTREL-070) + org Actions policy (ORG-ACTPOL-071)
+# --------------------------------------------------------------------------- #
+
+_OK_HDR = {"x-ratelimit-remaining": "100"}
+
+
+def _releases_json() -> list:
+    return [
+        {"draft": True, "immutable": False, "tag_name": "v2.0.0-rc"},
+        {"draft": False, "immutable": True, "tag_name": "v1.0.0"},
+    ]
+
+
+def _actions_permissions_json() -> dict:
+    return {"enabled_repositories": "all", "allowed_actions": "selected", "sha_pinning_required": True}
+
+
+def _selected_actions_json() -> dict:
+    return {"github_owned_allowed": True, "verified_allowed": True, "patterns_allowed": ["actions/*@*"]}
+
+
+def _make_client_factory(handler: object):
+    transport = httpx.MockTransport(handler)
+    real_client = httpx.Client
+
+    def _client(**kwargs: object) -> httpx.Client:
+        merged = dict(kwargs)
+        merged["transport"] = transport
+        return real_client(**merged)
+
+    return _client
+
+
+def _full_handler(request: httpx.Request) -> httpx.Response:
+    base = _github_handler(request)
+    if base.status_code != 404:
+        return base
+    path = request.url.path
+    if path == "/repos/o/r/releases":
+        return httpx.Response(200, json=_releases_json(), headers=_OK_HDR)
+    if path == "/orgs/o/actions/permissions":
+        return httpx.Response(200, json=_actions_permissions_json(), headers=_OK_HDR)
+    if path == "/orgs/o/actions/permissions/selected-actions":
+        return httpx.Response(200, json=_selected_actions_json(), headers=_OK_HDR)
+    return httpx.Response(404, json={"message": "unexpected"}, headers=_OK_HDR)
+
+
+def test_collect_release_immutability_and_actions_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(httpx, "Client", _make_client_factory(_full_handler))
+    rows = GitHubEvidenceCollector("tok").collect("o/r")
+    by_key = {r.evidence_key: r.data for r in rows}
+
+    assert "github-release-immutability" in by_key
+    rel = by_key["github-release-immutability"]
+    assert rel["schema_version"] == "github-release-immutability/v1"
+    assert rel["repository"] == "o/r"
+    assert rel["posture"]["immutable_releases_enabled"] is True
+    assert rel["posture"]["release_attestation_present"] is True
+    assert rel["collection"]["mode"] == "api"
+
+    assert "github-actions-policy" in by_key
+    pol = by_key["github-actions-policy"]
+    assert pol["schema_version"] == "github-actions-policy/v1"
+    assert pol["organization"] == "o"
+    assert pol["posture"]["allowed_actions"] == "selected"
+    assert pol["posture"]["sha_pinning_required"] is True
+    assert pol["posture"]["verified_creators_allowed"] is True
+
+
+def test_actions_policy_soft_skips_without_admin_org(monkeypatch: pytest.MonkeyPatch) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        base = _github_handler(request)
+        if base.status_code != 404:
+            return base
+        path = request.url.path
+        if path == "/repos/o/r/releases":
+            return httpx.Response(200, json=_releases_json(), headers=_OK_HDR)
+        if path == "/orgs/o/actions/permissions":
+            return httpx.Response(403, json={"message": "needs admin:org"}, headers=_OK_HDR)
+        return httpx.Response(404, json={"message": "unexpected"}, headers=_OK_HDR)
+
+    monkeypatch.setattr(httpx, "Client", _make_client_factory(handler))
+    # 403 on the org endpoint must NOT raise (admin:org is a higher bar) — it degrades to a skip.
+    rows = GitHubEvidenceCollector("tok").collect("o/r")
+    keys = {r.evidence_key for r in rows}
+    assert "github-release-immutability" in keys
+    assert "github-actions-policy" not in keys
+
+
+def test_release_immutability_skipped_when_no_published_release(monkeypatch: pytest.MonkeyPatch) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        base = _github_handler(request)
+        if base.status_code != 404:
+            return base
+        if request.url.path == "/repos/o/r/releases":
+            return httpx.Response(200, json=[{"draft": True, "immutable": False}], headers=_OK_HDR)
+        return httpx.Response(404, json={"message": "unexpected"}, headers=_OK_HDR)
+
+    monkeypatch.setattr(httpx, "Client", _make_client_factory(handler))
+    rows = GitHubEvidenceCollector("tok").collect("o/r")
+    assert "github-release-immutability" not in {r.evidence_key for r in rows}

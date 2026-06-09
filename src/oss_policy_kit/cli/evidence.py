@@ -42,6 +42,8 @@ _COLLECT_PREVIEW: dict[str, list[tuple[str, str]]] = {
         ("github-rulesets.json", "GET /repos/{owner}/{repo}/rulesets"),
         ("github-secret-scanning.json", "GET /repos/{owner}/{repo} (security_and_analysis)"),
         ("github-environment-protection.json", "GET /repos/{owner}/{repo}/environments"),
+        ("github-release-immutability.json", "GET /repos/{owner}/{repo}/releases (latest immutable flag)"),
+        ("github-actions-policy.json", "GET /orgs/{owner}/actions/permissions (admin:org; skipped otherwise)"),
     ],
     "gitlab": [
         ("branch-protection.json", "GET /api/v4/projects/{id}/protected_branches (+ /approvals)"),

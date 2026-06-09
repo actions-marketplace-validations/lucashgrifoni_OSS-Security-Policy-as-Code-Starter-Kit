@@ -35,18 +35,23 @@ def _github_headers(token: str) -> dict[str, str]:
     }
 
 
-def _fetch_optional_json(client: Any, url: str, *, label: str, default: Any) -> Any:
+def _fetch_optional_json(client: Any, url: str, *, label: str, default: Any, raise_on_403: bool = True) -> Any:
     """GET an optional GitHub endpoint; return parsed JSON, or ``default`` on 403/404/422.
 
     Raises a permission error on 403 (so scopes can be widened deliberately) and logs a
-    warning on 422 before falling back to ``default``.
+    warning on 422 before falling back to ``default``. Pass ``raise_on_403=False`` for
+    endpoints that require a higher scope than typical repo collection (for example the
+    org-level Actions policy needs ``admin:org``), so a missing scope degrades to a skip
+    instead of failing the whole collection.
     """
 
     r = client.get(url)
     _enforce_rate_limit(r)
     if r.status_code in {403, 404}:
-        if r.status_code == 403:
+        if r.status_code == 403 and raise_on_403:
             _raise_permission("GET", f"{GITHUB_API}{url}", r.status_code)
+        if r.status_code == 403:
+            logger.warning("GitHub returned 403 for %s (insufficient scope); skipping %s.", url, label)
         return default
     if r.status_code == 422:
         logger.warning("GitHub returned 422 for %s; skipping %s.", url, label)
@@ -284,6 +289,20 @@ def _collect_github_sections(
     else:
         logger.warning("No GitHub environments returned for %s/%s; skipping environment file.", owner, repo)
 
+    # 5) Release immutability (GH-IMMUTREL-070) — derived from the latest published release.
+    rel_result = _collect_release_immutability(
+        client, owner, repo, slug, collected_at=collected_at, attested_date=attested_date, attested_by=attested_by
+    )
+    if rel_result is not None:
+        results.append(rel_result)
+
+    # 6) Org-level Actions policy (ORG-ACTPOL-071) — needs admin:org; soft-skip when unavailable.
+    pol_result = _collect_actions_policy(
+        client, owner, collected_at=collected_at, attested_date=attested_date, attested_by=attested_by
+    )
+    if pol_result is not None:
+        results.append(pol_result)
+
     return results
 
 
@@ -452,3 +471,104 @@ def _environments_payload(
         "collection": _github_collection_block(collected_at, f"{GITHUB_API}/repos/{repo_slug}/environments"),
         "notes": "Derived from GitHub environments API (first page).",
     }
+
+
+def _collect_release_immutability(
+    client: Any,
+    owner: str,
+    repo: str,
+    repo_slug: str,
+    *,
+    collected_at: str,
+    attested_date: str,
+    attested_by: str,
+) -> CollectionResult | None:
+    """Derive immutable-release posture from the latest published release's ``immutable`` flag.
+
+    GitHub exposes no repo-level "immutable releases enabled" setting, but each release object
+    carries an ``immutable`` boolean (immutable releases, GA 2025-10, also auto-generate a release
+    attestation). We read the latest non-draft release and derive the posture, explaining the
+    derivation in ``notes``. No published release -> skip (the control stays manual-review).
+    """
+
+    rel_url = f"/repos/{owner}/{repo}/releases?per_page=10"
+    raw = _fetch_optional_json(client, rel_url, label="release immutability evidence", default=[])
+    releases = cast(list[dict[str, Any]], raw) if isinstance(raw, list) else []
+    latest = next((r for r in releases if isinstance(r, dict) and not r.get("draft")), None)
+    if latest is None:
+        logger.warning("No published GitHub releases for %s/%s; skipping release-immutability file.", owner, repo)
+        return None
+    immutable = bool(latest.get("immutable"))
+    payload = {
+        "schema_version": "github-release-immutability/v1",
+        "attested_at": attested_date,
+        "attested_by": attested_by,
+        "repository": repo_slug,
+        "posture": {
+            "immutable_releases_enabled": immutable,
+            "release_attestation_present": immutable,
+        },
+        "collection": _github_collection_block(collected_at, f"{GITHUB_API}/repos/{repo_slug}/releases"),
+        "notes": (
+            "Derived from the latest published release's `immutable` flag; immutable releases "
+            "auto-generate a release attestation. The kit records this posture, it does not "
+            "re-verify the attestation."
+        ),
+    }
+    return CollectionResult(
+        evidence_key="github-release-immutability",
+        data=payload,
+        source_url=f"{GITHUB_API}/repos/{owner}/{repo}/releases",
+        collected_at=collected_at,
+    )
+
+
+def _collect_actions_policy(
+    client: Any,
+    owner: str,
+    *,
+    collected_at: str,
+    attested_date: str,
+    attested_by: str,
+) -> CollectionResult | None:
+    """Collect org-level Actions policy (``allowed_actions`` + ``sha_pinning_required``).
+
+    Requires ``admin:org``; a 403/404 (no scope, or ``owner`` is a user rather than an org)
+    degrades to a skip so repo-scoped collection is never broken.
+    ``verified_creators_allowed`` comes from the selected-actions endpoint when applicable.
+    """
+
+    perm_url = f"/orgs/{owner}/actions/permissions"
+    raw = _fetch_optional_json(client, perm_url, label="org Actions policy evidence", default=None, raise_on_403=False)
+    if not isinstance(raw, dict) or "allowed_actions" not in raw:
+        return None
+    allowed = str(raw.get("allowed_actions", "all"))
+    posture: dict[str, Any] = {
+        "allowed_actions": allowed if allowed in {"all", "local_only", "selected"} else "all",
+        "sha_pinning_required": bool(raw.get("sha_pinning_required")),
+    }
+    if allowed == "selected":
+        sel = _fetch_optional_json(
+            client,
+            f"/orgs/{owner}/actions/permissions/selected-actions",
+            label="org selected-actions evidence",
+            default={},
+            raise_on_403=False,
+        )
+        if isinstance(sel, dict) and "verified_allowed" in sel:
+            posture["verified_creators_allowed"] = bool(sel.get("verified_allowed"))
+    payload = {
+        "schema_version": "github-actions-policy/v1",
+        "attested_at": attested_date,
+        "attested_by": attested_by,
+        "organization": owner,
+        "posture": posture,
+        "collection": _github_collection_block(collected_at, f"{GITHUB_API}{perm_url}"),
+        "notes": "Derived from the organization Actions permissions API (requires admin:org).",
+    }
+    return CollectionResult(
+        evidence_key="github-actions-policy",
+        data=payload,
+        source_url=f"{GITHUB_API}{perm_url}",
+        collected_at=collected_at,
+    )

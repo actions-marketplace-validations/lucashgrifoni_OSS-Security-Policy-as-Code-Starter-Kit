@@ -36,9 +36,15 @@ Either way, the kit refuses to silently inflate trust.
 | `github-rulesets` | `GET /repos/{owner}/{repo}/rulesets` | `GH-PLAT-024` |
 | `github-secret-scanning` | `GET /repos/{owner}/{repo}` (`security_and_analysis`) | `GH-PLAT-025` |
 | `github-environment-protection` | `GET /repos/{owner}/{repo}/environments` | `GH-PLAT-026` |
+| `github-release-immutability` | `GET /repos/{owner}/{repo}/releases` (latest `immutable` flag) | `GH-IMMUTREL-070` |
+| `github-actions-policy` | `GET /orgs/{owner}/actions/permissions` (needs `admin:org`; soft-skipped otherwise) | `ORG-ACTPOL-071` |
 
-GitHub is **the most complete collector**: 4 endpoints feed 4 evidence keys covering the 4
-GitHub-specific platform controls used by `github-level-3` and `github-release-hardening-3`.
+GitHub is **the most complete collector**: 6 endpoints feed 6 evidence keys covering the
+GitHub-specific platform controls used by `github-level-3` and `github-release-hardening-3`. The
+org-level Actions policy (`ORG-ACTPOL-071`) needs `admin:org`; when that scope is absent the
+collector skips it (the control stays manual-review) rather than failing the whole run. Immutable
+releases have no repo-level setting endpoint, so the kit derives the posture from the latest
+published release's `immutable` flag and records it without re-verifying the attestation.
 
 ### GitLab (`GitLabEvidenceCollector`)
 
