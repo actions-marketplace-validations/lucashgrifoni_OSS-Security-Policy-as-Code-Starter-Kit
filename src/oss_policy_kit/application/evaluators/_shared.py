@@ -209,6 +209,10 @@ class EvalContext:
     #: Default None: only populated when ``evaluate --use-insights-evidence`` is set. When
     #: None, no control consumes self-reported Insights signals (clone-only verdicts stand).
     insights_evidence: InsightsEvidence | None = None
+    #: ADR-028 (opt-in, default off): when True, a control whose pass is anchored on a
+    #: verified attestation record (e.g. PROV-VERIFY-061) resolves to ATTESTED instead of
+    #: PASS. Only set by ``evaluate --enable-attested``; never relaxes a FAIL/MRR outcome.
+    enable_attested: bool = False
 
 
 def insights_self_attested_outcome(

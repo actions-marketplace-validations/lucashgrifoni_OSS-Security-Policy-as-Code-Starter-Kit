@@ -1161,13 +1161,26 @@ def eval_prov_verify_061(ctx: EvalContext) -> EvalOutcome:
     source_suffix = ""
     if isinstance(source_raw, str) and source_raw.strip():
         source_suffix = f" source={source_raw.strip()};"
+    # ADR-028 (opt-in): a fully verified attestation record (transparency-log inclusion
+    # confirmed + fresh verified_at) is the canonical ATTESTED case. Gated behind
+    # ``--enable-attested``; default off keeps the historical PASS. The crypto verification
+    # itself happens in CI (gh attestation verify / cosign verify-bundle) and is recorded in
+    # this structured evidence file — the kit validates that record, it does not re-sign.
+    attested = ctx.enable_attested
+    status = ControlStatus.ATTESTED if attested else ControlStatus.PASS
+    basis = (
+        "Anchored on a CI-produced verification record (the kit validated the record; it did "
+        "not itself re-verify the signature)."
+        if attested
+        else "Re-verify on every release artifact emission to keep verified_at within the freshness window."
+    )
     return EvalOutcome(
-        status=ControlStatus.PASS,
+        status=status,
         reason=(
             f"Provenance attestation verified ({method});{source_suffix} transparency-log inclusion confirmed; "
             f"verified_at={verified_at_raw} within {ctx.evidence_max_age_days}-day freshness window."
         ),
-        remediation="Re-verify on every release artifact emission to keep verified_at within the freshness window.",
+        remediation=basis,
         evidence_sources=[str(candidate.resolve())],
         confidence="high",
         evidence_collection_method=EvidenceCollectionMethod.LIVE,

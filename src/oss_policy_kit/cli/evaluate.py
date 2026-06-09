@@ -177,6 +177,16 @@ def cli_root(
         ),
         rich_help_panel=OPT_PANEL_EVIDENCE,
     ),
+    enable_attested: bool = typer.Option(
+        False,
+        "--enable-attested/--no-enable-attested",
+        help=(
+            "Opt-in (ADR-028): when a control's pass is anchored on a verified attestation record "
+            "(PROV-VERIFY-061: transparency-log inclusion + fresh verified_at), resolve it to ATTESTED "
+            "instead of PASS. Never relaxes a FAIL/MRR. Default off."
+        ),
+        rich_help_panel=OPT_PANEL_EVIDENCE,
+    ),
     debug: bool = typer.Option(
         False,
         "--debug",
@@ -230,6 +240,7 @@ def cli_root(
             report_json_contract=report_json_contract.strip().lower().removeprefix("v"),
             use_insights_evidence=use_insights_evidence,
             applicability_engine=applicability_engine,
+            enable_attested=enable_attested,
         )
     )
 
@@ -380,6 +391,16 @@ def evaluate_cmd(
         ),
         rich_help_panel=OPT_PANEL_EVIDENCE,
     ),
+    enable_attested: bool = typer.Option(
+        False,
+        "--enable-attested/--no-enable-attested",
+        help=(
+            "Opt-in (ADR-028): when a control's pass is anchored on a verified attestation record "
+            "(PROV-VERIFY-061: transparency-log inclusion + fresh verified_at), resolve it to ATTESTED "
+            "instead of PASS. Never relaxes a FAIL/MRR. Default off."
+        ),
+        rich_help_panel=OPT_PANEL_EVIDENCE,
+    ),
 ) -> None:
     """Evaluate a local repository clone against a bundled profile.
 
@@ -416,5 +437,6 @@ def evaluate_cmd(
             include_absolute_path=include_absolute_path,
             use_insights_evidence=use_insights_evidence,
             applicability_engine=applicability_engine,
+            enable_attested=enable_attested,
         )
     )

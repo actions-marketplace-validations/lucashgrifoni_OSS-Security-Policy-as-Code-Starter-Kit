@@ -316,6 +316,10 @@ class EvaluateRequest:
     #: ADR-028: opt-in applicability engine. When True, controls that declare a
     #: precondition resolve to NOT_APPLICABLE consistently when it is unmet. Default off.
     applicability_engine: bool = False
+    #: ADR-028: opt-in ATTESTED emission. When True, a control whose pass is anchored on a
+    #: verified attestation record (PROV-VERIFY-061) resolves to ATTESTED instead of PASS.
+    #: Never relaxes a FAIL/MRR. Default off.
+    enable_attested: bool = False
 
 
 def _resolve_eval_target(req: EvaluateRequest) -> Path:
@@ -501,6 +505,7 @@ def _run_evaluate(req: EvaluateRequest) -> None:
         report_json_contract=req.report_json_contract,
         insights_evidence=insights_evidence,
         applicability_engine=req.applicability_engine,
+        enable_attested=req.enable_attested,
     )
     out = req.output_dir.resolve()
     json_path, md_path = _write_eval_reports(report, req, out)

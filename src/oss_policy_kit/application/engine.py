@@ -369,6 +369,7 @@ def evaluate_repository(
     live_collection: LiveCollectionMetadata | None = None,
     insights_evidence: InsightsEvidence | None = None,
     applicability_engine: bool = False,
+    enable_attested: bool = False,
 ) -> ExecutionReport:
     """Run all profile controls against a local repository clone.
 
@@ -391,6 +392,7 @@ def evaluate_repository(
         verbose_emit=verbose_emit,
         gitlab_ci=gitlab_ci,
         insights_evidence=insights_evidence,
+        enable_attested=enable_attested,
     )
 
     waivers = waiver_outcome.by_control if waiver_outcome else {}
