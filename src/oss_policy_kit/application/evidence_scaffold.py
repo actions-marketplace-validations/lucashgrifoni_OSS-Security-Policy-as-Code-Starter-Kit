@@ -78,6 +78,36 @@ def _github_templates(attested_at: str) -> dict[str, dict[str, Any]]:
             },
             "notes": "Confirm toggles against GitHub Advanced Security where applicable.",
         },
+        "github-release-immutability.json": {
+            "schema_version": "github-release-immutability/v1",
+            "attested_at": attested_at,
+            "attested_by": "REPLACE_ME_GITHUB_HANDLE",
+            "repository": "org/repo",
+            "posture": {
+                "immutable_releases_enabled": True,
+                "release_attestation_present": True,
+                "attestation_subject_digest_recorded": True,
+            },
+            "notes": (
+                "Enable immutable releases (GA 2025-10) in repository settings and confirm a release "
+                "attestation is published. The kit records this posture; it does not re-verify the attestation."
+            ),
+        },
+        "github-actions-policy.json": {
+            "schema_version": "github-actions-policy/v1",
+            "attested_at": attested_at,
+            "attested_by": "REPLACE_ME_GITHUB_HANDLE",
+            "organization": "REPLACE_ME_ORG",
+            "posture": {
+                "allowed_actions": "selected",
+                "sha_pinning_required": True,
+                "verified_creators_allowed": True,
+            },
+            "notes": (
+                "Org Settings > Actions policy: set allowed_actions to local_only or selected and require "
+                "SHA-pinning of third-party actions. Org-level posture is not clone-visible."
+            ),
+        },
     }
 
 

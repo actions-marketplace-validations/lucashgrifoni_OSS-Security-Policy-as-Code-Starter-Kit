@@ -2,7 +2,7 @@
 // Regenerate with: python scripts/generate-gitpage-catalog-data.py
 // Source of truth: src/oss_policy_kit/data/controls/catalog.yaml + bundled profiles.
 window.CATALOG_DATA = {
-  "controlCount": 212,
+  "controlCount": 214,
   "profileCount": 56,
   "facets": {
     "categories": [
@@ -1597,6 +1597,30 @@ window.CATALOG_DATA = {
         "cra-eu-strict-1",
         "github-release-hardening-3",
         "gitlab-release-hardening-3"
+      ]
+    },
+    {
+      "id": "GH-IMMUTREL-070",
+      "title": "GitHub immutable releases enabled / release attestation evidenced",
+      "category": "supply_chain",
+      "assurance": "evidence-backed",
+      "lifecycle": "experimental",
+      "weight": 2,
+      "profiles": [
+        "github-release-hardening-2",
+        "github-release-hardening-3"
+      ]
+    },
+    {
+      "id": "ORG-ACTPOL-071",
+      "title": "Organization-level Actions policy (block + SHA-pinning) evidenced",
+      "category": "platform",
+      "assurance": "evidence-backed",
+      "lifecycle": "experimental",
+      "weight": 2,
+      "profiles": [
+        "github-release-hardening-2",
+        "github-release-hardening-3"
       ]
     },
     {

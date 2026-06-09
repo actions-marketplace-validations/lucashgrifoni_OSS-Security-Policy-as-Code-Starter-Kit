@@ -10,10 +10,12 @@ from oss_policy_kit.application.evaluators._shared import (
     EvalOutcome,
     EvidenceCollectionMethod,
     Path,
+    _actions_policy_schema,
     _any_github_workflow_suggests_release_or_deploy,
     _environment_protection_schema,
     _evidence_is_api_backed,
     _evidence_placeholder_outcome,
+    _release_immutability_schema,
     _rulesets_schema,
     _runner_groups_schema,
     _secret_scanning_schema,
@@ -433,6 +435,159 @@ def eval_gh_plat_024(ctx: EvalContext) -> EvalOutcome:
             f"(repository {data.get('repository', 'unknown')}, attested {data.get('attested_at', 'unknown')})."
         ),
         remediation="Re-collect or re-attest rulesets evidence after policy changes in GitHub settings.",
+        evidence_sources=[str(evidence.resolve())],
+        confidence="high",
+        evidence_collection_method=ecm,
+    )
+
+
+def eval_gh_immutrel_070(ctx: EvalContext) -> EvalOutcome:
+    """GH-IMMUTREL-070: GitHub immutable releases / release attestation via explicit evidence.
+
+    Org/release platform posture is not clone-visible, so this is evidence-backed: the file
+    is absent -> manual review (not a fail); present + valid -> PASS/FAIL on the recorded
+    posture. The kit composes GitHub's release attestation; it does not re-verify it here
+    (cryptographic verification is the deferred ATTESTED path, ADR-028).
+    """
+
+    evidence = ctx.repo_root / _KIT_DIR / "evidence" / "github-release-immutability.json"
+    if not evidence.is_file():
+        return EvalOutcome(
+            status=ControlStatus.NOT_EVALUATED,
+            reason=(
+                "GitHub release immutability cannot be evaluated without evidence JSON. "
+                "Run `oss-policy-kit scaffold-evidence --platform github` and fill "
+                "`.oss-policy-kit/evidence/github-release-immutability.json`."
+            ),
+            remediation=(
+                "Enable immutable releases in repository settings and record the posture in "
+                ".oss-policy-kit/evidence/github-release-immutability.json."
+            ),
+            evidence_sources=[],
+            confidence="high",
+        )
+    data, error, ph = _validate_json_evidence(
+        evidence,
+        schema_loader=_release_immutability_schema,
+        evidence_name="GitHub release immutability",
+    )
+    if error:
+        return EvalOutcome(
+            status=ControlStatus.FAIL,
+            reason=error,
+            remediation=(
+                "Regenerate github-release-immutability evidence using "
+                "reports/schema/evidence-github-release-immutability.schema.json."
+            ),
+            evidence_sources=[str(evidence.resolve())],
+            confidence="low",
+        )
+    blocked = _evidence_placeholder_outcome(evidence, ph)
+    if blocked is not None:
+        return blocked
+    assert data is not None
+    posture = data["posture"]
+    assert isinstance(posture, dict)
+    ecm = EvidenceCollectionMethod.LIVE if _evidence_is_api_backed(data) else EvidenceCollectionMethod.MANUAL
+    if not posture.get("immutable_releases_enabled") and not posture.get("release_attestation_present"):
+        return EvalOutcome(
+            status=ControlStatus.FAIL,
+            reason=(
+                "Release-immutability evidence present but neither immutable_releases_enabled nor "
+                "release_attestation_present is true."
+            ),
+            remediation=(
+                "Enable GitHub immutable releases and/or publish a release attestation, then refresh the evidence file."
+            ),
+            evidence_sources=[str(evidence.resolve())],
+            confidence="medium",
+            evidence_collection_method=ecm,
+        )
+    return EvalOutcome(
+        status=ControlStatus.PASS,
+        reason=(
+            f"Release-immutability evidence valid: immutable_releases_enabled="
+            f"{bool(posture.get('immutable_releases_enabled'))}, release_attestation_present="
+            f"{bool(posture.get('release_attestation_present'))} "
+            f"({'live API collection' if ecm is EvidenceCollectionMethod.LIVE else 'self-attested file'}, "
+            f"repository {data.get('repository', 'unknown')})."
+        ),
+        remediation="Re-attest after release-settings changes; keep the release attestation current.",
+        evidence_sources=[str(evidence.resolve())],
+        confidence="high",
+        evidence_collection_method=ecm,
+    )
+
+
+def eval_org_actpol_071(ctx: EvalContext) -> EvalOutcome:
+    """ORG-ACTPOL-071: org-level Actions policy (block + SHA-pinning) via explicit evidence.
+
+    Organization Actions policy is not clone-visible -> evidence-backed (manual review when
+    absent). PASS requires a restricted allowlist (local_only/selected) AND SHA-pinning required.
+    """
+
+    evidence = ctx.repo_root / _KIT_DIR / "evidence" / "github-actions-policy.json"
+    if not evidence.is_file():
+        return EvalOutcome(
+            status=ControlStatus.NOT_EVALUATED,
+            reason=(
+                "Organization Actions policy cannot be evaluated without evidence JSON. "
+                "Run `oss-policy-kit scaffold-evidence --platform github` and fill "
+                "`.oss-policy-kit/evidence/github-actions-policy.json`."
+            ),
+            remediation=(
+                "Configure the org Actions policy to block third-party actions and require SHA-pinning, "
+                "then record it in .oss-policy-kit/evidence/github-actions-policy.json."
+            ),
+            evidence_sources=[],
+            confidence="high",
+        )
+    data, error, ph = _validate_json_evidence(
+        evidence,
+        schema_loader=_actions_policy_schema,
+        evidence_name="GitHub organization Actions policy",
+    )
+    if error:
+        return EvalOutcome(
+            status=ControlStatus.FAIL,
+            reason=error,
+            remediation=(
+                "Regenerate github-actions-policy evidence using "
+                "reports/schema/evidence-github-actions-policy.schema.json."
+            ),
+            evidence_sources=[str(evidence.resolve())],
+            confidence="low",
+        )
+    blocked = _evidence_placeholder_outcome(evidence, ph)
+    if blocked is not None:
+        return blocked
+    assert data is not None
+    posture = data["posture"]
+    assert isinstance(posture, dict)
+    ecm = EvidenceCollectionMethod.LIVE if _evidence_is_api_backed(data) else EvidenceCollectionMethod.MANUAL
+    allowed = posture.get("allowed_actions")
+    sha_pin = posture.get("sha_pinning_required") is True
+    if allowed == "all" or not sha_pin:
+        return EvalOutcome(
+            status=ControlStatus.FAIL,
+            reason=(
+                f"Actions-policy evidence present but not restrictive: allowed_actions={allowed!r}, "
+                f"sha_pinning_required={sha_pin}. Expected allowed_actions in (local_only, selected) "
+                "AND sha_pinning_required=true."
+            ),
+            remediation="Restrict allowed actions (local_only/selected) and require SHA-pinning at the org level.",
+            evidence_sources=[str(evidence.resolve())],
+            confidence="medium",
+            evidence_collection_method=ecm,
+        )
+    return EvalOutcome(
+        status=ControlStatus.PASS,
+        reason=(
+            f"Org Actions policy evidence valid: allowed_actions={allowed!r}, sha_pinning_required=true "
+            f"({'live API collection' if ecm is EvidenceCollectionMethod.LIVE else 'self-attested file'}, "
+            f"organization {data.get('organization', 'unknown')})."
+        ),
+        remediation="Re-attest after org policy changes; keep the allowlist and SHA-pin requirement enforced.",
         evidence_sources=[str(evidence.resolve())],
         confidence="high",
         evidence_collection_method=ecm,

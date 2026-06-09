@@ -1,8 +1,8 @@
-# Controls Catalog (212 controls)
+# Controls Catalog (214 controls)
 
 Single-page reference generated from the bundled control catalog and profiles. The authoritative source is [`src/oss_policy_kit/data/controls/catalog.yaml`](../src/oss_policy_kit/data/controls/catalog.yaml).
 
-Current bundled state: **212 controls** across **56 bundled profiles**. Regenerate this page whenever the catalog or profile membership changes (`python scripts/generate-controls-catalog.py`).
+Current bundled state: **214 controls** across **56 bundled profiles**. Regenerate this page whenever the catalog or profile membership changes (`python scripts/generate-controls-catalog.py`).
 
 > **Tip:** for an interactive, filterable view of this same catalog (filter by family, assurance, lifecycle, or profile membership, plus text search) see the **Control catalog** section of the project landing page: <https://lucashgrifoni.github.io/OSS-Security-Policy-as-Code-Starter-Kit/#catalog>.
 
@@ -15,10 +15,10 @@ Current bundled state: **212 controls** across **56 bundled profiles**. Regenera
 | `governance` | 15 |
 | `iac` | 30 |
 | `kubernetes` | 16 |
-| `platform` | 15 |
+| `platform` | 16 |
 | `release` | 3 |
 | `secure_development` | 45 |
-| `supply_chain` | 31 |
+| `supply_chain` | 32 |
 | `vulnerability_management` | 9 |
 
 ## By Assurance
@@ -26,7 +26,7 @@ Current bundled state: **212 controls** across **56 bundled profiles**. Regenera
 | Assurance | Count | Meaning |
 |---|---:|---|
 | `deterministic` | 31 | Structural parse or file presence/absence with high confidence. |
-| `evidence-backed` | 89 | Depends on a local JSON evidence file or API-collected attestation. |
+| `evidence-backed` | 91 | Depends on a local JSON evidence file or API-collected attestation. |
 | `signal` | 92 | Heuristic or directional signal; PASS is not proof of runtime behavior. |
 
 ## Full Catalog
@@ -103,6 +103,8 @@ Profile counts in the **Profiles** column reflect how many bundled profiles incl
 | `PROV-VERIFY-061` | supply_chain | evidence-backed | 3 | 16 | Build provenance attestation is verifiable (sigstore / Artifact Attestations) |
 | `GH-RUNNER-062` | ci_cd | signal | 3 | 7 | Self-hosted runners are ephemeral and restricted from PR-triggered workflows |
 | `RELEASE-ARCHIVE-063` | release | signal | 2 | 7 | Release artifacts have an explicit archival/retention policy |
+| `GH-IMMUTREL-070` | supply_chain | evidence-backed | 2 | 2 | GitHub immutable releases enabled / release attestation evidenced |
+| `ORG-ACTPOL-071` | platform | evidence-backed | 2 | 2 | Organization-level Actions policy (block + SHA-pinning) evidenced |
 | `SAST-SEMGREP-064` | ci_cd | evidence-backed | 3 | 1 | SAST scan evidence (Semgrep) is present and current |
 | `GOV-DISC-065` | governance | evidence-backed | 2 | 5 | Disclosure channel SLA documented (CRA reporting readiness) |
 | `SAST-ZIZMOR-066` | ci_cd | evidence-backed | 2 | 1 | zizmor SARIF findings (GitHub Actions security AST analysis) |
@@ -320,6 +322,8 @@ Each control entry below lists which bundled profiles include it. Controls not p
 - `PROV-VERIFY-061`: `aws-level-3`, `aws-release-hardening-3`, `azure-level-3`, `azure-release-hardening-3`, `cis-supply-chain-1`, `cra-eu-ready-1`, `cra-eu-strict-1`, `github-level-3`, `github-release-hardening-3`, `gitlab-level-3`, `gitlab-release-hardening-3`, `oss-publish-readiness-1`, `owasp-cicd-top10-1`, `s2c2f-l3-1`, `slsa-build-l2-1`, `ssdf-baseline-1`
 - `GH-RUNNER-062`: `cis-supply-chain-1`, `github-level-2`, `github-level-3`, `github-release-hardening-2`, `github-release-hardening-3`, `owasp-cicd-top10-1`, `slsa-build-l2-1`
 - `RELEASE-ARCHIVE-063`: `aws-release-hardening-3`, `azure-release-hardening-3`, `cis-supply-chain-1`, `cra-eu-ready-1`, `cra-eu-strict-1`, `github-release-hardening-3`, `gitlab-release-hardening-3`
+- `GH-IMMUTREL-070`: `github-release-hardening-2`, `github-release-hardening-3`
+- `ORG-ACTPOL-071`: `github-release-hardening-2`, `github-release-hardening-3`
 - `SAST-SEMGREP-064`: `appsec-sast-sca-1`
 - `GOV-DISC-065`: `cra-eu-ai-act-art11-1`, `cra-eu-ready-2-1`, `cra-eu-reporting-1`, `gitlab-level-3`, `gitlab-release-hardening-3`
 - `SAST-ZIZMOR-066`: `appsec-sast-sca-1`

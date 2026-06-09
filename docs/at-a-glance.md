@@ -19,8 +19,8 @@ This page keeps the detailed capability snapshot out of the root README so the f
 | Area | v7.2.0 <!-- x-release-please-version --> |
 |---|---|
 | Profiles | 56 bundled profiles |
-| Controls | 212 bundled controls |
-| CLI subcommands | 19 |
+| Controls | 214 bundled controls |
+| CLI subcommands | 20 |
 | Report contracts | `reports/2.0` default (v7.0.0 flip); `reports/1.0` selectable for one cycle |
 | Profiles added since v6.0.0 | AI/LLM advisory, EU AI Act Article 11 + Annex IV, EU CRA Art.13/14, SLSA Source L1/L2, full GitLab CI family (`gitlab-level-2/3` + `gitlab-release-hardening-1/2/3` + collector), OSS publish readiness, AI agent baseline, OSPS Baseline 2026, MCP server, OWASP Agentic ASI |
 | Release state | Published release baseline; see `CHANGELOG.md` and release artifacts for the exact shipped package. |

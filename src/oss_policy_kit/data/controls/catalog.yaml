@@ -516,6 +516,24 @@ controls:
     lifecycle: stable
     assurance: signal
     weight: 2
+  # v7.3.0 (ADR-038) — GitHub immutable-release + org-level Actions-policy posture.
+  # Org/release platform posture is not clone-visible -> evidence-backed (manual-review
+  # when the evidence file is absent). The kit composes GitHub's release attestation; it
+  # does not recreate it.
+  - id: GH-IMMUTREL-070
+    title: GitHub immutable releases enabled / release attestation evidenced
+    category: supply_chain
+    automation: not_observable_locally
+    lifecycle: experimental
+    assurance: evidence-backed
+    weight: 2
+  - id: ORG-ACTPOL-071
+    title: Organization-level Actions policy (block + SHA-pinning) evidenced
+    category: platform
+    automation: not_observable_locally
+    lifecycle: experimental
+    assurance: evidence-backed
+    weight: 2
   - id: SAST-SEMGREP-064
     title: SAST scan evidence (Semgrep) is present and current
     category: ci_cd

@@ -107,6 +107,14 @@ def _secret_scanning_schema() -> dict[str, Any]:
     return load_evidence_schema("evidence-github-secret-scanning.schema.json")
 
 
+def _release_immutability_schema() -> dict[str, Any]:
+    return load_evidence_schema("evidence-github-release-immutability.schema.json")
+
+
+def _actions_policy_schema() -> dict[str, Any]:
+    return load_evidence_schema("evidence-github-actions-policy.schema.json")
+
+
 def _azure_branch_policies_schema() -> dict[str, Any]:
     return load_evidence_schema("evidence-azure-branch-policies.schema.json")
 

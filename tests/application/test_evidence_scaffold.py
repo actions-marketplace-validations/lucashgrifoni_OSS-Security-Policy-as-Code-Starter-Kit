@@ -22,6 +22,8 @@ _SCHEMA_BY_FILENAME = {
     "github-rulesets.json": "evidence-github-rulesets.schema.json",
     "github-environment-protection.json": "evidence-github-environment-protection.schema.json",
     "github-secret-scanning.json": "evidence-github-secret-scanning.schema.json",
+    "github-release-immutability.json": "evidence-github-release-immutability.schema.json",
+    "github-actions-policy.json": "evidence-github-actions-policy.schema.json",
     "azure-branch-policies.json": "evidence-azure-branch-policies.schema.json",
     "azure-pipeline-governance.json": "evidence-azure-pipeline-governance.schema.json",
     "azure-sbom-artifact.json": "evidence-azure-sbom-artifact.schema.json",

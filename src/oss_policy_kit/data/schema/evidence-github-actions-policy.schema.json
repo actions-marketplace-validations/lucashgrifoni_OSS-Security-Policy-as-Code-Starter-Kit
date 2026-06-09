@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/schema/evidence-github-actions-policy.schema.json",
+  "title": "GitHub organization Actions policy evidence",
+  "type": "object",
+  "required": ["schema_version", "attested_at", "attested_by", "organization", "posture"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "github-actions-policy/v1" },
+    "attested_at": { "type": "string", "format": "date" },
+    "attested_by": { "type": "string" },
+    "organization": { "type": "string" },
+    "posture": {
+      "type": "object",
+      "required": ["allowed_actions", "sha_pinning_required"],
+      "additionalProperties": false,
+      "properties": {
+        "allowed_actions": { "type": "string", "enum": ["all", "local_only", "selected"] },
+        "sha_pinning_required": { "type": "boolean" },
+        "verified_creators_allowed": { "type": "boolean" }
+      }
+    },
+    "collection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_collection_method", "collected_at", "source_url"],
+      "properties": {
+        "evidence_collection_method": { "type": "string", "enum": ["live", "manual"] },
+        "collected_at": { "type": "string" },
+        "source_url": { "type": "string" },
+        "mode": { "type": "string", "enum": ["api"] }
+      }
+    },
+    "notes": { "type": "string" }
+  }
+}

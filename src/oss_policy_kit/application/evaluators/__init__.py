@@ -112,6 +112,8 @@ EVALUATOR_REGISTRY: dict[str, Callable[[EvalContext], EvalOutcome]] = {
     "GH-PLAT-024": eval_gh_plat_024,
     "GH-PLAT-025": eval_gh_plat_025,
     "GH-PLAT-026": eval_gh_plat_026,
+    "GH-IMMUTREL-070": eval_gh_immutrel_070,
+    "ORG-ACTPOL-071": eval_org_actpol_071,
     "AZ-PIPE-027": eval_az_pipe_027,
     "AZ-PIPE-028": eval_az_pipe_028,
     "AZ-PIPE-029": eval_az_pipe_029,
