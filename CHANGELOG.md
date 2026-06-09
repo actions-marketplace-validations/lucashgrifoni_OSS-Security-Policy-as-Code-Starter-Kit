@@ -6,6 +6,27 @@ This changelog follows the same public-facing format used by the GitHub release 
 
 ---
 
+## [7.1.0](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v7.0.1...v7.1.0) (2026-06-09)
+
+
+### Highlights
+
+* **engine:** opt-in applicability engine for declared control preconditions (ADR-028 PR2) ([3f76886](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/3f7688666375ac4556f00a8f032f8f548dbcb808))
+* **governance:** emit ATTESTED for verified provenance, opt-in (ADR-028 PR3) ([78e515d](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/78e515d2d6113519b4ddb2f350a09ecf816f443d))
+* **reports:** add ATTESTED control state (ADR-028 PR1) ([22fc6f4](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/22fc6f4c7ffa37625fbb967138339c06a971d594))
+
+
+### Improvements
+
+* **cli:** clean exit-2 errors for bad export-evidence reports and invalid diff-reports/collect-evidence options ([a90ef44](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/a90ef4483bdd0f091fae918ddb8157eaa2491ca2))
+
+
+### Notes
+
+* **readme:** bump GitHub Action usage example to [@v7](https://github.com/v7).0.1 ([f33a8d5](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/f33a8d5cd5f1a5bb20de2beef6d56ce302c90b16))
+* **readme:** bump GitHub Action usage example to [@v7](https://github.com/v7).0.1 ([49aae81](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/49aae81cc71137b2df4ffd2495eaf2498dbaeb6c))
+* **v8:** add v8 migration guide + control-impact analysis script (ADR-028 PR4) ([e0234bc](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/e0234bc13ab0c2d39c8c7b6e8158d22a5c7f3272))
+
 ## [7.0.1](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v7.0.0...v7.0.1) (2026-06-02)
 
 
