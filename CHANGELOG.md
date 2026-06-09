@@ -6,6 +6,21 @@ This changelog follows the same public-facing format used by the GitHub release 
 
 ---
 
+## [7.2.0](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v7.1.0...v7.2.0) (2026-06-09)
+
+
+### Highlights
+
+* **cli:** add osps-coverage command for advisory OSPS coverage (ADR-037) ([56528d8](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/56528d8b85a46c56749d288fe9f0952e8c6d3b52))
+* **frameworks:** generated OSPS Baseline v2026.02.19 coverage map (ADR-037) ([43cb8c0](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/43cb8c046bbed04afb3c2c17f1b802f29fc85ff4))
+
+
+### Notes
+
+* **deps:** bump actions/checkout from 6.0.2 to 6.0.3 ([#84](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/issues/84)) ([d9f435c](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/d9f435ca476a6bad15059d8e1416e193ae865d85))
+* **deps:** bump github/codeql-action from 4.36.0 to 4.36.2 ([#85](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/issues/85)) ([8f92752](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/8f927521f025cd8e03768c634a8dd930ce35483f))
+* **security:** upgrade pip to &gt;=26.1.2 in pip-audit job (PYSEC-2026-196) ([fdd1697](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/fdd16974bc479d1e23444278a80497d4535c702b))
+
 ## [7.1.0](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v7.0.1...v7.1.0) (2026-06-09)
 
 
