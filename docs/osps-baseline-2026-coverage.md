@@ -4,6 +4,8 @@
 
 Generated from [`src/oss_policy_kit/data/frameworks/osps-baseline-2026.yaml`](../src/oss_policy_kit/data/frameworks/osps-baseline-2026.yaml) and the bundled control catalog. Per-control assurance is read live from the catalog. Regenerate with `python scripts/generate-osps-coverage.py` whenever the map, catalog, or profile changes.
 
+> For a quick terminal view of the same data, run `oss-policy-kit osps-coverage` (`--format json` for the full machine-readable map).
+
 - **OSPS Baseline snapshot:** `v2026.02.19` ([v2026.02.19](https://github.com/ossf/security-baseline/releases/tag/v2026.02.19))
 - **Aligned kit profile:** `osps-baseline-2026-1`
 - **Criteria in snapshot:** 41 across 8 families (AC, BR, DO, GV, LE, QA, SA, VM)
