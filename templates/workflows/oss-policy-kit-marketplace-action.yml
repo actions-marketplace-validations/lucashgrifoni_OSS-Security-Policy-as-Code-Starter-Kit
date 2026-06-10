@@ -29,7 +29,10 @@ jobs:
       - name: Run oss-policy-kit baseline
         id: oss-policy
         # Pin to an exact released tag (e.g. @v7.2.0) for reproducibility, or
-        # to the commit SHA of the release tag for maximum assurance.
+        # to the commit SHA of the release tag for maximum assurance. The tag
+        # pin is the documented adopter convention, so the unpinned-SHA
+        # scanner note is suppressed on the next line.
+        # kics-scan ignore-line
         uses: lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit@v7.2.0
         with:
           target: '.'
