@@ -5,7 +5,7 @@ The kit ships as a composite GitHub Action so adopters can evaluate the bundled 
 ## Quick start
 
 ```yaml
-- uses: lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit@v6.4.0
+- uses: lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit@v7.2.0
   with:
     profile: github-level-1
     fail-on: fail
@@ -14,7 +14,7 @@ The kit ships as a composite GitHub Action so adopters can evaluate the bundled 
 Pin to a specific release for reproducibility:
 
 ```yaml
-- uses: lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit@v6.4.0
+- uses: lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit@v7.2.0
   with:
     profile: github-level-1
     fail-on: fail

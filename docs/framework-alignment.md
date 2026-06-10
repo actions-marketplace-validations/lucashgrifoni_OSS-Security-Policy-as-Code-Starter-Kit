@@ -25,8 +25,8 @@ navigate from a framework requirement back to a concrete control or evidence fil
 > SSDF, profile `appsec-llm-ssdf-218a-1`), **EU AI Act Article 11 + Annex IV** (profile
 > `cra-eu-ai-act-art11-1`, `LLM-AI-ACT-*` controls), and **OpenSSF Security Insights 1.0
 > emit** (the `emit-insights` subcommand). The Roadmap sections at the end of this page are
-> retained as historical design notes; the mapping tables themselves still need a v6.x
-> re-map (see the snapshot notice above).
+> retained as historical design notes; the mapping tables were re-mapped for the v6.x
+> families in the 2026-05-25 refresh (see the snapshot notice above).
 
 > **Honesty contract**: A `pass` on a control here does not equal a `pass` against the framework
 > requirement it maps to. Several frameworks include items the kit deliberately does **not**
