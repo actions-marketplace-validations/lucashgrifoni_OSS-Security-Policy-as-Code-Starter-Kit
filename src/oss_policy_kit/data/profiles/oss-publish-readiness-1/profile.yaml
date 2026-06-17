@@ -18,6 +18,11 @@ description: >
   underpin a trustworthy publish path (``CI-PIN-008``, ``CI-PERM-006``),
   and ``PROV-VERIFY-061`` for the post-publish verification step
   (extended in v6.0.0 to surface ``verification.source`` — see V6-10).
+  v10 adds clone-observable **CISA Secure by Design Pledge** readiness signals
+  (``CISA-SBD-VDP-001`` published VDP / RFC 9116 security.txt, ``CISA-SBD-CVE-003``
+  CWE-in-advisory hygiene, ``CISA-SBD-SECRETS-005`` secret-scan composition),
+  cross-mapped to ISO/IEC 29147 + 30111. These are readiness signals, **not**
+  "pledge fulfilled" — the MFA pledge goal stays with ``ORG-MFA-001``.
   **Posture:** advisory. **Recommended `--fail-on`:** ``degraded`` only.
 audience: >
   OSS maintainers publishing to PyPI, npm, RubyGems, or crates.io who
@@ -42,6 +47,10 @@ controls:
   - SCANNER-INTEGRITY-001
   - GH-EGRESS-NATIVE-001
   - GH-WF-LOCKFILE-001
+  # CISA Secure by Design Pledge readiness signals (v10; ISO/IEC 29147 + 30111)
+  - CISA-SBD-VDP-001
+  - CISA-SBD-CVE-003
+  - CISA-SBD-SECRETS-005
   # Sustaining governance
   - GOV-SEC-001
   - GOV-DISC-013

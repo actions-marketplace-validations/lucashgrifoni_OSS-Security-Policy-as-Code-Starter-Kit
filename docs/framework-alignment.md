@@ -5,7 +5,7 @@ DevSecOps frameworks operators most often have to defend against. It is a **mapp
 **certification claim**.
 
 > **Snapshot — v6.x refresh complete (2026-05-25).** As of **v7.3.0** the kit bundles
-> **214 controls / 56 profiles**, and the per-framework tables below now map the v6.x families:
+> **220 controls / 56 profiles**, and the per-framework tables below now map the v6.x families:
 > **AI/LLM (NIST 800-218A), AI agent + MCP, OWASP Agentic ASI, EU AI Act, OpenSSF Security
 > Insights** (the *AI / regulatory frameworks* sections), **GitLab CI** (`GL-PIPE-*` → OWASP CICD
 > Top 10), **Kubernetes** (`K8S-*` → CIS Kubernetes / Pod Security Standards / NSA-CISA), **IaC**
@@ -649,6 +649,25 @@ evidence-backed. Complemented by the `MCP-*` (MCP server security, ADR-023) and
 [`profiles/ai-agent.md`](profiles/ai-agent.md), [`mcp-server-security.md`](mcp-server-security.md), and
 ADR-016.
 
+## OWASP Top 10 for Agentic Applications — ASI01–ASI10 (family extended in v10)
+
+The `AGENT-ASI-*` family (ADR-024) maps the [OWASP Top 10 for Agentic Applications](https://genai.owasp.org/) (2026, published 2025-12-09) to clone-side signals, bundled in the advisory profile `appsec-agentic-asi-1`. Every control returns `NOT_APPLICABLE` when no agentic-AI framework is detected; a match is a pattern **signal** for the named risk family — **not** a verdict on exploitability and **not** a claim that an agent is safe in production. The v10 slice added `AGENT-ASI-EXEC-005`, `AGENT-ASI-CASCADE-008`, and `AGENT-ASI-ROGUE-010` so the family covers all ten risks without a gap; ASI03 and ASI04 are **mapped to existing controls, not duplicated**.
+
+| OWASP Agentic risk | Kit control(s) | Coverage | Clone-side signal |
+|---|---|---|---|
+| **ASI01** Agent Goal Hijack | `AGENT-ASI-GOAL-001` | signal | Version-controlled system-prompt / goal file. |
+| **ASI02** Tool Misuse & Exploitation | `AGENT-ASI-TOOL-002`, `AI-AGENT-002` | signal | Tool allowlist + per-tool least privilege. |
+| **ASI03** Agent Identity & Privilege Abuse | `AI-AGENT-008` | signal | Dedicated agent identity; flags token-passthrough anti-pattern. *(mapped, not duplicated)* |
+| **ASI04** Agentic Supply Chain Compromise | `AI-AGENT-010`, `MCP-TOOL-HASH-001`, `LLM-218A-PW-001` | signal | Model-version pinning, MCP tool-description hashing, pinned LLM SDKs. *(mapped, not duplicated)* |
+| **ASI05** Unexpected Code Execution | `AGENT-ASI-EXEC-005` | signal | Documented code-execution sandbox / isolation (seccomp, container, WASM). |
+| **ASI06** Memory & Context Poisoning | `AGENT-ASI-MEMORY-006`, `AI-AGENT-009` | signal / evidence-backed | Memory purge / poisoning-resistance policy. |
+| **ASI07** Insecure Inter-Agent Communication | `AGENT-ASI-INTER-007` | signal | Mutual authentication (mTLS / signed messages) for agent-to-agent traffic. |
+| **ASI08** Cascading Agent Failures | `AGENT-ASI-CASCADE-008` | signal | Iteration / recursion / step caps and circuit-breakers on agent loops. |
+| **ASI09** Human-Agent Trust Exploitation | `AGENT-ASI-CONFIRM-009` | signal | Human checkpoint for destructive / irreversible operations. |
+| **ASI10** Rogue Agents | `AGENT-ASI-ROGUE-010`, `AI-AGENT-007` | signal / evidence-backed | Agent inventory / registry + monitoring; tool-call audit logging. |
+
+**Coverage (v10):** all ten ASI risks map to ≥1 control; ASI03/ASI04 reuse existing controls (no duplicate IDs). Clone-side signals only — no runtime, no network. ADR-024 documents the family rationale; the profile is advisory (`--fail-on degraded`).
+
 ## EU AI Act — Article 11 + Annex IV (shipped in v6.0.0)
 
 EU AI Act Article 11 + Annex IV become enforceable on **2026-08-02** and require technical documentation for high-risk AI systems, including the intended purpose, training data summary, risk management documentation, and post-market monitoring plan. v6.0.0 shipped the **advisory** profile `cra-eu-ai-act-art11-1` with a 3-control family `LLM-AI-ACT-*`.
@@ -664,6 +683,66 @@ Bundled controls (already in v5.9.x): `GOV-DISC-065`, `REL-CHANGE-012`, `SAST-OS
 **Hard caveat (see [`eu-ai-act-readiness.md`](eu-ai-act-readiness.md))**: this profile is **not** a conformity assessment under the AI Act. Conformity assessment requires a notified body and is outside the kit's scope. The profile produces a clone-side posture indicator that adopters can use as evidence input; the formal CE-marking process is external. ADR-010 documents the design rationale.
 
 **Coverage (shipped, v6.x)**: 3 advisory controls + 4 bundled signals. Profile is advisory (`--fail-on degraded`). The EU CRA Article 13/14 product-class obligations are covered separately by the `CRA-ART-*` / `CRA-PRODUCT-*` families (ADR-020) and documented in [`cra-readiness.md`](cra-readiness.md).
+
+## CISA Secure by Design Pledge — clone-observable readiness signals (added in v10)
+
+The [CISA Secure by Design Pledge](https://www.cisa.gov/securebydesign) is a **voluntary** commitment an organization signs with CISA. The kit can only observe a subset of its goals from a repository clone, so these controls are **readiness signals — never "pledge fulfilled" or "certified"**. The disclosure signals are cross-mapped to **ISO/IEC 29147:2018** (vulnerability disclosure) and **ISO/IEC 30111:2019** (vulnerability handling) and overlap the CRA Article 14 track above — they are *mapped, not duplicated*. Bundled in `oss-publish-readiness-1` (advisory).
+
+| CISA SbD pledge goal | Kit control | Coverage | Standard cross-map / limitation |
+|---|---|---|---|
+| **Vulnerability disclosure policy** | `CISA-SBD-VDP-001` | signal | RFC 9116 `.well-known/security.txt` (or a `SECURITY.md` disclosure section). ISO/IEC 29147. Overlaps `CRA-ART14-COORD-002`. |
+| **Complete CVEs (CWE in advisories)** | `CISA-SBD-CVE-003` | signal | CWE identifier present in published advisories (CSAF / `advisories.json` / OSV). ISO/IEC 30111. `NOT_APPLICABLE` when no advisory metadata is in the clone. |
+| **No default passwords / hardcoded secrets** | `CISA-SBD-SECRETS-005` | evidence-backed | Composes the gitleaks SARIF evidence (`SAST-GITLEAKS-069`); does **not** re-scan. `MANUAL_REVIEW` without that evidence. |
+| **Multi-factor authentication** | `ORG-MFA-001` | evidence-backed | *Mapped, not duplicated.* MFA enforcement cannot be proven from a clone; accepts `org-mfa-posture.json` evidence. |
+| **Security patch uptake** | — | out of scope | Runtime / customer telemetry; not clone-observable. |
+| **Evidence of intrusions** | — | out of scope | Runtime / customer telemetry; not clone-observable. |
+
+**Honesty caveat:** "has a policy" ≠ "runs the process". No control here is `deterministic` for a process claim, and the kit makes **no certification or "pledge fulfilled" claim** — the pledge is signed by an organization with CISA, not produced by a tool.
+
+## AI framework crosswalks — NIST AI RMF, ISO/IEC 42001, MITRE ATLAS (informative, added in v10)
+
+> **Informative mapping only.** The three tables below add *traceability* between the kit's existing AI / agentic controls (`AI-AGENT-*`, `AGENT-ASI-*`, `LLM-218A-*`, `LLM-AI-ACT-*`, `MCP-*`) and three external AI frameworks. They introduce **no new control, weight, or pass/fail outcome**, and assert **no conformance or certification**. Rows are kept only where a control area maps to a citable framework element; where none exists the row is omitted. Always confirm the current framework text upstream (see "Versioning of this doc").
+
+### NIST AI RMF + Generative AI Profile (NIST AI 600-1, published 2024-07-26) — informative
+
+The AI RMF organizes work into four functions — **Govern, Map, Measure, Manage**. The kit's clone-side controls touch the security/transparency edges of that core; deeper organizational subcategories are out of clone scope.
+
+| Kit control area | AI RMF function / subcategory | Note |
+|---|---|---|
+| AI security considerations + policy (`LLM-218A-PO-001`) | **Govern 1.2**, **Govern 4.1** | Trustworthy-AI characteristics + risk culture documented. |
+| AI risk-management documentation (`LLM-AI-ACT-003`) | **Govern 1.1**, **Map 1.1** | Legal/context risk framing. `evidence-backed` only where a repo artifact exists. |
+| Prompt registry / governance (`LLM-218A-PO-002`, `AI-AGENT-003`) | **Manage 1.3** | Versioned, reviewed system-prompt registry. |
+| Prompt-injection / adversarial testing (`AI-AGENT-004`, `LLM-218A-PW-002`, `AGENT-ASI-GOAL-001`) | **Measure 2.7** | AI system security & resilience (TEVV). |
+| Tool allowlist / least privilege (`AI-AGENT-002`, `AGENT-ASI-TOOL-002`, `MCP-SCOPE-001`) | **Measure 2.7**, **Manage 2.2** | Constrain agent capability surface. |
+| Output handling / content filtering (`AI-AGENT-005`, `LLM-AI-ACT-002`) | **Measure 2.6** | AI system safety of outputs. |
+| Model / SDK version pinning (`AI-AGENT-010`, `LLM-218A-PW-001`) | **Map 4.1**, **Manage 4.1** | Provenance + post-deployment monitoring. |
+| Memory poisoning / context hygiene (`AI-AGENT-009`, `AGENT-ASI-MEMORY-006`) | **Measure 2.7** | Resilience to context tampering. |
+| Tool-call audit logging (`AI-AGENT-007`, `AGENT-ASI-ROGUE-010`) | **Manage 4.1** | Post-deployment monitoring / accountability. |
+
+### ISO/IEC 42001:2023 (AI Management System) — informative
+
+ISO/IEC 42001 is an **organizational management-system standard**; most of its requirements (leadership, resourcing, internal audit) cannot be observed from a repository clone. The kit maps only the artifact-producing edges. **No conformance or certification claim** — certification is a third-party audit, out of the kit's scope.
+
+| Kit control area | ISO/IEC 42001 clause / Annex A | Note |
+|---|---|---|
+| AI risk-management documentation (`LLM-AI-ACT-003`) | **§6.1.2 / §8.2** (AI risk assessment) | Documented risk process artifact. |
+| AI security / governance policy (`LLM-218A-PO-001`) | **§5.2**, **Annex A.2** (AI policy) | Policy-presence signal. |
+| EU AI Act Annex IV technical docs (`LLM-AI-ACT-*`) | **§8.4 / Annex A.5** (AI system impact assessment) | Impact/technical documentation. |
+| Model lifecycle / versioning (`AI-AGENT-010`, `LLM-218A-PS-002`) | **Annex A.6** (AI system life cycle) | Version/lifecycle artifacts. |
+| Data / memory handling (`AI-AGENT-009`) | **Annex A.7** (data for AI systems) | Data-handling posture. |
+
+### MITRE ATLAS — informative
+
+[MITRE ATLAS](https://atlas.mitre.org/) catalogues adversary techniques against AI systems. The kit's controls are **mitigations** that reduce exposure to the named techniques; a mapping is not a claim the technique is blocked. Only well-established technique IDs are cited.
+
+| Kit control area | ATLAS technique | Note |
+|---|---|---|
+| Prompt-injection testing + goal integrity (`AI-AGENT-004`, `AGENT-ASI-GOAL-001`, `MCP-INJECTION-TEST-001`) | **AML.T0051** LLM Prompt Injection; **AML.T0054** LLM Jailbreak | Adversarial-test presence. |
+| Memory / context poisoning policy (`AI-AGENT-009`, `AGENT-ASI-MEMORY-006`) | **AML.T0051.001** Indirect Prompt Injection | Poisoned context fed back to the model. |
+| Tool allowlist + MCP tool surface (`AI-AGENT-002`, `AGENT-ASI-TOOL-002`, `MCP-TOOL-HASH-001`) | **AML.T0053** LLM Plugin Compromise | Constrain / integrity-check tool surface. |
+| Model + SDK supply chain (`AI-AGENT-010`, `LLM-218A-PW-001`) | **AML.T0010** ML Supply Chain Compromise | Pin / verify model + dependency provenance. |
+| Rate limiting + cascading-failure guards (`AI-AGENT-006`, `AGENT-ASI-CASCADE-008`) | **AML.T0029** Denial of ML Service | Bound resource consumption / loops. |
+| Tool-call audit logging + rogue-agent monitoring (`AI-AGENT-007`, `AGENT-ASI-ROGUE-010`) | **AML.T0024** Exfiltration via ML Inference API | Logging aids detection of abuse / exfiltration. |
 
 ## OpenSSF Security Insights 1.0 — emit (shipped in v6.0.0)
 

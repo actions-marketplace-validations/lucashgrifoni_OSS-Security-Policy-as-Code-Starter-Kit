@@ -77,4 +77,4 @@ In **v7.0.0**, make `reports/2.0` the **default** report contract.
 
 - ADR-013, `docs/reports-contract-v2.0.md`, `scripts/migrate-1.0-to-2.0.py`
 - OpenSSF Scorecard v6 conformance model — <https://github.com/ossf/scorecard/pull/4952>
-- `ROADMAP.md` (v7.x horizon); roadmap plan `melhorias/ativos/planos/roadmap-v7-v10-claude-opus-4-7-2026-05-25.md` (§6, §11.1)
+- `ROADMAP.md` (v7.x horizon); local roadmap plan (§6, §11.1)

@@ -3,7 +3,7 @@
 - **Status**: proposed (targets v6.6.0, ADDITIVE / non-breaking) — promotes backlog item `openvex-export`
 - **Date**: 2026-05-26
 - **Context window**: v7.x roadmap horizon — "Contract modernization & ecosystem interoperability", shipped early as a v6.x additive minor (roadmap decision §11.1: defer the breaking reports/2.0 flip one cycle; ship low-risk interop first)
-- **Related**: ADR-002 (emit-vex scope), ADR-001 (SCA scanner choice), `docs/vex-emission.md`, `ROADMAP.md` (v7.x), `melhorias/ativos/backlog/openvex-export-2026-05-25.md`
+- **Related**: ADR-002 (emit-vex scope), ADR-001 (SCA scanner choice), `docs/vex-emission.md`, `ROADMAP.md` (v7.x); local OpenVEX backlog note
 
 ## Context
 

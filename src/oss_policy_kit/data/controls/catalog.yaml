@@ -1413,6 +1413,30 @@ controls:
     lifecycle: experimental
     assurance: signal
     weight: 1
+  # v10 CISA Secure by Design Pledge readiness signals (clone-observable subset; ISO/IEC
+  # 29147 + 30111). MFA goal -> ORG-MFA-001 (mapped, not duplicated). Disclosure overlaps
+  # the CRA Art.14 track above (mapped in docs/framework-alignment.md).
+  - id: CISA-SBD-VDP-001
+    title: Published vulnerability disclosure policy signal (RFC 9116 security.txt / SECURITY.md, ISO/IEC 29147)
+    category: governance
+    automation: deterministic
+    lifecycle: experimental
+    assurance: signal
+    weight: 2
+  - id: CISA-SBD-CVE-003
+    title: Published advisories carry CWE identifiers (ISO/IEC 30111 handling hygiene)
+    category: governance
+    automation: deterministic
+    lifecycle: experimental
+    assurance: signal
+    weight: 1
+  - id: CISA-SBD-SECRETS-005
+    title: Default-credential / hardcoded-secret hygiene composed from secret-scan evidence
+    category: governance
+    automation: not_observable_locally
+    lifecycle: experimental
+    assurance: evidence-backed
+    weight: 2
   # PR-23 — EPSS + CISA KEV prioritization in SCA.
   - id: SCA-KEV-001
     title: No dependency CVE present in the CISA KEV catalog (SARIF kev property)
@@ -1517,6 +1541,29 @@ controls:
     weight: 2
   - id: AGENT-ASI-CONFIRM-009
     title: Human checkpoint required for destructive agent operations (ASI09)
+    category: secure_development
+    automation: deterministic
+    lifecycle: experimental
+    assurance: signal
+    weight: 2
+  # v10 ASI-depth extension (ADR-024 family): completes ASI01-ASI10 coverage.
+  # ASI03 -> AI-AGENT-008, ASI04 -> AI-AGENT-010 / MCP-TOOL-HASH-001 (mapped, not duplicated).
+  - id: AGENT-ASI-EXEC-005
+    title: Agent code-execution sandboxing / isolation documented (ASI05)
+    category: secure_development
+    automation: deterministic
+    lifecycle: experimental
+    assurance: signal
+    weight: 2
+  - id: AGENT-ASI-CASCADE-008
+    title: Agent cascading-failure guards documented (iteration/recursion caps, breakers) (ASI08)
+    category: secure_development
+    automation: deterministic
+    lifecycle: experimental
+    assurance: signal
+    weight: 2
+  - id: AGENT-ASI-ROGUE-010
+    title: Agent inventory / monitoring for rogue-agent detection documented (ASI10)
     category: secure_development
     automation: deterministic
     lifecycle: experimental

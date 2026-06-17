@@ -2,7 +2,7 @@
 // Regenerate with: python scripts/generate-gitpage-catalog-data.py
 // Source of truth: src/oss_policy_kit/data/controls/catalog.yaml + bundled profiles.
 window.CATALOG_DATA = {
-  "controlCount": 214,
+  "controlCount": 220,
   "profileCount": 56,
   "facets": {
     "categories": [
@@ -3077,6 +3077,39 @@ window.CATALOG_DATA = {
       ]
     },
     {
+      "id": "CISA-SBD-VDP-001",
+      "title": "Published vulnerability disclosure policy signal (RFC 9116 security.txt / SECURITY.md, ISO/IEC 29147)",
+      "category": "governance",
+      "assurance": "signal",
+      "lifecycle": "experimental",
+      "weight": 2,
+      "profiles": [
+        "oss-publish-readiness-1"
+      ]
+    },
+    {
+      "id": "CISA-SBD-CVE-003",
+      "title": "Published advisories carry CWE identifiers (ISO/IEC 30111 handling hygiene)",
+      "category": "governance",
+      "assurance": "signal",
+      "lifecycle": "experimental",
+      "weight": 1,
+      "profiles": [
+        "oss-publish-readiness-1"
+      ]
+    },
+    {
+      "id": "CISA-SBD-SECRETS-005",
+      "title": "Default-credential / hardcoded-secret hygiene composed from secret-scan evidence",
+      "category": "governance",
+      "assurance": "evidence-backed",
+      "lifecycle": "experimental",
+      "weight": 2,
+      "profiles": [
+        "oss-publish-readiness-1"
+      ]
+    },
+    {
       "id": "SCA-KEV-001",
       "title": "No dependency CVE present in the CISA KEV catalog (SARIF kev property)",
       "category": "vulnerability_management",
@@ -3235,6 +3268,39 @@ window.CATALOG_DATA = {
     {
       "id": "AGENT-ASI-CONFIRM-009",
       "title": "Human checkpoint required for destructive agent operations (ASI09)",
+      "category": "secure_development",
+      "assurance": "signal",
+      "lifecycle": "experimental",
+      "weight": 2,
+      "profiles": [
+        "appsec-agentic-asi-1"
+      ]
+    },
+    {
+      "id": "AGENT-ASI-EXEC-005",
+      "title": "Agent code-execution sandboxing / isolation documented (ASI05)",
+      "category": "secure_development",
+      "assurance": "signal",
+      "lifecycle": "experimental",
+      "weight": 2,
+      "profiles": [
+        "appsec-agentic-asi-1"
+      ]
+    },
+    {
+      "id": "AGENT-ASI-CASCADE-008",
+      "title": "Agent cascading-failure guards documented (iteration/recursion caps, breakers) (ASI08)",
+      "category": "secure_development",
+      "assurance": "signal",
+      "lifecycle": "experimental",
+      "weight": 2,
+      "profiles": [
+        "appsec-agentic-asi-1"
+      ]
+    },
+    {
+      "id": "AGENT-ASI-ROGUE-010",
+      "title": "Agent inventory / monitoring for rogue-agent detection documented (ASI10)",
       "category": "secure_development",
       "assurance": "signal",
       "lifecycle": "experimental",

@@ -8,24 +8,36 @@ description: >
   detected:
   - ``AGENT-ASI-GOAL-001`` (ASI01) — goal/system-prompt version-controlled.
   - ``AGENT-ASI-TOOL-002`` (ASI02) — tool allowlist + least privilege.
+  - ``AGENT-ASI-EXEC-005`` (ASI05) — code-execution sandboxing / isolation.
   - ``AGENT-ASI-MEMORY-006`` (ASI06) — memory purge / poisoning policy.
   - ``AGENT-ASI-INTER-007`` (ASI07) — inter-agent mutual authentication.
+  - ``AGENT-ASI-CASCADE-008`` (ASI08) — iteration/recursion caps + breakers.
   - ``AGENT-ASI-CONFIRM-009`` (ASI09) — human checkpoint for destructive ops.
+  - ``AGENT-ASI-ROGUE-010`` (ASI10) — agent inventory / rogue-agent monitoring.
+  ASI03 (identity/privilege abuse) and ASI04 (agentic supply chain) are covered
+  by ``AI-AGENT-008`` and ``AI-AGENT-010`` / ``MCP-TOOL-HASH-001`` respectively
+  (mapped in docs/framework-alignment.md, not duplicated here).
   Bundled supporting controls: ``LLM-218A-PO-001`` (AI security
   considerations), ``MCP-TOOL-HASH-001`` and ``MCP-CONFIRM-001`` (tool
   surface), ``AI-AGENT-002`` (tool allowlist).
+  Informative framework crosswalks (NIST AI RMF / AI 600-1, ISO/IEC 42001,
+  MITRE ATLAS) are in docs/framework-alignment.md — traceability only, no
+  conformance or certification claim.
   **Posture:** advisory. **Recommended `--fail-on`:** ``degraded`` only.
 audience: >
   Teams shipping AI agents (LangChain/LangGraph, AutoGen, CrewAI, MCP-based,
   or similar) who want a clone-side hygiene baseline against the OWASP Agentic
   Top 10 risk families.
 controls:
-  # OWASP Agentic ASI family
+  # OWASP Agentic ASI family (ASI01-ASI10)
   - AGENT-ASI-GOAL-001
   - AGENT-ASI-TOOL-002
+  - AGENT-ASI-EXEC-005
   - AGENT-ASI-MEMORY-006
   - AGENT-ASI-INTER-007
+  - AGENT-ASI-CASCADE-008
   - AGENT-ASI-CONFIRM-009
+  - AGENT-ASI-ROGUE-010
   # Tool surface (MCP) + AI baseline
   - MCP-TOOL-HASH-001
   - MCP-CONFIRM-001

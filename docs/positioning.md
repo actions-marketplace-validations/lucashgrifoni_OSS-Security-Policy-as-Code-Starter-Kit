@@ -2,7 +2,7 @@
 
 This page exists because the OSS security tooling landscape has multiple overlapping projects (Scorecard, zizmor, poutine, OSV-Scanner, Harden-Runner, Trivy, Syft) plus general-purpose policy engines (OPA/Conftest, Kyverno) and adopters reasonably ask: *"why use this kit if `<other tool>` already covers part of this?"*
 
-The honest answer is below. This page deliberately does not market the kit; it draws boundaries. Everything described here as **shipped** is verified against the **v6.4.0 build**. The items formerly listed at the end under *Roadmap (v6.0.0 — in development)* have since shipped across the v6.0.0–v6.4.0 line; that section is retained as historical context.
+The honest answer is below. This page deliberately does not market the kit; it draws boundaries. Everything described here as **shipped** is verified against the current released build; see `CHANGELOG.md` for the authoritative version and counts. The items formerly listed at the end under *Roadmap (v6.0.0 — in development)* have since shipped across the v6.0.0–v6.4.0 line; that section is retained as historical context.
 
 ---
 
@@ -10,10 +10,10 @@ The honest answer is below. This page deliberately does not market the kit; it d
 
 A **policy-as-code starter kit** that evaluates clone-visible OSS repository governance plus GitHub Actions / Azure Pipelines / AWS CodeBuild–CodePipeline / GitLab CI signals against **composable profiles** with explicit trust grading.
 
-Concretely, as of v6.4.0:
+Concretely, in the current release:
 
 - **56 bundled profiles** organized in ladders (`*-level-1` to `*-level-3`, including the first-class GitLab CI family `gitlab-level-1/2/3`), release-hardening tracks (`*-release-hardening-1/2/3`, including `gitlab-release-hardening-1/2/3`), regulatory advisories (`cra-eu-ready-1`, `cra-eu-strict-1`, `cra-eu-reporting-1`, EU CRA Art.13/14 and EU AI Act Art.11 readiness), framework-aligned advisories (`osps-baseline-1`, OSPS Baseline 2026, `slsa-build-l2-1`, SLSA Source L1/L2, `ssdf-baseline-1`, NIST 800-218A AI SSDF, `cis-supply-chain-1`, `owasp-cicd-top10-1`, `s2c2f-l1-1`), IaC posture profiles (Terraform, CloudFormation, Pulumi, Bicep), Kubernetes / container baselines, webhook hardening (`webhook-security-1`), an AppSec SAST/SCA bundle (`appsec-sast-sca-1`), and AI/agent source-side baselines (`ai-agent-baseline-1`, `appsec-mcp-server-1`, OWASP Agentic ASI). For the authoritative list see [profiles/overview.md](profiles/overview.md).
-- **214 controls** each labelled `deterministic` (clone-truth, no inference), `signal` (directional, not verified), or `evidence-backed` (consumes a structured evidence file with a schema). The grade flows into the `reports/1.0` JSON and Markdown output so consumers can reason about proof strength.
+- **220 controls** each labelled `deterministic` (clone-truth, no inference), `signal` (directional, not verified), or `evidence-backed` (consumes a structured evidence file with a schema). The grade flows into the `reports/1.0` JSON and Markdown output so consumers can reason about proof strength.
 - **Evidence model with explicit trust levels** — `static_clone`, `api_collected`, `user_supplied`, `derived`, `heuristic_signal`, `manual_review`, `not_observable` — and per-control collection metadata (`collected_at`, `collection_method`).
 - **Waiver registry** with owner, reason, and expiry, integrated with the gating decision.
 - **SARIF 2.1.0 output** for Code Scanning ingestion and **CycloneDX VEX 1.6** emission via `emit-vex`.

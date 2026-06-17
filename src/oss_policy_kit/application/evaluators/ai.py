@@ -1023,3 +1023,149 @@ def eval_agent_asi_confirm_009(ctx: EvalContext) -> EvalOutcome:
         evidence_sources=[],
         confidence="low",
     )
+
+
+# --- v10 ASI-depth extension (ADR-024 family) ------------------------------------------
+# Three more OWASP Agentic Top 10 (2026) risks gain a dedicated clone-side signal so the
+# AGENT-ASI-* family maps ASI01-ASI10 without a coverage gap. ASI03 (identity / privilege
+# abuse) and ASI04 (agentic supply chain) are intentionally NOT given new IDs: they are
+# already covered by AI-AGENT-008 (dedicated identity + token-passthrough anti-pattern) and
+# by AI-AGENT-010 / MCP-TOOL-HASH-001 / LLM-218A-PW-001 respectively (see
+# docs/framework-alignment.md). All three remain advisory `signal` controls: clone-only, no
+# runtime, never a "safe in production" verdict.
+
+
+def eval_agent_asi_exec_005(ctx: EvalContext) -> EvalOutcome:
+    """AGENT-ASI-EXEC-005 (ASI05): code-execution sandboxing / isolation signal.
+
+    Unexpected code execution is the agent running attacker-influenced code through a
+    code-interpreter or shell tool. Clone-side we can only look for a documented sandbox /
+    isolation posture; the agent is never executed, so this stays a low-confidence signal.
+    """
+    applicable, found = _agentic_applicable(ctx.repo_root)
+    if not applicable:
+        return _agentic_na("ASI05 unexpected-code-execution")
+    hit = _agentic_signal(
+        ctx.repo_root,
+        found,
+        (
+            "code execution sandbox",
+            "code-execution sandbox",
+            "sandboxed execution",
+            "execution sandbox",
+            "restricted execution",
+            "isolated execution",
+            "execution isolation",
+            "code interpreter sandbox",
+            "seccomp",
+            "gvisor",
+            "firejail",
+            "wasm sandbox",
+            "no arbitrary code execution",
+        ),
+    )
+    if hit is not None:
+        return EvalOutcome(
+            status=ControlStatus.PASS,
+            reason=f"Agent code-execution sandboxing / isolation signal detected in {hit.name} (ASI05).",
+            remediation="Keep code-execution tools sandboxed (seccomp / container / WASM); deny arbitrary host exec.",
+            evidence_sources=[str(hit.resolve())],
+            confidence="low",
+        )
+    return EvalOutcome(
+        status=ControlStatus.MANUAL_REVIEW_REQUIRED,
+        reason="Agentic framework detected but no code-execution sandboxing / isolation policy documented.",
+        remediation="Sandbox or isolate any agent code-execution / shell tool and document it (OWASP ASI05).",
+        evidence_sources=[],
+        confidence="low",
+    )
+
+
+def eval_agent_asi_cascade_008(ctx: EvalContext) -> EvalOutcome:
+    """AGENT-ASI-CASCADE-008 (ASI08): cascading-failure guard signal.
+
+    Cascading agent failures come from unbounded loops, recursion, or fan-out between
+    agents. Clone-side we look for a documented iteration / recursion / step cap or a
+    circuit-breaker; we cannot prove the guard is wired at runtime, so confidence is low.
+    """
+    applicable, found = _agentic_applicable(ctx.repo_root)
+    if not applicable:
+        return _agentic_na("ASI08 cascading-failures")
+    hit = _agentic_signal(
+        ctx.repo_root,
+        found,
+        (
+            "max_iterations",
+            "max iterations",
+            "max_steps",
+            "max steps",
+            "max_turns",
+            "recursion_limit",
+            "recursion limit",
+            "recursion guard",
+            "iteration limit",
+            "step limit",
+            "loop limit",
+            "loop guard",
+            "circuit breaker",
+            "circuit-breaker",
+        ),
+    )
+    if hit is not None:
+        return EvalOutcome(
+            status=ControlStatus.PASS,
+            reason=f"Agent cascading-failure guard signal detected in {hit.name} (ASI08).",
+            remediation="Keep iteration/recursion/step caps and circuit-breakers enforced on agent loops.",
+            evidence_sources=[str(hit.resolve())],
+            confidence="low",
+        )
+    return EvalOutcome(
+        status=ControlStatus.MANUAL_REVIEW_REQUIRED,
+        reason="Agentic framework detected but no cascading-failure guard (iteration/recursion cap, breaker) found.",
+        remediation="Bound agent loops with iteration/recursion/step limits and circuit-breakers (OWASP ASI08).",
+        evidence_sources=[],
+        confidence="low",
+    )
+
+
+def eval_agent_asi_rogue_010(ctx: EvalContext) -> EvalOutcome:
+    """AGENT-ASI-ROGUE-010 (ASI10): rogue-agent inventory / monitoring signal.
+
+    Rogue agents are unauthorized or compromised agents acting inside the system. Clone-side
+    we look for a documented agent inventory / registry / allowlist or monitoring posture
+    that would let an operator detect one; this complements AI-AGENT-007 (tool-call audit).
+    """
+    applicable, found = _agentic_applicable(ctx.repo_root)
+    if not applicable:
+        return _agentic_na("ASI10 rogue-agents")
+    hit = _agentic_signal(
+        ctx.repo_root,
+        found,
+        (
+            "agent inventory",
+            "agent registry",
+            "agent allowlist",
+            "agent allow-list",
+            "registered agents",
+            "agent monitoring",
+            "rogue agent",
+            "unauthorized agent",
+            "agent identity registry",
+            "agent attestation",
+        ),
+    )
+    if hit is not None:
+        return EvalOutcome(
+            status=ControlStatus.PASS,
+            reason=f"Rogue-agent inventory / monitoring signal detected in {hit.name} (ASI10).",
+            remediation="Keep the agent inventory/registry current and monitor for unregistered agents.",
+            evidence_sources=[str(hit.resolve())],
+            confidence="low",
+        )
+    return EvalOutcome(
+        status=ControlStatus.MANUAL_REVIEW_REQUIRED,
+        reason="Agentic framework detected but no agent inventory / registry / monitoring signal found.",
+        remediation="Maintain an agent inventory/registry and monitor for rogue or unauthorized agents (OWASP ASI10).",
+        evidence_sources=[],
+        confidence="low",
+    )

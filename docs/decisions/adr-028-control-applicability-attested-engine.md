@@ -80,7 +80,7 @@ a first-class state and wired end-to-end (scoring per D2, `gate_role` mapping, `
 schema enum, `reports/2.0` status map, CLI table rendering, status ordering). **No bundled evaluator
 emits it yet**, so current outputs are unchanged. PR2 (applicability engine, opt-in), PR3 (verified
 attestation → `ATTESTED`), PR4 (impact diff + migration guide), and PR5 (the gated default flip) follow
-per the local execution plan `melhorias/ativos/planos/v8.0.0-control-states-applicability-attested-plan-2026-06-08.md`.
+per the local execution plan.
 
 ## Alternatives considered
 

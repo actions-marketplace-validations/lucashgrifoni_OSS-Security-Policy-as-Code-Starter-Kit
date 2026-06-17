@@ -76,6 +76,9 @@ ALLOWLISTED_PATHS: frozenset[str] = frozenset(
         # examples on purpose — these are not real credentials.
         ".gitleaks.toml",
         "tests/infrastructure/test_aws_ci.py",
+        # Sibling AWS CI parser test: also embeds the documented synthetic AWS
+        # access-key example to exercise the detector. Not a real credential.
+        "tests/infrastructure/test_aws_ci_parser_signals.py",
         # This test pins the public-hygiene regexes themselves and therefore
         # has to embed synthetic POSIX home-path fixtures to exercise the
         # matcher. The strings are not real paths.
@@ -84,6 +87,13 @@ ALLOWLISTED_PATHS: frozenset[str] = frozenset(
         # fixtures to prove _sanitize_target_path_for_payload strips them.
         # Not real auditor paths.
         "tests/application/test_reports_v1_schema.py",
+        # Evidence-projection helper test embeds synthetic POSIX/Windows home-path
+        # fixtures to prove _redact_path strips them. Not real auditor paths.
+        "tests/application/test_evidence_projection_helpers.py",
+        # .gitignore must name the project-local private planning directory in
+        # order to ignore it — the reference is functionally required, not a leak
+        # (same rationale as .dockerignore below).
+        ".gitignore",
         # The .dockerignore file deliberately excludes the project-local
         # private planning directory from container builds. That exclusion
         # rule is a protective allow-out, not a leaked path.

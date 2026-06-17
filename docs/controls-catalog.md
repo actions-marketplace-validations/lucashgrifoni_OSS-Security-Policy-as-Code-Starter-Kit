@@ -1,8 +1,8 @@
-# Controls Catalog (214 controls)
+# Controls Catalog (220 controls)
 
 Single-page reference generated from the bundled control catalog and profiles. The authoritative source is [`src/oss_policy_kit/data/controls/catalog.yaml`](../src/oss_policy_kit/data/controls/catalog.yaml).
 
-Current bundled state: **214 controls** across **56 bundled profiles**. Regenerate this page whenever the catalog or profile membership changes (`python scripts/generate-controls-catalog.py`).
+Current bundled state: **220 controls** across **56 bundled profiles**. Regenerate this page whenever the catalog or profile membership changes (`python scripts/generate-controls-catalog.py`).
 
 > **Tip:** for an interactive, filterable view of this same catalog (filter by family, assurance, lifecycle, or profile membership, plus text search) see the **Control catalog** section of the project landing page: <https://lucashgrifoni.github.io/OSS-Security-Policy-as-Code-Starter-Kit/#catalog>.
 
@@ -12,12 +12,12 @@ Current bundled state: **214 controls** across **56 bundled profiles**. Regenera
 |---|---:|
 | `ci_cd` | 41 |
 | `container` | 7 |
-| `governance` | 15 |
+| `governance` | 18 |
 | `iac` | 30 |
 | `kubernetes` | 16 |
 | `platform` | 16 |
 | `release` | 3 |
-| `secure_development` | 45 |
+| `secure_development` | 48 |
 | `supply_chain` | 32 |
 | `vulnerability_management` | 9 |
 
@@ -26,8 +26,8 @@ Current bundled state: **214 controls** across **56 bundled profiles**. Regenera
 | Assurance | Count | Meaning |
 |---|---:|---|
 | `deterministic` | 31 | Structural parse or file presence/absence with high confidence. |
-| `evidence-backed` | 91 | Depends on a local JSON evidence file or API-collected attestation. |
-| `signal` | 92 | Heuristic or directional signal; PASS is not proof of runtime behavior. |
+| `evidence-backed` | 92 | Depends on a local JSON evidence file or API-collected attestation. |
+| `signal` | 97 | Heuristic or directional signal; PASS is not proof of runtime behavior. |
 
 ## Full Catalog
 
@@ -230,6 +230,9 @@ Profile counts in the **Profiles** column reflect how many bundled profiles incl
 | `CRA-ART14-CSAF-001` | governance | signal | 2 | 1 | CSAF advisory feed present (CRA Article 14 reporting readiness) |
 | `CRA-ART14-COORD-002` | governance | signal | 2 | 1 | Coordinated vulnerability disclosure policy documented (CRA Article 14) |
 | `CRA-PRODUCT-CLASS-001` | governance | signal | 1 | 1 | CRA product classification declared (Implementing Reg (EU) 2025/2392) |
+| `CISA-SBD-VDP-001` | governance | signal | 2 | 1 | Published vulnerability disclosure policy signal (RFC 9116 security.txt / SECURITY.md, ISO/IEC 29147) |
+| `CISA-SBD-CVE-003` | governance | signal | 1 | 1 | Published advisories carry CWE identifiers (ISO/IEC 30111 handling hygiene) |
+| `CISA-SBD-SECRETS-005` | governance | evidence-backed | 2 | 1 | Default-credential / hardcoded-secret hygiene composed from secret-scan evidence |
 | `SCA-KEV-001` | vulnerability_management | evidence-backed | 3 | 1 | No dependency CVE present in the CISA KEV catalog (SARIF kev property) |
 | `SCA-EPSS-001` | vulnerability_management | evidence-backed | 2 | 1 | No high-EPSS high-severity dependency CVE unaddressed (SARIF epss_score property) |
 | `SLSA-SRC-006` | supply_chain | evidence-backed | 3 | 1 | Signed commits required (SLSA Source L2) |
@@ -245,6 +248,9 @@ Profile counts in the **Profiles** column reflect how many bundled profiles incl
 | `AGENT-ASI-MEMORY-006` | secure_development | signal | 2 | 1 | Agent persistent-memory purge / poisoning policy documented (ASI06) |
 | `AGENT-ASI-INTER-007` | secure_development | signal | 2 | 1 | Inter-agent communication mutual authentication signal (ASI07) |
 | `AGENT-ASI-CONFIRM-009` | secure_development | signal | 2 | 1 | Human checkpoint required for destructive agent operations (ASI09) |
+| `AGENT-ASI-EXEC-005` | secure_development | signal | 2 | 1 | Agent code-execution sandboxing / isolation documented (ASI05) |
+| `AGENT-ASI-CASCADE-008` | secure_development | signal | 2 | 1 | Agent cascading-failure guards documented (iteration/recursion caps, breakers) (ASI08) |
+| `AGENT-ASI-ROGUE-010` | secure_development | signal | 2 | 1 | Agent inventory / monitoring for rogue-agent detection documented (ASI10) |
 | `GH-EGRESS-NATIVE-001` | ci_cd | signal | 2 | 1 | GitHub Actions native egress firewall policy declared |
 | `GH-WF-LOCKFILE-001` | ci_cd | signal | 2 | 1 | GitHub Actions workflow lockfile present (action SHA pinning) |
 | `CONT-DISTROLESS-001` | container | signal | 2 | 1 | Container base image is distroless / minimal (Chainguard, Wolfi, distroless, scratch) |
@@ -449,6 +455,9 @@ Each control entry below lists which bundled profiles include it. Controls not p
 - `CRA-ART14-CSAF-001`: `cra-eu-ready-2-1`
 - `CRA-ART14-COORD-002`: `cra-eu-ready-2-1`
 - `CRA-PRODUCT-CLASS-001`: `cra-eu-ready-2-1`
+- `CISA-SBD-VDP-001`: `oss-publish-readiness-1`
+- `CISA-SBD-CVE-003`: `oss-publish-readiness-1`
+- `CISA-SBD-SECRETS-005`: `oss-publish-readiness-1`
 - `SCA-KEV-001`: `appsec-sast-sca-1`
 - `SCA-EPSS-001`: `appsec-sast-sca-1`
 - `SLSA-SRC-006`: `slsa-source-l2-1`
@@ -464,6 +473,9 @@ Each control entry below lists which bundled profiles include it. Controls not p
 - `AGENT-ASI-MEMORY-006`: `appsec-agentic-asi-1`
 - `AGENT-ASI-INTER-007`: `appsec-agentic-asi-1`
 - `AGENT-ASI-CONFIRM-009`: `appsec-agentic-asi-1`
+- `AGENT-ASI-EXEC-005`: `appsec-agentic-asi-1`
+- `AGENT-ASI-CASCADE-008`: `appsec-agentic-asi-1`
+- `AGENT-ASI-ROGUE-010`: `appsec-agentic-asi-1`
 - `GH-EGRESS-NATIVE-001`: `oss-publish-readiness-1`
 - `GH-WF-LOCKFILE-001`: `oss-publish-readiness-1`
 - `CONT-DISTROLESS-001`: `container-baseline-1`

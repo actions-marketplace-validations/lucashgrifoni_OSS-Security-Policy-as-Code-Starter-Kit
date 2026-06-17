@@ -9,6 +9,9 @@ description: >
   This profile is NOT a runtime policy enforcer and does not claim that an
   agent is safe in production. Pair it with runtime controls, red-team
   testing, and platform authorization.
+  Informative framework crosswalks (NIST AI RMF / AI 600-1, ISO/IEC 42001,
+  MITRE ATLAS) are documented in docs/framework-alignment.md — traceability
+  only, no conformance or certification claim.
 audience: >
   Teams building AI agents, tool-using LLM applications, or MCP servers who
   want an advisory pre-release check over clone-visible source posture and
