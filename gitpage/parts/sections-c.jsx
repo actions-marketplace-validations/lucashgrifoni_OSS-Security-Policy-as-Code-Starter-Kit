@@ -334,40 +334,38 @@ function SignalsSection() {
 const MILESTONES = [
   {
     id: "current",
-    title: "Now",
+    title: "Now — maintenance",
     icon: "rocket",
-    era: "v6.0.0 GA",
+    era: "v7.3.0 · stable",
     bullets: [
-      "Finish local v6.0.0 branch review and push strategy",
-      "Keep reports/1.0 as default while shipping opt-in reports/2.0",
-      "Ship the landed v6 profile expansion: AI/LLM, EU AI Act, SLSA Source L1, GitLab L2, OSS publish readiness",
-      "Publish release evidence: PyPI attestations, signed GHCR image, SBOM, changelog, migration guide, sample reports",
+      "The kit is feature-complete for its core thesis: a clone-only, evidence-backed, interoperable repository gate.",
+      "Active feature development is paused; ongoing work is security fixes and dependency maintenance.",
+      "220 controls across 56 profiles; reports/2.0 is the default report contract.",
+      "Published to PyPI, GHCR, and GitHub Releases with signed assets, SBOM, and build provenance.",
     ],
   },
   {
-    id: "next",
-    title: "Next",
+    id: "shipped",
+    title: "Shipped",
     icon: "shield",
-    era: "v6.x",
+    era: "v6.6 → v7.3",
     bullets: [
-      "Refactor the large evaluator module into smaller family modules",
-      "Add property-based tests for control/profile YAML, waivers, and report schema edge cases",
-      "Add a navigable control catalog on GitHub Pages",
-      "Expand public comparison docs and first-adopter tutorial assets",
-      "Publish threat model and supply-chain pipeline audit evidence",
+      "Ecosystem interop: reports/2.0 default flip, OpenVEX + CycloneDX VEX, SPDX + CycloneDX SBOM, CEL/Rego export, OSCAL + in-toto evidence.",
+      "Opt-in applicability engine and an ATTESTED control state; honest OSPS Baseline coverage by level.",
+      "OWASP Agentic ASI (ASI01–ASI10) source-side coverage and CISA Secure-by-Design readiness signals.",
+      "NIST AI RMF / ISO 42001 / MITRE ATLAS crosswalks; GitHub immutable-release and org Actions-policy signals.",
     ],
   },
   {
-    id: "later",
-    title: "Later",
+    id: "directional",
+    title: "Directional — paused",
     icon: "satellite",
-    era: "v7+",
+    era: "v8 – v10",
     bullets: [
-      "Explore CEL/Rego export as an integration layer for policy engines",
-      "Add SPDX SBOM export alongside CycloneDX-focused flows",
-      "Add diff-catalogs for control/profile deltas between kit versions",
-      "Add optional structured JSON logging and richer CLI explain commands",
-      "Publish maintainer/community signals when there is real adoption evidence",
+      "Make the applicability engine and ATTESTED states the default (a breaking change), gated on OpenSSF Scorecard v6 / Gemara reaching GA.",
+      "Deeper EU CRA conformance evidence: vulnerability-handling, support-period, and crypto-agility signals.",
+      "A normalized cross-scanner finding model with EPSS/KEV prioritization — within a single clone-only run, never a platform.",
+      "These horizons are direction only, not scheduled; they resume on a deliberate decision to reopen development.",
     ],
   },
   {
@@ -389,7 +387,7 @@ function RoadmapSection() {
       id="roadmap"
       eyebrow="Roadmap"
       title="The roadmap is conservative: deepen evidence quality without losing scope discipline."
-      subtitle="What matters here is not surface area. It is keeping the kit useful, explainable, and safe to trust for the things it claims to evaluate."
+      subtitle="The kit is feature-complete for its core thesis and is now in a stable, maintenance-focused phase — security and dependency upkeep, not new surface area. The directional horizons below are retained as possible future work, not scheduled commitments."
     >
       <div className="relative">
         <div
