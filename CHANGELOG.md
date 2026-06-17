@@ -6,6 +6,21 @@ This changelog follows the same public-facing format used by the GitHub release 
 
 ---
 
+## [7.3.0](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v7.2.0...v7.3.0) (2026-06-17)
+
+
+### Highlights
+
+* **collector:** auto-collect immutable-release + org Actions-policy evidence ([8dd4bed](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/8dd4bed74230922028d44fbd15f964889b2323ab))
+* **controls:** add immutable-release + org Actions-policy evidence signals (ADR-038) ([4755817](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/4755817c772ce392039b2297565a754ecf0f328e))
+* **controls:** complete OWASP Agentic ASI + CISA Secure-by-Design signals (ADR-039, ADR-040) ([e9b501b](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/e9b501b35fb69f47b4f0b2b6eb049b10e06aa893))
+* **controls:** opt-in ATTESTED for the verified release attestation (GH-IMMUTREL-070) ([6efc463](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/6efc46362148e9381a96f1175a46928f746deba9))
+
+
+### Notes
+
+* sync README counts, CLI flags, and action pins with current state ([cdf8f7e](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/cdf8f7e9efb1753c8dd0b8be216cff75f70810bd))
+
 ## [7.2.0](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v7.1.0...v7.2.0) (2026-06-09)
 
 
