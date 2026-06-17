@@ -168,22 +168,24 @@ def cli_root(
         rich_help_panel=OPT_PANEL_EVIDENCE,
     ),
     applicability_engine: bool = typer.Option(
-        False,
+        True,
         "--applicability-engine/--no-applicability-engine",
         help=(
-            "Opt-in (ADR-028): resolve controls that declare a precondition to NOT_APPLICABLE "
-            "consistently when it is unmet, instead of per-evaluator ad-hoc handling. Default off; "
-            "enabling it never changes a control whose precondition is met."
+            "Default on since v8.0.0 (ADR-041): resolve controls that declare a precondition to "
+            "NOT_APPLICABLE consistently when it is unmet, instead of per-evaluator ad-hoc handling. "
+            "Use --no-applicability-engine to opt out for one deprecation cycle; never changes a "
+            "control whose precondition is met."
         ),
         rich_help_panel=OPT_PANEL_EVIDENCE,
     ),
     enable_attested: bool = typer.Option(
-        False,
+        True,
         "--enable-attested/--no-enable-attested",
         help=(
-            "Opt-in (ADR-028): when a control's pass is anchored on a verified attestation record "
-            "(PROV-VERIFY-061: transparency-log inclusion + fresh verified_at), resolve it to ATTESTED "
-            "instead of PASS. Never relaxes a FAIL/MRR. Default off."
+            "Default on since v8.0.0 (ADR-041): when a control's pass is anchored on a verified "
+            "attestation record (PROV-VERIFY-061: transparency-log inclusion + fresh verified_at), "
+            "resolve it to ATTESTED instead of PASS. Use --no-enable-attested to opt out for one "
+            "deprecation cycle; never relaxes a FAIL/MRR."
         ),
         rich_help_panel=OPT_PANEL_EVIDENCE,
     ),
@@ -382,22 +384,24 @@ def evaluate_cmd(
         rich_help_panel=OPT_PANEL_EVIDENCE,
     ),
     applicability_engine: bool = typer.Option(
-        False,
+        True,
         "--applicability-engine/--no-applicability-engine",
         help=(
-            "Opt-in (ADR-028): resolve controls that declare a precondition to NOT_APPLICABLE "
-            "consistently when it is unmet, instead of per-evaluator ad-hoc handling. Default off; "
-            "enabling it never changes a control whose precondition is met."
+            "Default on since v8.0.0 (ADR-041): resolve controls that declare a precondition to "
+            "NOT_APPLICABLE consistently when it is unmet, instead of per-evaluator ad-hoc handling. "
+            "Use --no-applicability-engine to opt out for one deprecation cycle; never changes a "
+            "control whose precondition is met."
         ),
         rich_help_panel=OPT_PANEL_EVIDENCE,
     ),
     enable_attested: bool = typer.Option(
-        False,
+        True,
         "--enable-attested/--no-enable-attested",
         help=(
-            "Opt-in (ADR-028): when a control's pass is anchored on a verified attestation record "
-            "(PROV-VERIFY-061: transparency-log inclusion + fresh verified_at), resolve it to ATTESTED "
-            "instead of PASS. Never relaxes a FAIL/MRR. Default off."
+            "Default on since v8.0.0 (ADR-041): when a control's pass is anchored on a verified "
+            "attestation record (PROV-VERIFY-061: transparency-log inclusion + fresh verified_at), "
+            "resolve it to ATTESTED instead of PASS. Use --no-enable-attested to opt out for one "
+            "deprecation cycle; never relaxes a FAIL/MRR."
         ),
         rich_help_panel=OPT_PANEL_EVIDENCE,
     ),
