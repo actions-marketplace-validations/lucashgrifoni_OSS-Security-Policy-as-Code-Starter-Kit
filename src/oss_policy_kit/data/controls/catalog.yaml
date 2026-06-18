@@ -189,6 +189,12 @@ controls:
     lifecycle: stable
     assurance: deterministic
     weight: 2
+    applicability:
+      requires_any_files:
+        - "**/azure-pipelines.yml"
+        - "**/azure-pipelines.yaml"
+        - "**/.azure-pipelines/*.yml"
+        - "**/.azure-pipelines/*.yaml"
   - id: AZ-PIPE-028
     title: Azure Pipelines include pull request validation trigger posture
     category: ci_cd
@@ -196,6 +202,12 @@ controls:
     lifecycle: stable
     assurance: deterministic
     weight: 2
+    applicability:
+      requires_any_files:
+        - "**/azure-pipelines.yml"
+        - "**/azure-pipelines.yaml"
+        - "**/.azure-pipelines/*.yml"
+        - "**/.azure-pipelines/*.yaml"
   - id: AZ-PIPE-029
     title: Azure checkout avoids persistCredentials true
     category: ci_cd
@@ -203,6 +215,12 @@ controls:
     lifecycle: stable
     assurance: deterministic
     weight: 2
+    applicability:
+      requires_any_files:
+        - "**/azure-pipelines.yml"
+        - "**/azure-pipelines.yaml"
+        - "**/.azure-pipelines/*.yml"
+        - "**/.azure-pipelines/*.yaml"
   - id: AZ-PIPE-030
     title: Azure pipelines use secure template extension posture
     category: ci_cd
@@ -210,6 +228,12 @@ controls:
     lifecycle: stable
     assurance: deterministic
     weight: 1
+    applicability:
+      requires_any_files:
+        - "**/azure-pipelines.yml"
+        - "**/azure-pipelines.yaml"
+        - "**/.azure-pipelines/*.yml"
+        - "**/.azure-pipelines/*.yaml"
   - id: AZ-SEC-031
     title: Azure pipeline security scan signal detected
     category: vulnerability_management
@@ -217,6 +241,12 @@ controls:
     lifecycle: stable
     assurance: signal
     weight: 1
+    applicability:
+      requires_any_files:
+        - "**/azure-pipelines.yml"
+        - "**/azure-pipelines.yaml"
+        - "**/.azure-pipelines/*.yml"
+        - "**/.azure-pipelines/*.yaml"
   - id: AZ-SCA-032
     title: Azure pipeline dependency audit or SCA signal detected
     category: supply_chain
@@ -224,6 +254,12 @@ controls:
     lifecycle: stable
     assurance: signal
     weight: 1
+    applicability:
+      requires_any_files:
+        - "**/azure-pipelines.yml"
+        - "**/azure-pipelines.yaml"
+        - "**/.azure-pipelines/*.yml"
+        - "**/.azure-pipelines/*.yaml"
   - id: AZ-SBOM-033
     title: Azure pipeline SBOM generation signal detected
     category: supply_chain
@@ -231,6 +267,12 @@ controls:
     lifecycle: stable
     assurance: signal
     weight: 1
+    applicability:
+      requires_any_files:
+        - "**/azure-pipelines.yml"
+        - "**/azure-pipelines.yaml"
+        - "**/.azure-pipelines/*.yml"
+        - "**/.azure-pipelines/*.yaml"
   - id: AZ-PLAT-034
     title: Azure Repos branch policy posture evidenced
     category: platform
@@ -287,6 +329,15 @@ controls:
     lifecycle: stable
     assurance: deterministic
     weight: 2
+    applicability:
+      requires_any_files:
+        - "**/buildspec.yml"
+        - "**/buildspec.yaml"
+        - "**/.aws/buildspec*.yml"
+        - "**/.aws/buildspec*.yaml"
+        - "pipelines/aws/codepipeline.yml"
+        - "pipelines/aws/codepipeline.yaml"
+        - "pipelines/aws/codepipeline.json"
   - id: AWS-SECRET-038
     title: CodeBuild buildspec avoids inline secret anti-patterns and prefers managed secret sources
     category: ci_cd
@@ -294,6 +345,15 @@ controls:
     lifecycle: stable
     assurance: deterministic
     weight: 3
+    applicability:
+      requires_any_files:
+        - "**/buildspec.yml"
+        - "**/buildspec.yaml"
+        - "**/.aws/buildspec*.yml"
+        - "**/.aws/buildspec*.yaml"
+        - "pipelines/aws/codepipeline.yml"
+        - "pipelines/aws/codepipeline.yaml"
+        - "pipelines/aws/codepipeline.json"
   - id: AWS-SEC-039
     title: Security scanning signal in CodeBuild buildspec
     category: vulnerability_management
@@ -301,6 +361,15 @@ controls:
     lifecycle: stable
     assurance: signal
     weight: 1
+    applicability:
+      requires_any_files:
+        - "**/buildspec.yml"
+        - "**/buildspec.yaml"
+        - "**/.aws/buildspec*.yml"
+        - "**/.aws/buildspec*.yaml"
+        - "pipelines/aws/codepipeline.yml"
+        - "pipelines/aws/codepipeline.yaml"
+        - "pipelines/aws/codepipeline.json"
   - id: AWS-SCA-040
     title: Dependency audit or SCA signal in CodeBuild buildspec
     category: supply_chain
@@ -308,6 +377,15 @@ controls:
     lifecycle: stable
     assurance: signal
     weight: 1
+    applicability:
+      requires_any_files:
+        - "**/buildspec.yml"
+        - "**/buildspec.yaml"
+        - "**/.aws/buildspec*.yml"
+        - "**/.aws/buildspec*.yaml"
+        - "pipelines/aws/codepipeline.yml"
+        - "pipelines/aws/codepipeline.yaml"
+        - "pipelines/aws/codepipeline.json"
   - id: AWS-SBOM-041
     title: SBOM generation signal in CodeBuild buildspec
     category: supply_chain
@@ -315,6 +393,15 @@ controls:
     lifecycle: stable
     assurance: signal
     weight: 1
+    applicability:
+      requires_any_files:
+        - "**/buildspec.yml"
+        - "**/buildspec.yaml"
+        - "**/.aws/buildspec*.yml"
+        - "**/.aws/buildspec*.yaml"
+        - "pipelines/aws/codepipeline.yml"
+        - "pipelines/aws/codepipeline.yaml"
+        - "pipelines/aws/codepipeline.json"
   - id: AWS-PIPE-042
     title: Committed CodePipeline export under pipelines/aws/ with minimal useful structure
     category: ci_cd
@@ -322,6 +409,15 @@ controls:
     lifecycle: stable
     assurance: deterministic
     weight: 2
+    applicability:
+      requires_any_files:
+        - "**/buildspec.yml"
+        - "**/buildspec.yaml"
+        - "**/.aws/buildspec*.yml"
+        - "**/.aws/buildspec*.yaml"
+        - "pipelines/aws/codepipeline.yml"
+        - "pipelines/aws/codepipeline.yaml"
+        - "pipelines/aws/codepipeline.json"
   - id: AWS-PROV-043
     title: Provenance or attestation signal in CodeBuild buildspec
     category: supply_chain
@@ -329,6 +425,15 @@ controls:
     lifecycle: stable
     assurance: signal
     weight: 1
+    applicability:
+      requires_any_files:
+        - "**/buildspec.yml"
+        - "**/buildspec.yaml"
+        - "**/.aws/buildspec*.yml"
+        - "**/.aws/buildspec*.yaml"
+        - "pipelines/aws/codepipeline.yml"
+        - "pipelines/aws/codepipeline.yaml"
+        - "pipelines/aws/codepipeline.json"
   - id: AWS-CP-044
     title: CodePipeline promotion and artifact governance evidenced
     category: platform
@@ -583,6 +688,10 @@ controls:
     lifecycle: experimental
     assurance: deterministic
     weight: 1
+    applicability:
+      requires_any_files:
+        - "**/.gitlab-ci.yml"
+        - "**/.gitlab-ci.yaml"
   - id: GL-PIPE-002
     title: GitLab CI image references pinned to a tag or digest
     category: ci_cd
@@ -590,6 +699,10 @@ controls:
     lifecycle: experimental
     assurance: signal
     weight: 2
+    applicability:
+      requires_any_files:
+        - "**/.gitlab-ci.yml"
+        - "**/.gitlab-ci.yaml"
   - id: GL-PIPE-003
     title: GitLab CI scripts do not pipe network downloads to a shell
     category: ci_cd
@@ -597,6 +710,10 @@ controls:
     lifecycle: experimental
     assurance: signal
     weight: 3
+    applicability:
+      requires_any_files:
+        - "**/.gitlab-ci.yml"
+        - "**/.gitlab-ci.yaml"
   - id: GL-PIPE-004
     title: "GitLab CI jobs do not declare broad `inherit: secrets: true`"
     category: ci_cd
@@ -604,6 +721,10 @@ controls:
     lifecycle: experimental
     assurance: deterministic
     weight: 2
+    applicability:
+      requires_any_files:
+        - "**/.gitlab-ci.yml"
+        - "**/.gitlab-ci.yaml"
   - id: GL-PIPE-005
     title: GitLab CI `include:` does not reference unpinned remote URLs
     category: ci_cd
@@ -611,6 +732,10 @@ controls:
     lifecycle: experimental
     assurance: signal
     weight: 2
+    applicability:
+      requires_any_files:
+        - "**/.gitlab-ci.yml"
+        - "**/.gitlab-ci.yaml"
   - id: GL-PIPE-006
     title: GitLab CI jobs use trigger restrictions (`rules:` / `only:` / `except:`)
     category: ci_cd
@@ -618,6 +743,10 @@ controls:
     lifecycle: experimental
     assurance: signal
     weight: 1
+    applicability:
+      requires_any_files:
+        - "**/.gitlab-ci.yml"
+        - "**/.gitlab-ci.yaml"
   - id: IAC-TF-001
     title: Terraform - object storage configured for public access
     category: iac
@@ -625,6 +754,10 @@ controls:
     lifecycle: experimental
     assurance: evidence-backed
     weight: 3
+    applicability:
+      requires_any_files:
+        - "**/*.tf"
+        - "**/*.tf.json"
   - id: IAC-TF-002
     title: Terraform - security group exposes management port to 0.0.0.0/0
     category: iac
@@ -632,6 +765,10 @@ controls:
     lifecycle: experimental
     assurance: evidence-backed
     weight: 3
+    applicability:
+      requires_any_files:
+        - "**/*.tf"
+        - "**/*.tf.json"
   - id: IAC-TF-003
     title: Terraform - IAM grants AdministratorAccess or Action=* + Resource=*
     category: iac
@@ -639,6 +776,10 @@ controls:
     lifecycle: experimental
     assurance: evidence-backed
     weight: 3
+    applicability:
+      requires_any_files:
+        - "**/*.tf"
+        - "**/*.tf.json"
   - id: IAC-TF-004
     title: Terraform - storage / RDS / EBS resource without encryption-at-rest
     category: iac
@@ -646,6 +787,10 @@ controls:
     lifecycle: experimental
     assurance: evidence-backed
     weight: 2
+    applicability:
+      requires_any_files:
+        - "**/*.tf"
+        - "**/*.tf.json"
   - id: IAC-TF-005
     title: Terraform - audit / access logging disabled on sensitive resources
     category: iac
@@ -653,6 +798,10 @@ controls:
     lifecycle: experimental
     assurance: evidence-backed
     weight: 2
+    applicability:
+      requires_any_files:
+        - "**/*.tf"
+        - "**/*.tf.json"
   - id: IAC-TF-006
     title: Terraform - default VPC / subnet / security group used in declarations
     category: iac
@@ -660,6 +809,10 @@ controls:
     lifecycle: experimental
     assurance: evidence-backed
     weight: 2
+    applicability:
+      requires_any_files:
+        - "**/*.tf"
+        - "**/*.tf.json"
   - id: IAC-TF-007
     title: Terraform - workload assigned a public IP without explicit intent
     category: iac
@@ -667,6 +820,10 @@ controls:
     lifecycle: experimental
     assurance: evidence-backed
     weight: 2
+    applicability:
+      requires_any_files:
+        - "**/*.tf"
+        - "**/*.tf.json"
   - id: IAC-TF-008
     title: Terraform - AWS resources without owner / cost_center tags
     category: iac
@@ -674,6 +831,10 @@ controls:
     lifecycle: experimental
     assurance: evidence-backed
     weight: 1
+    applicability:
+      requires_any_files:
+        - "**/*.tf"
+        - "**/*.tf.json"
   - id: IAC-TF-009
     title: Terraform - provider versions not pinned in required_providers
     category: iac
@@ -681,6 +842,10 @@ controls:
     lifecycle: experimental
     assurance: evidence-backed
     weight: 1
+    applicability:
+      requires_any_files:
+        - "**/*.tf"
+        - "**/*.tf.json"
   - id: IAC-TF-010
     title: Terraform - local backend used (no remote + encryption + locking)
     category: iac
@@ -688,6 +853,10 @@ controls:
     lifecycle: experimental
     assurance: evidence-backed
     weight: 1
+    applicability:
+      requires_any_files:
+        - "**/*.tf"
+        - "**/*.tf.json"
   - id: IAC-TF-011
     title: Terraform - production-naming data store missing lifecycle.prevent_destroy
     category: iac
@@ -695,6 +864,10 @@ controls:
     lifecycle: experimental
     assurance: evidence-backed
     weight: 2
+    applicability:
+      requires_any_files:
+        - "**/*.tf"
+        - "**/*.tf.json"
   - id: IAC-TF-012
     title: Terraform - data.aws_iam_policy_document uses wildcard principal '*'
     category: iac
@@ -702,6 +875,10 @@ controls:
     lifecycle: experimental
     assurance: evidence-backed
     weight: 1
+    applicability:
+      requires_any_files:
+        - "**/*.tf"
+        - "**/*.tf.json"
   - id: SEC-FUZZ-001
     title: Fuzzing presence (OSS-Fuzz / cifuzz / atheris / Scorecard Fuzzing)
     category: vulnerability_management
@@ -961,6 +1138,9 @@ controls:
     lifecycle: experimental
     assurance: evidence-backed
     weight: 3
+    applicability:
+      requires_any_files:
+        - "**/*.bicep"
   - id: IAC-BICEP-002
     title: Bicep - NSG rule allows management port inbound from '*'
     category: iac
@@ -968,6 +1148,9 @@ controls:
     lifecycle: experimental
     assurance: evidence-backed
     weight: 3
+    applicability:
+      requires_any_files:
+        - "**/*.bicep"
   - id: IAC-BICEP-003
     title: Bicep - role assignment grants Owner / Contributor / User Access Admin
     category: iac
@@ -975,6 +1158,9 @@ controls:
     lifecycle: experimental
     assurance: evidence-backed
     weight: 3
+    applicability:
+      requires_any_files:
+        - "**/*.bicep"
   - id: IAC-BICEP-004
     title: Bicep - storage / SQL / disk resource without encryption-at-rest
     category: iac
@@ -982,6 +1168,9 @@ controls:
     lifecycle: experimental
     assurance: evidence-backed
     weight: 2
+    applicability:
+      requires_any_files:
+        - "**/*.bicep"
   - id: IAC-BICEP-005
     title: Bicep - sensitive resource has no diagnosticSettings paired
     category: iac
@@ -989,6 +1178,9 @@ controls:
     lifecycle: experimental
     assurance: evidence-backed
     weight: 1
+    applicability:
+      requires_any_files:
+        - "**/*.bicep"
   - id: IAC-BICEP-006
     title: Bicep - direct public IP declared without documented intent
     category: iac
@@ -996,6 +1188,9 @@ controls:
     lifecycle: experimental
     assurance: evidence-backed
     weight: 2
+    applicability:
+      requires_any_files:
+        - "**/*.bicep"
   - id: SEC-WEBHOOK-001
     title: Webhook receiver verifies inbound signature
     category: secure_development
@@ -1122,6 +1317,10 @@ controls:
     lifecycle: experimental
     assurance: signal
     weight: 3
+    applicability:
+      requires_any_files:
+        - "**/.gitlab-ci.yml"
+        - "**/.gitlab-ci.yaml"
   - id: GL-PIPE-008
     title: GitLab CI restricts self-hosted runner usage via tags
     category: ci_cd
@@ -1129,6 +1328,10 @@ controls:
     lifecycle: experimental
     assurance: signal
     weight: 2
+    applicability:
+      requires_any_files:
+        - "**/.gitlab-ci.yml"
+        - "**/.gitlab-ci.yaml"
   - id: GL-PIPE-009
     title: GitLab project documents audit-event streaming or external export
     category: ci_cd
@@ -1143,6 +1346,10 @@ controls:
     lifecycle: experimental
     assurance: signal
     weight: 2
+    applicability:
+      requires_any_files:
+        - "**/.gitlab-ci.yml"
+        - "**/.gitlab-ci.yaml"
   - id: GL-PIPE-011
     title: GitLab CI merge-request rules enforce code-review approvals
     category: ci_cd
@@ -1157,6 +1364,10 @@ controls:
     lifecycle: experimental
     assurance: signal
     weight: 1
+    applicability:
+      requires_any_files:
+        - "**/.gitlab-ci.yml"
+        - "**/.gitlab-ci.yaml"
   - id: AIBOM-PRESENT-001
     title: AI Bill of Materials present in evidence directory
     category: supply_chain

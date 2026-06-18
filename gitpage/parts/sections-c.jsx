@@ -334,12 +334,12 @@ function SignalsSection() {
 const MILESTONES = [
   {
     id: "current",
-    title: "Now — maintenance",
+    title: "Now — v8.0.0",
     icon: "rocket",
-    era: "v7.3.0 · stable",
+    era: "v8.0.0",
     bullets: [
-      "The kit is feature-complete for its core thesis: a clone-only, evidence-backed, interoperable repository gate.",
-      "Active feature development is paused; ongoing work is security fixes and dependency maintenance.",
+      "Control applicability is first-class: controls for technology a repo does not use are NOT_APPLICABLE by default, not UNKNOWN or FAIL.",
+      "Verified build-provenance passes surface as ATTESTED by default; opt out of either with --no-applicability-engine / --no-enable-attested.",
       "220 controls across 56 profiles; reports/2.0 is the default report contract.",
       "Published to PyPI, GHCR, and GitHub Releases with signed assets, SBOM, and build provenance.",
     ],
@@ -358,11 +358,10 @@ const MILESTONES = [
   },
   {
     id: "directional",
-    title: "Directional — paused",
+    title: "Directional",
     icon: "satellite",
-    era: "v8 – v10",
+    era: "v9 – v10",
     bullets: [
-      "Make the applicability engine and ATTESTED states the default (a breaking change), gated on OpenSSF Scorecard v6 / Gemara reaching GA.",
       "Deeper EU CRA conformance evidence: vulnerability-handling, support-period, and crypto-agility signals.",
       "A normalized cross-scanner finding model with EPSS/KEV prioritization — within a single clone-only run, never a platform.",
       "These horizons are direction only, not scheduled; they resume on a deliberate decision to reopen development.",
