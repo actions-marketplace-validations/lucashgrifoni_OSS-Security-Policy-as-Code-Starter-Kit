@@ -6,6 +6,18 @@ This changelog follows the same public-facing format used by the GitHub release 
 
 ---
 
+## [8.0.0](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v7.3.0...v8.0.0) (2026-06-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* **controls:** evaluate/evaluate-many now default to the applicability engine and ATTESTED resolution ON. Controls for technology a repo does not use resolve to NOT_APPLICABLE by default (Terraform/Bicep that were UNKNOWN; GitLab/Azure/AWS pipeline-presence that were FAIL); verified build-provenance passes surface as ATTESTED. Opt out for one deprecation cycle with --no-applicability-engine / --no-enable-attested. No PASS is migrated and no FAIL is relaxed. The programmatic run_evaluation() default is unchanged (off) for backward compatibility. reports/2.0 already enumerates all five states, so no contract bump.
+
+### Highlights
+
+* **controls:** applicability engine + ATTESTED on by default (v8.0.0, ADR-041) ([1203df3](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/1203df3a8a69eaaf7eadbe1f6eb51491ef6802d5))
+* **controls:** declare applicability preconditions for IaC and platform-CI families ([9695fe7](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/9695fe70505c15501fbcb5e9199eadcf12c817f0))
+
 ## [7.3.0](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v7.2.0...v7.3.0) (2026-06-17)
 
 
