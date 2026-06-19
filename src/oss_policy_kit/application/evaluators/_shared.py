@@ -275,6 +275,63 @@ def _has_changelog(repo: Path) -> bool:
     return any(p.is_file() for p in names)
 
 
+# Build-instructions signal (OSPS-DO-07): a build-tool entrypoint, a dedicated
+# INSTALL file, or a build/install/development section heading in a doc.
+_BUILD_TOOL_FILES = (
+    "Makefile",
+    "makefile",
+    "GNUmakefile",
+    "Taskfile.yml",
+    "Taskfile.yaml",
+    "justfile",
+    "Justfile",
+    "noxfile.py",
+    "tox.ini",
+    "Earthfile",
+    "build.sh",
+    "INSTALL",
+    "INSTALL.md",
+)
+_BUILD_DOC_CANDIDATES = (
+    "README.md",
+    "README.rst",
+    "README.txt",
+    "CONTRIBUTING.md",
+    "docs/INSTALL.md",
+    "docs/building.md",
+    "docs/build.md",
+    "docs/development.md",
+)
+_BUILD_HEADING_PATTERN = re.compile(
+    r"(?im)^\s{0,3}#{1,6}\s*"
+    r"(building|build from source|installation|install(?:ing| from source)?|"
+    r"from source|compiling|compile|development setup|getting started|setup|how to build)\b"
+)
+
+
+def _has_build_instructions(repo: Path) -> bool:
+    """Signal (OSPS-DO-07): does the clone document how to build from source?
+
+    True when a build-tool entrypoint exists (Makefile/Taskfile/justfile/nox/tox/...),
+    a dedicated INSTALL file is present, or a README/CONTRIBUTING/docs file carries a
+    build/install/development section heading. Filesystem-only, best-effort (signal grade).
+    """
+    if any((repo / name).is_file() for name in _BUILD_TOOL_FILES):
+        return True
+    candidates = [repo / rel for rel in _BUILD_DOC_CANDIDATES]
+    candidates.append(repo / _GITHUB_DIR / "CONTRIBUTING.md")
+    for path in candidates:
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if _BUILD_HEADING_PATTERN.search(text):
+            return True
+    return False
+
+
 def _has_license(repo: Path) -> bool:
     for p in repo.iterdir():
         if not p.is_file():

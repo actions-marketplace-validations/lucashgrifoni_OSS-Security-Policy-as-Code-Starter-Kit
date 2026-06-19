@@ -35,6 +35,7 @@ controls:
   - GOV-CON-002
   - GOV-LIC-004
   - GOV-DISC-013
+  - GOV-BUILD-072
   # Quality & Security Assessment
   - SEC-CODEQL-010
   - SEC-DEPREV-011

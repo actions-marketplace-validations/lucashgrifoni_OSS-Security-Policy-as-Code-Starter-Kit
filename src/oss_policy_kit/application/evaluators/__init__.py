@@ -26,6 +26,7 @@ EVALUATOR_REGISTRY: dict[str, Callable[[EvalContext], EvalOutcome]] = {
     "SEC-CODEQL-010": eval_sec_codeql_010,
     "SEC-DEPREV-011": eval_sec_deprev_011,
     "REL-CHANGE-012": eval_rel_change_012,
+    "GOV-BUILD-072": eval_gov_build_072,
     "GOV-DISC-013": eval_gov_disc_013,
     "GOV-WAIV-014": eval_gov_waiv_014,
     "PLAT-BRPROT-015": eval_plat_brprot_015,

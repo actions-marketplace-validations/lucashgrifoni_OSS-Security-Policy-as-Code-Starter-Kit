@@ -2,7 +2,7 @@
 // Regenerate with: python scripts/generate-gitpage-catalog-data.py
 // Source of truth: src/oss_policy_kit/data/controls/catalog.yaml + bundled profiles.
 window.CATALOG_DATA = {
-  "controlCount": 220,
+  "controlCount": 221,
   "profileCount": 56,
   "facets": {
     "categories": [
@@ -479,6 +479,17 @@ window.CATALOG_DATA = {
         "osps-baseline-1",
         "osps-baseline-2026-1",
         "slsa-build-l2-1"
+      ]
+    },
+    {
+      "id": "GOV-BUILD-072",
+      "title": "Source-code build instructions documented",
+      "category": "governance",
+      "assurance": "signal",
+      "lifecycle": "experimental",
+      "weight": 1,
+      "profiles": [
+        "osps-baseline-2026-1"
       ]
     },
     {

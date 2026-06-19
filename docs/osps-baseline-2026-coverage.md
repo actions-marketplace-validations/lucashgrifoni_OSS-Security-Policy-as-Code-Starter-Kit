@@ -17,8 +17,8 @@ Generated from [`src/oss_policy_kit/data/frameworks/osps-baseline-2026.yaml`](..
 | OSPS level | Criteria in level | With kit signal | Not yet expressed |
 |---|---:|---:|---:|
 | L1 | 17 | 11 | 6 |
-| L2 | 32 | 17 | 15 |
-| L3 | 40 | 21 | 19 |
+| L2 | 32 | 18 | 14 |
+| L3 | 40 | 22 | 18 |
 
 ## Per-criterion map
 
@@ -43,7 +43,7 @@ Every OSPS Baseline v2026.02.19 criterion, in upstream order. The **Kit signal**
 | `OSPS-DO-04` | 3 | Communicate support lifecycle expectations clearly | _-- not expressed_ |
 | `OSPS-DO-05` | 3 | Document security update scope and duration | _-- not expressed_ |
 | `OSPS-DO-06` | 2, 3 | Describe dependency selection and tracking methods | _-- not expressed_ |
-| `OSPS-DO-07` | 2, 3 | Provide source-code build instructions | _-- not expressed_ |
+| `OSPS-DO-07` | 2, 3 | Provide source-code build instructions | `GOV-BUILD-072` (signal) |
 | `OSPS-GV-01` | 2, 3 | Publish project roles and responsibilities | _-- not expressed_ |
 | `OSPS-GV-02` | 1, 2, 3 | Enable public discussion mechanisms for feedback | _-- not expressed_ |
 | `OSPS-GV-03` | 1, 2, 3 | Publish a contribution guide | `GOV-CON-002` (deterministic) |
@@ -70,12 +70,12 @@ Every OSPS Baseline v2026.02.19 criterion, in upstream order. The **Kit signal**
 
 ## Honest gaps
 
-19 of 41 criteria have no clone-visible kit signal. These are real and intentional: the kit does not assess them from a clone (e.g. user-documentation quality, threat modeling, encrypted dev channels, contributor vetting). They are listed so adopters know what the kit does **not** cover.
+18 of 41 criteria have no clone-visible kit signal. These are real and intentional: the kit does not assess them from a clone (e.g. user-documentation quality, threat modeling, encrypted dev channels, contributor vetting). They are listed so adopters know what the kit does **not** cover.
 
 | Family | Uncovered criteria |
 |---|---|
 | BR | `OSPS-BR-02`, `OSPS-BR-03` |
-| DO | `OSPS-DO-01`, `OSPS-DO-02`, `OSPS-DO-03`, `OSPS-DO-04`, `OSPS-DO-05`, `OSPS-DO-06`, `OSPS-DO-07` |
+| DO | `OSPS-DO-01`, `OSPS-DO-02`, `OSPS-DO-03`, `OSPS-DO-04`, `OSPS-DO-05`, `OSPS-DO-06` |
 | GV | `OSPS-GV-01`, `OSPS-GV-02`, `OSPS-GV-04` |
 | LE | `OSPS-LE-01` |
 | QA | `OSPS-QA-01`, `OSPS-QA-05` |

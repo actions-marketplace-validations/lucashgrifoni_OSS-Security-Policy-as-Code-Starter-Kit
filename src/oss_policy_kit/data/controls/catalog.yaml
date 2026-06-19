@@ -98,6 +98,13 @@ controls:
     lifecycle: stable
     assurance: deterministic
     weight: 1
+  - id: GOV-BUILD-072
+    title: Source-code build instructions documented
+    category: governance
+    automation: automated
+    lifecycle: experimental
+    assurance: signal
+    weight: 1
   - id: GOV-DISC-013
     title: Responsible disclosure channel documented
     category: governance

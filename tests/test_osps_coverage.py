@@ -42,8 +42,8 @@ _TOTAL_CRITERIA = 41
 _LEVEL_TOTALS = {1: 17, 2: 32, 3: 40}
 # Honest coverage: criteria with >=1 clone-visible kit signal, per level.
 # Pinned deliberately — a change here must be a conscious mapping decision.
-_LEVEL_COVERED = {1: 11, 2: 17, 3: 21}
-_DISTINCT_TOUCHED = 22
+_LEVEL_COVERED = {1: 11, 2: 18, 3: 22}
+_DISTINCT_TOUCHED = 23
 
 
 # --------------------------------------------------------------------------- #
@@ -211,7 +211,7 @@ def test_cli_human_output_is_honest() -> None:
     assert proc.returncode == 0, proc.stderr + proc.stdout
     out = proc.stdout
     assert "v2026.02.19" in out
-    assert "11 / 17" in out and "17 / 32" in out and "21 / 40" in out
+    assert "11 / 17" in out and "18 / 32" in out and "22 / 40" in out
     assert "NOT a conformance certification" in out
     assert "OSPS-DO-01" in out  # a real gap is shown
 

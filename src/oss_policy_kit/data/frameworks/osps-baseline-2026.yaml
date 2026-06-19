@@ -86,6 +86,7 @@ mappings:
   - {control: GH-PROV-023, criteria: [OSPS-BR-06]}
   - {control: SEC-SECRETS-050, criteria: [OSPS-BR-07]}
   - {control: GOV-CON-002, criteria: [OSPS-GV-03]}
+  - {control: GOV-BUILD-072, criteria: [OSPS-DO-07]}
   - {control: GOV-LIC-004, criteria: [OSPS-LE-03, OSPS-LE-02]}
   - {control: BUILD-SBOM-QUAL-003, criteria: [OSPS-QA-02]}
   - {control: SEC-DEPREV-011, criteria: [OSPS-QA-03, OSPS-BR-05]}

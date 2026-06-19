@@ -1,8 +1,8 @@
-# Controls Catalog (220 controls)
+# Controls Catalog (221 controls)
 
 Single-page reference generated from the bundled control catalog and profiles. The authoritative source is [`src/oss_policy_kit/data/controls/catalog.yaml`](../src/oss_policy_kit/data/controls/catalog.yaml).
 
-Current bundled state: **220 controls** across **56 bundled profiles**. Regenerate this page whenever the catalog or profile membership changes (`python scripts/generate-controls-catalog.py`).
+Current bundled state: **221 controls** across **56 bundled profiles**. Regenerate this page whenever the catalog or profile membership changes (`python scripts/generate-controls-catalog.py`).
 
 > **Tip:** for an interactive, filterable view of this same catalog (filter by family, assurance, lifecycle, or profile membership, plus text search) see the **Control catalog** section of the project landing page: <https://lucashgrifoni.github.io/OSS-Security-Policy-as-Code-Starter-Kit/#catalog>.
 
@@ -12,7 +12,7 @@ Current bundled state: **220 controls** across **56 bundled profiles**. Regenera
 |---|---:|
 | `ci_cd` | 41 |
 | `container` | 7 |
-| `governance` | 18 |
+| `governance` | 19 |
 | `iac` | 30 |
 | `kubernetes` | 16 |
 | `platform` | 16 |
@@ -27,7 +27,7 @@ Current bundled state: **220 controls** across **56 bundled profiles**. Regenera
 |---|---:|---|
 | `deterministic` | 31 | Structural parse or file presence/absence with high confidence. |
 | `evidence-backed` | 92 | Depends on a local JSON evidence file or API-collected attestation. |
-| `signal` | 97 | Heuristic or directional signal; PASS is not proof of runtime behavior. |
+| `signal` | 98 | Heuristic or directional signal; PASS is not proof of runtime behavior. |
 
 ## Full Catalog
 
@@ -47,6 +47,7 @@ Profile counts in the **Profiles** column reflect how many bundled profiles incl
 | `SEC-CODEQL-010` | vulnerability_management | signal | 2 | 12 | CodeQL or equivalent security scanning in CI |
 | `SEC-DEPREV-011` | supply_chain | deterministic | 2 | 26 | Dependency review in pull requests |
 | `REL-CHANGE-012` | release | deterministic | 1 | 34 | Changelog or documented release notes |
+| `GOV-BUILD-072` | governance | signal | 1 | 1 | Source-code build instructions documented |
 | `GOV-DISC-013` | governance | signal | 2 | 44 | Responsible disclosure channel documented |
 | `GOV-WAIV-014` | governance | deterministic | 1 | 42 | Versioned waiver policy file present in repository (not CLI-only waivers) |
 | `PLAT-BRPROT-015` | platform | evidence-backed | 3 | 14 | Default branch protection / rulesets (evidence-backed) |
@@ -272,6 +273,7 @@ Each control entry below lists which bundled profiles include it. Controls not p
 - `SEC-CODEQL-010`: `appsec-sast-sca-1`, `github-aws-level-2`, `github-azure-level-2`, `github-level-1`, `github-level-2`, `github-level-3`, `github-release-hardening-1`, `github-release-hardening-2`, `github-release-hardening-3`, `osps-baseline-1`, `osps-baseline-2026-1`, `ssdf-baseline-1`
 - `SEC-DEPREV-011`: `appsec-sast-sca-1`, `cis-supply-chain-1`, `cra-eu-ready-1`, `cra-eu-reporting-1`, `cra-eu-strict-1`, `github-aws-level-2`, `github-azure-level-2`, `github-level-1`, `github-level-2`, `github-level-3`, `github-release-hardening-1`, `github-release-hardening-2`, `github-release-hardening-3`, `gitlab-level-1`, `gitlab-level-2`, `gitlab-level-3`, `gitlab-release-hardening-1`, `gitlab-release-hardening-2`, `gitlab-release-hardening-3`, `osps-baseline-1`, `osps-baseline-2026-1`, `owasp-cicd-top10-1`, `s2c2f-l1-1`, `s2c2f-l2-1`, `s2c2f-l3-1`, `ssdf-baseline-1`
 - `REL-CHANGE-012`: `aws-level-1`, `aws-level-2`, `aws-level-3`, `aws-release-hardening-1`, `aws-release-hardening-2`, `aws-release-hardening-3`, `azure-level-1`, `azure-level-2`, `azure-level-3`, `azure-release-hardening-1`, `azure-release-hardening-2`, `azure-release-hardening-3`, `cra-eu-ai-act-art11-1`, `cra-eu-ready-1`, `cra-eu-ready-2-1`, `cra-eu-reporting-1`, `cra-eu-strict-1`, `github-aws-level-2`, `github-azure-level-2`, `github-level-1`, `github-level-2`, `github-level-3`, `github-release-hardening-1`, `github-release-hardening-2`, `github-release-hardening-3`, `gitlab-level-1`, `gitlab-level-2`, `gitlab-level-3`, `gitlab-release-hardening-1`, `gitlab-release-hardening-2`, `gitlab-release-hardening-3`, `osps-baseline-1`, `osps-baseline-2026-1`, `slsa-build-l2-1`
+- `GOV-BUILD-072`: `osps-baseline-2026-1`
 - `GOV-DISC-013`: `appsec-agentic-asi-1`, `appsec-llm-ssdf-218a-1`, `appsec-mcp-server-1`, `aws-level-1`, `aws-level-2`, `aws-level-3`, `aws-release-hardening-1`, `aws-release-hardening-2`, `aws-release-hardening-3`, `azure-level-1`, `azure-level-2`, `azure-level-3`, `azure-release-hardening-1`, `azure-release-hardening-2`, `azure-release-hardening-3`, `cra-eu-ai-act-art11-1`, `cra-eu-ready-1`, `cra-eu-ready-2-1`, `cra-eu-reporting-1`, `cra-eu-strict-1`, `github-aws-level-2`, `github-azure-level-2`, `github-level-1`, `github-level-2`, `github-level-3`, `github-release-hardening-1`, `github-release-hardening-2`, `github-release-hardening-3`, `gitlab-level-1`, `gitlab-level-2`, `gitlab-level-3`, `gitlab-release-hardening-1`, `gitlab-release-hardening-2`, `gitlab-release-hardening-3`, `osps-baseline-1`, `osps-baseline-2026-1`, `oss-publish-readiness-1`, `s2c2f-l1-1`, `s2c2f-l2-1`, `s2c2f-l3-1`, `slsa-source-l1-1`, `slsa-source-l2-1`, `ssdf-baseline-1`, `webhook-security-2`
 - `GOV-WAIV-014`: `appsec-agentic-asi-1`, `appsec-llm-ssdf-218a-1`, `appsec-mcp-server-1`, `appsec-sast-sca-1`, `aws-level-1`, `aws-level-2`, `aws-level-3`, `aws-release-hardening-1`, `aws-release-hardening-2`, `aws-release-hardening-3`, `azure-level-1`, `azure-level-2`, `azure-level-3`, `azure-release-hardening-1`, `azure-release-hardening-2`, `azure-release-hardening-3`, `cra-eu-ai-act-art11-1`, `cra-eu-ready-1`, `cra-eu-ready-2-1`, `cra-eu-reporting-1`, `cra-eu-strict-1`, `github-aws-level-2`, `github-azure-level-2`, `github-level-1`, `github-level-2`, `github-level-3`, `github-release-hardening-1`, `github-release-hardening-2`, `github-release-hardening-3`, `gitlab-level-1`, `gitlab-level-2`, `gitlab-level-3`, `gitlab-release-hardening-1`, `gitlab-release-hardening-2`, `gitlab-release-hardening-3`, `oss-publish-readiness-1`, `s2c2f-l1-1`, `s2c2f-l2-1`, `s2c2f-l3-1`, `slsa-source-l1-1`, `slsa-source-l2-1`, `ssdf-baseline-1`
 - `PLAT-BRPROT-015`: `cis-supply-chain-1`, `cra-eu-ready-1`, `cra-eu-strict-1`, `github-release-hardening-1`, `github-release-hardening-2`, `github-release-hardening-3`, `gitlab-level-3`, `gitlab-release-hardening-1`, `gitlab-release-hardening-2`, `gitlab-release-hardening-3`, `osps-baseline-1`, `osps-baseline-2026-1`, `owasp-cicd-top10-1`, `ssdf-baseline-1`

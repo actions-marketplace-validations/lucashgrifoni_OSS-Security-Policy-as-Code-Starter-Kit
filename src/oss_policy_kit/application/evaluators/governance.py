@@ -33,6 +33,7 @@ from oss_policy_kit.application.evaluators._shared import (
     _exists_ci_readme,
     _find_sbom_files,
     _gov_disc_013_private_reporting_signals,
+    _has_build_instructions,
     _has_changelog,
     _has_codeowners,
     _has_license,
@@ -161,6 +162,30 @@ def eval_rel_change_012(ctx: EvalContext) -> EvalOutcome:
         remediation="Add CHANGELOG.md and reference it from releases.",
         evidence_sources=[],
         confidence="high",
+    )
+
+
+def eval_gov_build_072(ctx: EvalContext) -> EvalOutcome:
+    if _has_build_instructions(ctx.repo_root):
+        return EvalOutcome(
+            status=ControlStatus.PASS,
+            reason="Source-code build instructions detected (build-tool file or a build/install/development section).",
+            remediation="Keep build/install instructions current as the build process changes.",
+            evidence_sources=[],
+            confidence="medium",
+        )
+    return EvalOutcome(
+        status=ControlStatus.MANUAL_REVIEW_REQUIRED,
+        reason=(
+            "No build instructions detected (no Makefile/Taskfile/justfile/nox/tox/INSTALL, and no "
+            "build/install/development section in README/CONTRIBUTING)."
+        ),
+        remediation=(
+            "Document how to build from source: add a Makefile/Taskfile or a 'Building from source' "
+            "section to README.md or CONTRIBUTING.md."
+        ),
+        evidence_sources=[],
+        confidence="low",
     )
 
 
