@@ -61,6 +61,7 @@ EVALUATOR_REGISTRY: dict[str, Callable[[EvalContext], EvalOutcome]] = {
     "CRA-ART14-CSAF-001": eval_cra_art14_csaf_001,
     "CRA-ART14-COORD-002": eval_cra_art14_coord_002,
     "CRA-PRODUCT-CLASS-001": eval_cra_product_class_001,
+    "CRA-ART13-SUPPORT-003": eval_cra_art13_support_003,
     "CISA-SBD-VDP-001": eval_cisa_sbd_vdp_001,
     "CISA-SBD-CVE-003": eval_cisa_sbd_cve_003,
     "CISA-SBD-SECRETS-005": eval_cisa_sbd_secrets_005,

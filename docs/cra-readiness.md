@@ -39,6 +39,10 @@ Focused exclusively on the September 2026 deadline. Bundles 11 controls covering
 
 Bundles 12 controls; a discovery surface for CRA preparation before September 2026. Less reporting-specific than `cra-eu-reporting-1`, more aligned with the documentation expectations of the full 2027 deadline.
 
+### `cra-eu-ready-2-1` — Article 11/13/14 signals (advisory)
+
+The canonical CRA bundle. Among its Article 13 signals, `CRA-ART13-SUPPORT-003` looks for a **declared security-update support period** — a clone-visible `Supported Versions` table or a support-window statement in `SECURITY.md`/`SUPPORT.md` (CRA Annex I, Part I obligation to declare a support period). A separately-published RFC 9116 `.well-known/security.txt` (`CISA-SBD-VDP-001`) doubles as a CRA Art.13/14 disclosure-channel readiness signal — it is **mapped, not duplicated**. All are `signal`-grade readiness indicators: a declared period is not proof it is honoured, and **none asserts CRA conformity**.
+
 ### `cra-eu-strict-1` — full obligations alignment (2027-12-11)
 
 Bundles 19 controls (12 from `cra-eu-ready-1` plus 7 stricter additions covering GitHub platform governance, org-wide MFA, action pinning, secret scanning posture). Still **advisory** — the kit does not certify conformity.

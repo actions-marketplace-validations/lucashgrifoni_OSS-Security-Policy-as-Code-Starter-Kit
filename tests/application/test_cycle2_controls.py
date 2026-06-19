@@ -18,6 +18,7 @@ from oss_policy_kit.application.evaluators import (
     eval_agent_asi_tool_002,
     eval_cont_distroless_001,
     eval_cra_art13_sbd_001,
+    eval_cra_art13_support_003,
     eval_cra_art14_csaf_001,
     eval_cra_product_class_001,
     eval_gh_wf_lockfile_001,
@@ -162,6 +163,33 @@ def test_cra_art14_csaf_pass_on_well_known(tmp_path: Path) -> None:
 def test_cra_product_class_manual_when_absent(tmp_path: Path) -> None:
     out = eval_cra_product_class_001(SimpleNamespace(repo_root=tmp_path))
     assert out.status is ControlStatus.MANUAL_REVIEW_REQUIRED
+
+
+# --- T2.4 (v8.1.0): CRA Article 13 / Annex I support-period signal ---------
+def test_cra_support_period_pass_on_supported_versions(tmp_path: Path) -> None:
+    (tmp_path / "SECURITY.md").write_text(
+        "# Security\n\n## Supported Versions\n\n| Version | Supported |\n|---|---|\n| 8.x | yes |\n",
+        encoding="utf-8",
+    )
+    out = eval_cra_art13_support_003(SimpleNamespace(repo_root=tmp_path))
+    assert out.status is ControlStatus.PASS
+    # Honest wording: readiness signal, never a CRA conformity/certification claim.
+    blob = f"{out.reason} {out.remediation}".lower()
+    assert "certified" not in blob and "conformity" not in blob and "compliant" not in blob
+
+
+def test_cra_support_period_manual_when_absent(tmp_path: Path) -> None:
+    (tmp_path / "SECURITY.md").write_text("# Security\n\nReport issues to security@example.com\n", encoding="utf-8")
+    out = eval_cra_art13_support_003(SimpleNamespace(repo_root=tmp_path))
+    assert out.status is ControlStatus.MANUAL_REVIEW_REQUIRED
+
+
+def test_cra_support_period_pass_on_support_window_doc(tmp_path: Path) -> None:
+    (tmp_path / "SUPPORT.md").write_text(
+        "# Support\n\nSecurity updates for 24 months after release.\n", encoding="utf-8"
+    )
+    out = eval_cra_art13_support_003(SimpleNamespace(repo_root=tmp_path))
+    assert out.status is ControlStatus.PASS
 
 
 # --- PR-23: EPSS + KEV -----------------------------------------------------

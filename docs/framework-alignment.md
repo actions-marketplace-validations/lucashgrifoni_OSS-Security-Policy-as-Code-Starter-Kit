@@ -383,6 +383,8 @@ Regulatory pressure with concrete artifact requirements. Key dates:
 | Build provenance for shipped artifacts | `GH-PROV-023`, `AZ-ARTPRV-059`, `AWS-PROVART-059`, `PROV-VERIFY-061` | YES (since v5.1.0) | Provenance attestation independently verified. |
 | **Art.13** Security by design | `CRA-ART13-SBD-001` | PARTIAL | `signal` (v6.x) — security-by-design intent declared in repo docs. |
 | **Art.13** Secure-by-default configuration | `CRA-ART13-DEFAULTS-002` | PARTIAL | `signal` (v6.x) — secure-by-default configuration documented. |
+| **Annex I** Security-update support period | `CRA-ART13-SUPPORT-003` | PARTIAL | `signal` (v8.1.0) — a declared security-update support window / `Supported Versions` statement in repo docs. Readiness, not conformity. |
+| **Art.13/14** Published VDP (security.txt) | `CISA-SBD-VDP-001` | PARTIAL | `signal` — RFC 9116 `.well-known/security.txt` doubles as a CRA Art.13/14 disclosure-channel readiness signal (mapped, not duplicated). |
 | **Art.14** Coordinated vulnerability disclosure | `CRA-ART14-COORD-002` | PARTIAL | `signal` (v6.x) — CVD policy documented. |
 | **Art.14** Advisory feed (machine-readable) | `CRA-ART14-CSAF-001` | PARTIAL | `signal` (v6.x) — CSAF advisory feed present (reporting readiness). |
 | Product classification (Implementing Reg (EU) 2025/2392) | `CRA-PRODUCT-CLASS-001` | PARTIAL | `signal` (v6.x) — CRA product class declared (default vs important vs critical). Classification drives obligation tier; the kit records the declaration, it does not adjudicate it. |

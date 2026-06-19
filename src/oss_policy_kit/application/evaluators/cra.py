@@ -171,6 +171,57 @@ def eval_cra_product_class_001(ctx: EvalContext) -> EvalOutcome:
     )
 
 
+_SUPPORT_PERIOD_TERMS: tuple[str, ...] = (
+    "support period",
+    "support window",
+    "support policy",
+    "support lifecycle",
+    "support timeline",
+    "security support",
+    "security updates until",
+    "security updates for",
+    "security update period",
+    "supported until",
+    "supported versions",
+    "end of life",
+    "end-of-life",
+    "maintenance period",
+)
+
+
+def eval_cra_art13_support_003(ctx: EvalContext) -> EvalOutcome:
+    """CRA-ART13-SUPPORT-003: security-update support period declared (CRA Annex I).
+
+    Clone-visible signal that the manufacturer has declared, somewhere in SECURITY.md / a
+    support doc / README, the window during which the product receives security updates — a
+    core CRA obligation (Annex I, Part I). A common honest signal is a SECURITY.md
+    "Supported Versions" table. Signal only: a declared period is not proof it is honoured.
+    Readiness, never CRA conformity.
+    """
+    p, text = _read_first_existing(
+        ctx.repo_root,
+        ("SECURITY.md", "docs/security.md", "SUPPORT.md", "docs/support.md", "docs/cra-readiness.md", "README.md"),
+    )
+    if p is not None and any(t in text for t in _SUPPORT_PERIOD_TERMS):
+        return EvalOutcome(
+            status=ControlStatus.PASS,
+            reason=f"Security-update support period / supported-versions statement found in {p.name} (CRA Annex I).",
+            remediation="Keep the declared support window current and aligned with the release cadence.",
+            evidence_sources=[str(p.resolve())],
+            confidence="low",
+        )
+    return EvalOutcome(
+        status=ControlStatus.MANUAL_REVIEW_REQUIRED,
+        reason="No declared security-update support period (e.g. a 'Supported Versions' / support-window statement).",
+        remediation=(
+            "Declare the security-update support period (CRA Annex I): add a 'Supported Versions' or "
+            "support-window section to SECURITY.md. See docs/cra-readiness.md."
+        ),
+        evidence_sources=[str(p.resolve())] if p else [],
+        confidence="low",
+    )
+
+
 # --- v10 CISA Secure by Design Pledge readiness signals --------------------------------
 # Honest, clone-observable subset of the (voluntary, 7-goal) CISA Secure by Design Pledge,
 # cross-mapped to ISO/IEC 29147 (disclosure) + 30111 (handling). These are "readiness"

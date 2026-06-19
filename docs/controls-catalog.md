@@ -1,8 +1,8 @@
-# Controls Catalog (221 controls)
+# Controls Catalog (222 controls)
 
 Single-page reference generated from the bundled control catalog and profiles. The authoritative source is [`src/oss_policy_kit/data/controls/catalog.yaml`](../src/oss_policy_kit/data/controls/catalog.yaml).
 
-Current bundled state: **221 controls** across **56 bundled profiles**. Regenerate this page whenever the catalog or profile membership changes (`python scripts/generate-controls-catalog.py`).
+Current bundled state: **222 controls** across **56 bundled profiles**. Regenerate this page whenever the catalog or profile membership changes (`python scripts/generate-controls-catalog.py`).
 
 > **Tip:** for an interactive, filterable view of this same catalog (filter by family, assurance, lifecycle, or profile membership, plus text search) see the **Control catalog** section of the project landing page: <https://lucashgrifoni.github.io/OSS-Security-Policy-as-Code-Starter-Kit/#catalog>.
 
@@ -12,7 +12,7 @@ Current bundled state: **221 controls** across **56 bundled profiles**. Regenera
 |---|---:|
 | `ci_cd` | 41 |
 | `container` | 7 |
-| `governance` | 19 |
+| `governance` | 20 |
 | `iac` | 30 |
 | `kubernetes` | 16 |
 | `platform` | 16 |
@@ -27,7 +27,7 @@ Current bundled state: **221 controls** across **56 bundled profiles**. Regenera
 |---|---:|---|
 | `deterministic` | 31 | Structural parse or file presence/absence with high confidence. |
 | `evidence-backed` | 92 | Depends on a local JSON evidence file or API-collected attestation. |
-| `signal` | 98 | Heuristic or directional signal; PASS is not proof of runtime behavior. |
+| `signal` | 99 | Heuristic or directional signal; PASS is not proof of runtime behavior. |
 
 ## Full Catalog
 
@@ -231,6 +231,7 @@ Profile counts in the **Profiles** column reflect how many bundled profiles incl
 | `CRA-ART14-CSAF-001` | governance | signal | 2 | 1 | CSAF advisory feed present (CRA Article 14 reporting readiness) |
 | `CRA-ART14-COORD-002` | governance | signal | 2 | 1 | Coordinated vulnerability disclosure policy documented (CRA Article 14) |
 | `CRA-PRODUCT-CLASS-001` | governance | signal | 1 | 1 | CRA product classification declared (Implementing Reg (EU) 2025/2392) |
+| `CRA-ART13-SUPPORT-003` | governance | signal | 1 | 1 | Security-update support period declared (CRA Annex I) |
 | `CISA-SBD-VDP-001` | governance | signal | 2 | 1 | Published vulnerability disclosure policy signal (RFC 9116 security.txt / SECURITY.md, ISO/IEC 29147) |
 | `CISA-SBD-CVE-003` | governance | signal | 1 | 1 | Published advisories carry CWE identifiers (ISO/IEC 30111 handling hygiene) |
 | `CISA-SBD-SECRETS-005` | governance | evidence-backed | 2 | 1 | Default-credential / hardcoded-secret hygiene composed from secret-scan evidence |
@@ -457,6 +458,7 @@ Each control entry below lists which bundled profiles include it. Controls not p
 - `CRA-ART14-CSAF-001`: `cra-eu-ready-2-1`
 - `CRA-ART14-COORD-002`: `cra-eu-ready-2-1`
 - `CRA-PRODUCT-CLASS-001`: `cra-eu-ready-2-1`
+- `CRA-ART13-SUPPORT-003`: `cra-eu-ready-2-1`
 - `CISA-SBD-VDP-001`: `oss-publish-readiness-1`
 - `CISA-SBD-CVE-003`: `oss-publish-readiness-1`
 - `CISA-SBD-SECRETS-005`: `oss-publish-readiness-1`

@@ -2,7 +2,7 @@
 // Regenerate with: python scripts/generate-gitpage-catalog-data.py
 // Source of truth: src/oss_policy_kit/data/controls/catalog.yaml + bundled profiles.
 window.CATALOG_DATA = {
-  "controlCount": 221,
+  "controlCount": 222,
   "profileCount": 56,
   "facets": {
     "categories": [
@@ -3079,6 +3079,17 @@ window.CATALOG_DATA = {
     {
       "id": "CRA-PRODUCT-CLASS-001",
       "title": "CRA product classification declared (Implementing Reg (EU) 2025/2392)",
+      "category": "governance",
+      "assurance": "signal",
+      "lifecycle": "experimental",
+      "weight": 1,
+      "profiles": [
+        "cra-eu-ready-2-1"
+      ]
+    },
+    {
+      "id": "CRA-ART13-SUPPORT-003",
+      "title": "Security-update support period declared (CRA Annex I)",
       "category": "governance",
       "assurance": "signal",
       "lifecycle": "experimental",

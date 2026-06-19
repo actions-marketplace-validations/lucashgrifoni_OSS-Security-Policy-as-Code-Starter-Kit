@@ -1631,6 +1631,13 @@ controls:
     lifecycle: experimental
     assurance: signal
     weight: 1
+  - id: CRA-ART13-SUPPORT-003
+    title: Security-update support period declared (CRA Annex I)
+    category: governance
+    automation: deterministic
+    lifecycle: experimental
+    assurance: signal
+    weight: 1
   # v10 CISA Secure by Design Pledge readiness signals (clone-observable subset; ISO/IEC
   # 29147 + 30111). MFA goal -> ORG-MFA-001 (mapped, not duplicated). Disclosure overlaps
   # the CRA Art.14 track above (mapped in docs/framework-alignment.md).
