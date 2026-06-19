@@ -35,6 +35,7 @@ The subcommand:
 | `spdx` | GA (v7.0.0) | SPDX 2.3 JSON **evidence projection** — one package (the evaluated repo) with one annotation per control. **Not** a dependency/component SBOM of the target (the kit is a clone-only evaluator, not a dependency resolver). See ADR-034. |
 | `oscal` | GA (v7.0.0) | OSCAL 1.1 `assessment-results` JSON — each control result becomes an `EXAMINE` observation carrying the kit's verdict + assurance grade (as `props` under the `https://oss-policy-kit` namespace) and a reference to the evaluated repository; the result also carries an `assessment-subjects` entry and an `assessment-log` (run timestamp + tool). Unsigned. See ADR-036. Assurance/subject/log enrichment added in v8.1.0. |
 | `in-toto-bundle` | GA (v7.0.0) | **Unsigned** in-toto v1 statement with a custom policy-evaluation predicate. Signing (cosign/Sigstore) is the v8 ATTESTED track; this statement is its input. See ADR-036. |
+| `gemara` | GA (v8.1.0) | OpenSSF **Gemara Layer 5 Evaluation Log** (JSON) — the kit is a conformance gate (Layer 5). Each control becomes a `ControlEvaluation`; the kit state maps to a Gemara `Result` (`Passed`/`Failed`/`Needs Review`/`Not Applicable`) and the assurance grade to a `ConfidenceLevel`. Structurally valid, unsigned; the Gemara schema is pre-1.0 (CUE), so the targeted model version is pinned in `gemara-version` and no CUE dependency is added. See ADR-042. |
 
 Planned for a future release (not yet shipped):
 

@@ -49,7 +49,7 @@ _DEFAULT_REPORT = Path("out/evaluation-report.json")
 # in v6.0.0 (see ADR-012); the surface is not. ``spdx``/``oscal``/``in-toto-bundle``
 # were promoted from "future" to GA in v7.0.0 (ADR-034, ADR-036); ``guac`` stays
 # deferred until an adopter needs it (its backlog stub gates promotion on demand).
-_SUPPORTED_FORMATS: tuple[str, ...] = ("chainloop", "sarif", "spdx", "oscal", "in-toto-bundle")
+_SUPPORTED_FORMATS: tuple[str, ...] = ("chainloop", "sarif", "spdx", "oscal", "in-toto-bundle", "gemara")
 
 # Custom predicate type for the in-toto policy-evaluation statement (ADR-036).
 _INTOTO_PREDICATE_TYPE = "https://oss-policy-kit/attestations/policy-evaluation/v0.1"
@@ -377,12 +377,132 @@ def _render_intoto_bundle(report: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# --- Gemara Layer 5 Evaluation Log (ADR-042) --------------------------------
+# Pinned snapshot of the OpenSSF Gemara model the renderer targets. The Gemara
+# schema is expressed in CUE and is pre-1.0 (dev); per the scope-gate we do NOT
+# add a CUE dependency or vendor a validator — we pin the model version in the
+# emitted `gemara-version` field and validate structurally (as every other
+# export format does). Source: https://github.com/gemaraproj/gemara (evaluationlog.cue).
+_GEMARA_MODEL_VERSION = "v0.17.0-dev"
+
+# The six Gemara `#Result` enum values (layer5/metadata schema).
+_GEMARA_RESULTS: frozenset[str] = frozenset(
+    {"Not Run", "Passed", "Failed", "Needs Review", "Not Applicable", "Unknown"}
+)
+
+# kit reports/2.0 state -> Gemara Result. ATTESTED is a (verified) pass.
+_GEMARA_STATE_MAP: dict[str, str] = {
+    "PASS": "Passed",
+    "FAIL": "Failed",
+    "UNKNOWN": "Needs Review",
+    "MANUAL_REVIEW_REQUIRED": "Needs Review",
+    "NOT_APPLICABLE": "Not Applicable",
+    "ATTESTED": "Passed",
+}
+# reports/1.0 lowercase status fallback.
+_GEMARA_STATUS_MAP: dict[str, str] = {
+    "pass": "Passed",
+    "fail": "Failed",
+    "manual-review-required": "Needs Review",
+    "unknown": "Needs Review",
+    "not-applicable": "Not Applicable",
+    "attested": "Passed",
+}
+# kit assurance grade -> Gemara ConfidenceLevel ("Undetermined"|"Low"|"Medium"|"High").
+_GEMARA_CONFIDENCE: dict[str, str] = {
+    "deterministic": "High",
+    "evidence-backed": "High",
+    "attested": "High",
+    "signal": "Medium",
+}
+
+
+def _gemara_result(control: dict[str, Any]) -> str:
+    state = str(control.get("state") or "").strip().upper()
+    if state in _GEMARA_STATE_MAP:
+        return _GEMARA_STATE_MAP[state]
+    status = str(control.get("status") or "").strip().lower()
+    return _GEMARA_STATUS_MAP.get(status, "Unknown")
+
+
+def _gemara_aggregate(results: list[str]) -> str:
+    if not results:
+        return "Unknown"
+    if "Failed" in results:
+        return "Failed"
+    if "Needs Review" in results or "Unknown" in results:
+        return "Needs Review"
+    return "Passed"  # all Passed / Not Applicable
+
+
+def _render_gemara(report: dict[str, Any]) -> dict[str, Any]:
+    """Render the evaluation report as a Gemara Layer 5 Evaluation Log (ADR-042).
+
+    The kit is a conformance *gate* tool — Gemara Layer 5. Each control result maps to a
+    Gemara ``ControlEvaluation`` (with one ``AssessmentLog``); the kit state maps to a Gemara
+    ``Result`` and the assurance grade to a ``ConfidenceLevel``. Structurally valid, unsigned;
+    the Gemara schema is pre-1.0 so the targeted model version is pinned in ``gemara-version``.
+    """
+    now = _now_iso8601_z()
+    version = _kit_version(report)
+    profile_id = _profile_id(report)
+    target = str(report.get("target", "unknown"))
+    reference_id = f"oss-policy-kit:{profile_id or 'evaluation'}"
+    controls = [c for c in (report.get("controls", []) or []) if isinstance(c, dict)]
+
+    evaluations: list[dict[str, Any]] = []
+    for c in controls:
+        cid = str(c.get("id", "UNKNOWN"))
+        result = _gemara_result(c)
+        message = str(c.get("reason", "")) or result
+        mapping = {"reference-id": reference_id, "entry-id": cid}
+        assessment: dict[str, Any] = {
+            "requirement": dict(mapping),
+            "description": f"Clone-only evaluation of {cid}.",
+            "result": result,
+            "message": message,
+            "applicability": [profile_id or "evaluation"],
+            "steps": ["examine clone-visible repository artifacts"],
+            "start": now,
+        }
+        confidence = _GEMARA_CONFIDENCE.get(str(c.get("assurance") or "").strip())
+        if confidence:
+            assessment["confidence-level"] = confidence
+        evaluations.append(
+            {
+                "name": cid,
+                "result": result,
+                "message": message,
+                "control": dict(mapping),
+                "assessment-logs": [assessment],
+            }
+        )
+
+    return {
+        "metadata": {
+            "id": f"oss-policy-kit-evaluation-{profile_id or 'evaluation'}",
+            "type": "EvaluationLog",
+            "gemara-version": _GEMARA_MODEL_VERSION,
+            "version": version,
+            "date": now,
+            "description": (
+                "oss-policy-kit clone-only policy evaluation projected into a Gemara Layer 5 Evaluation Log."
+            ),
+            "author": {"id": "oss-policy-kit", "name": "oss-policy-kit", "type": "Software", "version": version},
+        },
+        "target": {"id": target, "name": target, "type": "Software"},
+        "result": _gemara_aggregate([e["result"] for e in evaluations]),
+        "evaluations": evaluations,
+    }
+
+
 _RENDERERS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "chainloop": _render_chainloop,
     "sarif": _render_sarif,
     "spdx": _render_spdx,
     "oscal": _render_oscal,
     "in-toto-bundle": _render_intoto_bundle,
+    "gemara": _render_gemara,
 }
 
 
@@ -455,12 +575,50 @@ def _validate_intoto(doc: dict[str, Any]) -> list[str]:
     return errs
 
 
+def _validate_gemara(doc: dict[str, Any]) -> list[str]:
+    errs: list[str] = []
+    md = doc.get("metadata")
+    if not isinstance(md, dict) or md.get("type") != "EvaluationLog":
+        errs.append("gemara: metadata.type must be 'EvaluationLog'")
+    elif not md.get("gemara-version"):
+        errs.append("gemara: metadata.gemara-version must be set")
+    if not isinstance(doc.get("target"), dict):
+        errs.append("gemara: target must be an object")
+    if doc.get("result") not in _GEMARA_RESULTS:
+        errs.append("gemara: result must be a Gemara Result enum value")
+    evals = doc.get("evaluations")
+    if not isinstance(evals, list) or not evals:
+        errs.append("gemara: evaluations must be a non-empty array")
+        return errs
+    for ev in evals:
+        if not isinstance(ev, dict):
+            continue
+        if ev.get("result") not in _GEMARA_RESULTS:
+            errs.append(f"gemara: evaluation {ev.get('name')!r} has an invalid result")
+            break
+        logs = ev.get("assessment-logs")
+        if not isinstance(logs, list) or not logs:
+            errs.append(f"gemara: evaluation {ev.get('name')!r} must have a non-empty assessment-logs")
+            break
+        # Gemara enforces the assessment requirement reference-id == control reference-id.
+        control_ref = ev.get("control", {}).get("reference-id") if isinstance(ev.get("control"), dict) else None
+        first = logs[0]
+        log_ref = (
+            first.get("requirement", {}).get("reference-id") if isinstance(first.get("requirement"), dict) else None
+        )
+        if control_ref != log_ref:
+            errs.append(f"gemara: evaluation {ev.get('name')!r} requirement reference-id must match the control")
+            break
+    return errs
+
+
 _VALIDATORS: dict[str, Callable[[dict[str, Any]], list[str]]] = {
     "chainloop": _validate_chainloop,
     "sarif": _validate_sarif,
     "spdx": _validate_spdx,
     "oscal": _validate_oscal,
     "in-toto-bundle": _validate_intoto,
+    "gemara": _validate_gemara,
 }
 
 

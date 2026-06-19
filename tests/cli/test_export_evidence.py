@@ -13,6 +13,7 @@ from oss_policy_kit.cli.export_evidence import (
     _SUPPORTED_FORMATS,
     _load_evaluation_report,
     _render_chainloop,
+    _render_gemara,
     _render_intoto_bundle,
     _render_oscal,
     _render_sarif,
@@ -178,6 +179,56 @@ def test_render_oscal_validation_catches_missing_log() -> None:
     errs = _validate({"assessment-results": {"metadata": {}, "results": [{"observations": []}]}}, "oscal")
     assert any("assessment-subjects" in e for e in errs)
     assert any("assessment-log" in e for e in errs)
+
+
+# --- v8.1.0: Gemara Layer 5 Evaluation Log (ADR-042) ---------------------------------
+
+
+def test_gemara_is_registered() -> None:
+    assert "gemara" in _SUPPORTED_FORMATS
+    assert "gemara" in _RENDERERS
+
+
+def test_render_gemara_maps_states_grades_and_validates() -> None:
+    report = {
+        "target": "examples/hardened-repo",
+        "profile": {"id": "github-level-1"},
+        "controls": [
+            {"id": "GOV-SEC-001", "state": "PASS", "assurance": "deterministic", "reason": "present"},
+            {"id": "GH-PROV-023", "state": "UNKNOWN", "assurance": "signal", "reason": "no evidence"},
+            {"id": "X-NA-001", "state": "NOT_APPLICABLE", "assurance": "signal"},
+            {"id": "Y-FAIL-001", "state": "FAIL", "assurance": "deterministic", "reason": "bad"},
+        ],
+    }
+    doc = _render_gemara(report)
+    assert doc["metadata"]["type"] == "EvaluationLog"
+    assert doc["metadata"]["gemara-version"]  # pinned pre-1.0 model version
+    assert doc["target"]["name"] == "examples/hardened-repo"
+    by_name = {e["name"]: e for e in doc["evaluations"]}
+    assert by_name["GOV-SEC-001"]["result"] == "Passed"
+    assert by_name["GH-PROV-023"]["result"] == "Needs Review"
+    assert by_name["X-NA-001"]["result"] == "Not Applicable"
+    assert by_name["Y-FAIL-001"]["result"] == "Failed"
+    # assurance grade -> Gemara ConfidenceLevel
+    assert by_name["GOV-SEC-001"]["assessment-logs"][0]["confidence-level"] == "High"
+    assert by_name["GH-PROV-023"]["assessment-logs"][0]["confidence-level"] == "Medium"
+    # aggregate is the worst-case (a Failed present)
+    assert doc["result"] == "Failed"
+    # requirement reference-id matches the control reference-id (Gemara constraint)
+    ev = by_name["GOV-SEC-001"]
+    assert ev["control"]["reference-id"] == ev["assessment-logs"][0]["requirement"]["reference-id"]
+    assert _validate(doc, "gemara") == []
+
+
+def test_validate_gemara_catches_bad_docs() -> None:
+    assert any("evaluations" in e for e in _validate({"metadata": {"type": "EvaluationLog"}}, "gemara"))
+    bad = {
+        "metadata": {"type": "EvaluationLog", "gemara-version": "v0"},
+        "target": {},
+        "result": "Passed",
+        "evaluations": [{"name": "A", "result": "Bogus", "assessment-logs": [{}]}],
+    }
+    assert any("invalid result" in e for e in _validate(bad, "gemara"))
 
 
 def test_render_intoto_bundle_shape_and_validation() -> None:
