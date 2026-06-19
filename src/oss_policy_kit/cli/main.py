@@ -15,6 +15,7 @@ from contextlib import suppress
 # Importing each module triggers Typer command registration via decorators.
 from oss_policy_kit.cli import (  # noqa: F401  (import side-effects: command registration)
     batch,
+    diff_catalogs,
     emit_insights,
     emit_vex,
     evaluate,
@@ -50,6 +51,7 @@ _COMMAND_DISPLAY_ORDER: tuple[str, ...] = (
     "recommend-profile",
     "init",
     "osps-coverage",
+    "diff-catalogs",
     "scan-iac",
     "scan-k8s",
     "scan-cfn",

@@ -235,6 +235,7 @@ def prepare_cli_args(args: list[str]) -> list[str]:
         "recommend-profile",
         "init",
         "osps-coverage",
+        "diff-catalogs",
         "scan-sast",
         "scan-iac",
         "scan-k8s",
