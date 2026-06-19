@@ -29,6 +29,25 @@ The subcommand:
 4. **Optionally validates** the output against the OpenSSF Security Insights 1.0 JSON Schema when `--validate` is passed.
 5. **Exits 0** on successful emission, **1** on validation failure, **2** on usage errors.
 
+### Merge fragment (`--merge`)
+
+If you already maintain a `security-insights.yml` and only want the parts the kit can confirm
+from the clone, use `--merge`:
+
+```text
+$ oss-policy-kit emit-insights --target . --merge --output insights-fragment.yml
+```
+
+`--merge` emits a **partial, merge-idempotent fragment** instead of a full standalone document:
+
+- it includes **only clone-backed fields** (e.g. `contribution-policy`, `vulnerability-reporting`,
+  `security-contacts`, `project-administrators`, `dependencies`) — fields the kit derives from a
+  present `CONTRIBUTING.md`, `SECURITY.md`, `CODEOWNERS`, a git remote, or detected dependency tooling;
+- it **drops** the volatile header timestamps (`last-updated` / `last-reviewed`) and the assumed
+  `project-lifecycle`, so re-running produces a **byte-identical** fragment (no churn on merge);
+- merge it into your own `security-insights.yml`, then **review and commit** — the kit fills only what
+  it can back, never the self-asserted-only fields.
+
 ## Field mapping (planned)
 
 | Insights 1.0 field | Source in the kit | Control / signal |
