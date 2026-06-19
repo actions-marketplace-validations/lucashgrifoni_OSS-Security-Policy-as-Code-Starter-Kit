@@ -33,6 +33,9 @@ class ScorecardBundle:
     checks: list[ScorecardCheck] = field(default_factory=list)
     raw_path: str | None = None
     aggregate_score: float | None = None
+    #: The Scorecard run's ``date`` field (ISO-8601 string) when present, used for
+    #: evidence-freshness/staleness checks by consumers. ``None`` when undated.
+    result_date: str | None = None
 
 
 def _coerce_checks(blob: Any) -> list[ScorecardCheck]:
@@ -73,6 +76,14 @@ def _coerce_aggregate_score(value: Any) -> float | None:
     return score
 
 
+def _coerce_date(value: Any) -> str | None:
+    """Return a non-empty ISO-8601-ish date string, else ``None``."""
+
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
 def load_scorecard_json(path: Path) -> ScorecardBundle:
     """Load Scorecard JSON (common CLI export shapes)."""
 
@@ -80,6 +91,7 @@ def load_scorecard_json(path: Path) -> ScorecardBundle:
     data = json.loads(text)
     checks: list[ScorecardCheck] = []
     aggregate: float | None = None
+    result_date: str | None = None
     if isinstance(data, dict):
         scorecard_obj = data.get("scorecard") if isinstance(data.get("scorecard"), dict) else None
         if scorecard_obj is not None:
@@ -89,7 +101,10 @@ def load_scorecard_json(path: Path) -> ScorecardBundle:
             checks = _coerce_checks(data.get("checks"))
         if aggregate is None:
             aggregate = _coerce_aggregate_score(data.get("score"))
-    return ScorecardBundle(checks=checks, raw_path=str(path.resolve()), aggregate_score=aggregate)
+        result_date = _coerce_date(data.get("date"))
+    return ScorecardBundle(
+        checks=checks, raw_path=str(path.resolve()), aggregate_score=aggregate, result_date=result_date
+    )
 
 
 def load_scorecard_auto(path: Path) -> ScorecardBundle:
@@ -100,11 +115,15 @@ def load_scorecard_auto(path: Path) -> ScorecardBundle:
         data = load_yaml_file(path)
         checks = _coerce_checks(data if isinstance(data, dict) else None)
         aggregate: float | None = None
+        result_date: str | None = None
         if isinstance(data, dict):
             aggregate = _coerce_aggregate_score(data.get("score"))
             if aggregate is None and isinstance(data.get("scorecard"), dict):
                 aggregate = _coerce_aggregate_score(data["scorecard"].get("score"))
-        return ScorecardBundle(checks=checks, raw_path=str(path.resolve()), aggregate_score=aggregate)
+            result_date = _coerce_date(data.get("date"))
+        return ScorecardBundle(
+            checks=checks, raw_path=str(path.resolve()), aggregate_score=aggregate, result_date=result_date
+        )
     return load_scorecard_json(path)
 
 

@@ -245,6 +245,7 @@ def prepare_cli_args(args: list[str]) -> list[str]:
         "emit-vex",
         "emit-insights",
         "ingest-insights",
+        "ingest-scorecard",
         "export-evidence",
         "export-policy",
     }:

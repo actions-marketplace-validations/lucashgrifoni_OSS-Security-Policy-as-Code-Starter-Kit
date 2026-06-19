@@ -23,6 +23,7 @@ from oss_policy_kit.cli import (  # noqa: F401  (import side-effects: command re
     export_evidence,
     export_policy,
     ingest_insights,
+    ingest_scorecard,
     init,
     osps_coverage,
     profiles,
@@ -63,6 +64,7 @@ _COMMAND_DISPLAY_ORDER: tuple[str, ...] = (
     "emit-vex",
     "emit-insights",
     "ingest-insights",
+    "ingest-scorecard",
     "export-evidence",
     "export-policy",
 )
