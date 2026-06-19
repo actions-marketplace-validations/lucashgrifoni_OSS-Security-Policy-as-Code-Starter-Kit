@@ -45,6 +45,14 @@ For maximum supply-chain assurance, pin to the commit SHA of the release tag and
 | `sarif` | Absolute path to the SARIF file (set only when `sarif-output` was provided) |
 | `exit-code` | Exit code returned by `oss-policy-kit evaluate` (`0`, `1`, `2`, `3`) |
 
+## Job summary and annotations
+
+After each run the action writes a **GitHub Actions job summary** (a Markdown table of control
+counts plus the failing controls) to the workflow run page, and emits **inline annotations** —
+`::error` for each `fail` and `::warning` for each manual-review (`UNKNOWN`) control — so findings
+surface directly on the pull request's Checks tab. This is best-effort and never changes the exit
+code the action forwards: `fail-on` still decides whether the check passes or fails.
+
 ## Permissions
 
 The action only needs `contents: read`. Grant `security-events: write` only if you forward SARIF to GitHub Code Scanning.

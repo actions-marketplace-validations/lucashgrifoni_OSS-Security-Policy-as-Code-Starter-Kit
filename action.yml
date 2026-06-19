@@ -167,6 +167,12 @@ runs:
           fi
           echo "sarif=${sarif_path}" >> "${GITHUB_OUTPUT}"
         fi
+        # Write a GitHub Actions job summary + per-finding annotations from the report.
+        # Best-effort: ${GITHUB_ACTION_PATH} is this action's own checkout, and a failure
+        # here (|| true) never changes the evaluation exit code forwarded below.
+        if [ -f "${report_json}" ]; then
+          python "${GITHUB_ACTION_PATH}/scripts/action_summary.py" "${report_json}" || true
+        fi
         # Forward the kit's exit code so branch protection and required-check
         # gates behave the way operators expect (1 when --fail-on is tripped).
         exit "${rc}"
