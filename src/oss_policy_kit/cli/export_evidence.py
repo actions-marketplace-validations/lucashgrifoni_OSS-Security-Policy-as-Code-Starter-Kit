@@ -54,6 +54,9 @@ _SUPPORTED_FORMATS: tuple[str, ...] = ("chainloop", "sarif", "spdx", "oscal", "i
 # Custom predicate type for the in-toto policy-evaluation statement (ADR-036).
 _INTOTO_PREDICATE_TYPE = "https://oss-policy-kit/attestations/policy-evaluation/v0.1"
 
+# OSCAL prop namespace for kit-specific observation properties (assurance grade, kit state).
+_OSCAL_KIT_NS = "https://oss-policy-kit"
+
 
 def _now_iso8601_z() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -262,24 +265,47 @@ def _render_spdx(report: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _oscal_observation(control: dict[str, Any], *, now: str, subject_uuid: str) -> dict[str, Any]:
+    """One OSCAL observation per control, carrying the kit's verdict + assurance grade.
+
+    The kit *examines* clone-visible artifacts (it does not run tests), so the method is
+    ``EXAMINE``. The kit assurance grade and reports/2.0 state ride as ``props`` under the
+    kit namespace; the observation points at the evaluated repository via ``subjects``.
+    """
+    cid = str(control.get("id", "UNKNOWN"))
+    state = str(control.get("state") or control.get("status") or "unknown")
+    props: list[dict[str, str]] = [{"name": "kit-state", "value": state, "ns": _OSCAL_KIT_NS}]
+    assurance = control.get("assurance")
+    if isinstance(assurance, str) and assurance.strip():
+        props.append({"name": "assurance", "value": assurance.strip(), "ns": _OSCAL_KIT_NS})
+    return {
+        "uuid": str(uuid.uuid4()),
+        "title": cid,
+        "description": f"{cid}: {state} — {control.get('reason', '')}",
+        "methods": ["EXAMINE"],
+        "props": props,
+        "subjects": [{"subject-uuid": subject_uuid, "type": "component"}],
+        "collected": now,
+    }
+
+
 def _render_oscal(report: dict[str, Any]) -> dict[str, Any]:
     """Render the evaluation report as an OSCAL 1.1 assessment-results document (ADR-036).
 
     The kit produces *assessment* output (pass/fail/observations), which maps to the OSCAL
     ``assessment-results`` model (not ``component-definition``). Each control result becomes
-    an OSCAL observation. GA v0.1: structurally valid, unsigned.
+    an OSCAL observation carrying the kit verdict + assurance grade (as ``props``) and a
+    reference to the evaluated repository (``assessment-subjects`` / observation ``subjects``).
+    The result also carries an ``assessment-log`` recording the run timestamp + tool. GA:
+    structurally valid, unsigned.
     """
     now = _now_iso8601_z()
     version = _kit_version(report)
     profile_id = _profile_id(report)
+    target = str(report.get("target", "unknown"))
+    subject_uuid = str(uuid.uuid4())
     observations = [
-        {
-            "uuid": str(uuid.uuid4()),
-            "title": str(c.get("id", "UNKNOWN")),
-            "description": f"{c.get('id', 'UNKNOWN')}: {c.get('status', 'unknown')} — {c.get('reason', '')}",
-            "methods": ["TEST"],
-            "collected": now,
-        }
+        _oscal_observation(c, now=now, subject_uuid=subject_uuid)
         for c in (report.get("controls", []) or [])
         if isinstance(c, dict)
     ]
@@ -299,7 +325,24 @@ def _render_oscal(report: dict[str, Any]) -> dict[str, Any]:
                     "title": "oss-policy-kit clone-only policy evaluation",
                     "description": "Clone-only policy evaluation results projected into OSCAL assessment-results.",
                     "start": now,
+                    "assessment-subjects": [
+                        {
+                            "type": "component",
+                            "description": f"Evaluated repository: {target}",
+                            "include-subjects": [{"subject-uuid": subject_uuid, "type": "component"}],
+                        }
+                    ],
                     "observations": observations,
+                    "assessment-log": {
+                        "entries": [
+                            {
+                                "uuid": str(uuid.uuid4()),
+                                "title": "oss-policy-kit evaluation run",
+                                "start": now,
+                                "props": [{"name": "tool", "value": f"oss-policy-kit-{version}", "ns": _OSCAL_KIT_NS}],
+                            }
+                        ]
+                    },
                 }
             ],
         }
@@ -386,8 +429,16 @@ def _validate_oscal(doc: dict[str, Any]) -> list[str]:
     errs: list[str] = []
     if not isinstance(ar.get("metadata"), dict):
         errs.append("oscal: assessment-results.metadata must be an object")
-    if not isinstance(ar.get("results"), list) or not ar.get("results"):
+    results = ar.get("results")
+    if not isinstance(results, list) or not results:
         errs.append("oscal: assessment-results.results must be a non-empty array")
+        return errs
+    first = results[0]
+    if isinstance(first, dict):
+        if not isinstance(first.get("assessment-subjects"), list) or not first.get("assessment-subjects"):
+            errs.append("oscal: results[0].assessment-subjects must be a non-empty array")
+        if not isinstance(first.get("assessment-log"), dict):
+            errs.append("oscal: results[0].assessment-log must be an object")
     return errs
 
 

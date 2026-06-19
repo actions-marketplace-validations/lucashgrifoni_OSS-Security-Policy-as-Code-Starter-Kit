@@ -33,7 +33,7 @@ The subcommand:
 | `chainloop` | experimental | Chainloop attestation envelope (JSON) wrapping the kit's report + SARIF. |
 | `sarif` | stable | Re-export of the SARIF the `evaluate` subcommand already produces. Provided for parity with the registry pattern. |
 | `spdx` | GA (v7.0.0) | SPDX 2.3 JSON **evidence projection** — one package (the evaluated repo) with one annotation per control. **Not** a dependency/component SBOM of the target (the kit is a clone-only evaluator, not a dependency resolver). See ADR-034. |
-| `oscal` | GA (v7.0.0) | OSCAL 1.1 `assessment-results` JSON — each control result becomes an observation. Unsigned. See ADR-036. |
+| `oscal` | GA (v7.0.0) | OSCAL 1.1 `assessment-results` JSON — each control result becomes an `EXAMINE` observation carrying the kit's verdict + assurance grade (as `props` under the `https://oss-policy-kit` namespace) and a reference to the evaluated repository; the result also carries an `assessment-subjects` entry and an `assessment-log` (run timestamp + tool). Unsigned. See ADR-036. Assurance/subject/log enrichment added in v8.1.0. |
 | `in-toto-bundle` | GA (v7.0.0) | **Unsigned** in-toto v1 statement with a custom policy-evaluation predicate. Signing (cosign/Sigstore) is the v8 ATTESTED track; this statement is its input. See ADR-036. |
 
 Planned for a future release (not yet shipped):

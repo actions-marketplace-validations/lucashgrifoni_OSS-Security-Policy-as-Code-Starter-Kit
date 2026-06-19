@@ -148,6 +148,38 @@ def test_render_oscal_validation_catches_missing_results() -> None:
     assert any("results" in e for e in errs)
 
 
+def test_render_oscal_carries_assurance_subject_and_log() -> None:
+    """T2.2: each observation carries the kit assurance grade + state; the result carries a
+    repo subject and an assessment-log."""
+    report = {
+        "target": "examples/hardened-repo",
+        "profile": {"id": "github-level-1"},
+        "controls": [
+            {"id": "GOV-SEC-001", "state": "PASS", "status": "pass", "assurance": "deterministic", "reason": "ok"},
+            {"id": "GH-PROV-023", "state": "UNKNOWN", "status": "manual-review-required", "assurance": "signal"},
+        ],
+    }
+    out = _render_oscal(report)
+    result = out["assessment-results"]["results"][0]
+    obs = result["observations"]
+    assert len(obs) == 2
+    assert obs[0]["methods"] == ["EXAMINE"]  # examines artifacts, does not run tests
+    props = {p["name"]: p["value"] for p in obs[0]["props"]}
+    assert props["assurance"] == "deterministic" and props["kit-state"] == "PASS"
+    assert obs[0]["subjects"][0]["subject-uuid"]  # points at a defined subject
+    # the result references the evaluated repo and logs the run
+    subj = result["assessment-subjects"][0]
+    assert "examples/hardened-repo" in subj["description"]
+    assert result["assessment-log"]["entries"][0]["title"]
+    assert _validate(out, "oscal") == []
+
+
+def test_render_oscal_validation_catches_missing_log() -> None:
+    errs = _validate({"assessment-results": {"metadata": {}, "results": [{"observations": []}]}}, "oscal")
+    assert any("assessment-subjects" in e for e in errs)
+    assert any("assessment-log" in e for e in errs)
+
+
 def test_render_intoto_bundle_shape_and_validation() -> None:
     out = _render_intoto_bundle(_sample_report())
     assert out["_type"] == "https://in-toto.io/Statement/v1"
