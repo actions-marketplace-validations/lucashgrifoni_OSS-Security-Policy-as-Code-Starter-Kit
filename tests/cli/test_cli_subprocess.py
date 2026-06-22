@@ -103,6 +103,17 @@ def test_subprocess_evaluate_help_distinct_from_root() -> None:
     assert "FAIL-ON MODES" in eval_help.stdout or "fail-on" in eval_help.stdout.lower()
 
 
+def test_subprocess_evaluate_help_drops_removed_report_contracts() -> None:
+    # 9.0.1 (M3): --help for --report-json-contract must not advertise the contracts
+    # removed in v9.0.0 (ADR-043). A user following the old help hit a hard exit-2.
+    proc = _run_module(["evaluate", "--help"])
+    assert proc.returncode == 0, proc.stderr + proc.stdout
+    out = _clean_output(proc)
+    assert "ADR-043" in out
+    assert "0.3, or 0.2" not in out
+    assert "removed in v5" not in out
+
+
 def test_subprocess_profiles_command() -> None:
     proc = _run_module(["profiles"])
     assert proc.returncode == 0, proc.stderr + proc.stdout

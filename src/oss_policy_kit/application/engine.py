@@ -121,13 +121,20 @@ def report_json_schema_url(contract: str) -> str:
     """Return the full ``schema_version`` URL for an evaluation JSON report contract.
 
     v9.0.0 (ADR-043, BREAKING): ``reports/2.0`` is the **only** contract. The legacy
-    selectable contracts (``0.1``/``0.2``/``0.3``/``1.0``) were removed; an empty
-    contract maps to ``2.0`` and any other value is a hard error (no silent fallback).
+    selectable contracts (``0.1``/``0.2``/``0.3``/``1.0``) were removed; only ``2.0``
+    is accepted and any other value — including an empty or whitespace-only value —
+    is a hard error (no silent fallback to the default).
     """
 
     c = contract.strip().lower().removeprefix("v")
-    if c in {"", "2.0"}:
+    if c == "2.0":
         return REPORT_JSON_SCHEMA_URL_V2_0
+    if c == "":
+        raise LoadError(
+            "Report JSON contract is empty; 'reports/2.0' is the only contract in v9.0.0 (ADR-043). "
+            "Drop --report-json-contract (2.0 is the default) or pass '2.0'. "
+            "See docs/v9.0.0-migration-guide.md."
+        )
     raise LoadError(
         f"Report JSON contract {contract!r} was removed in v9.0.0 (ADR-043); 'reports/2.0' is the only "
         "contract. Drop --report-json-contract (2.0 is the default) or pass '2.0'. "

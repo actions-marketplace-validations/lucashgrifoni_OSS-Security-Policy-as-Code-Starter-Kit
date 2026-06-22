@@ -52,6 +52,11 @@ DEFAULT_PROFILE_PER_PLATFORM: dict[str, str] = {
 #: deliberately not auto-selectable here: they require a deliberate choice.
 SUPPORTED_PLATFORMS: frozenset[str] = frozenset({"github", "gitlab", "azure", "aws"})
 
+#: Platforms for which per-platform evidence templates exist and can be scaffolded
+#: by ``--with-evidence``. gitlab/unknown have no evidence templates in this version,
+#: so ``--with-evidence`` is downgraded (with a note) for them rather than silently dropped.
+EVIDENCE_PLATFORMS: frozenset[str] = frozenset({"github", "azure", "aws"})
+
 #: Allowed values for ``--fail-on``. Mirrors :mod:`oss_policy_kit.cli.common`.
 SUPPORTED_FAIL_ON: frozenset[str] = frozenset({"none", "fail", "degraded"})
 
@@ -324,6 +329,18 @@ def build_init_plan(
             f"{detected_platform}.",
         )
 
+    # Evidence templates only exist for github/azure/aws. Mirror the workflow handling:
+    # downgrade --with-evidence for other platforms and surface a note, instead of
+    # silently dropping it (which left a dangling "fill the evidence files" next-step
+    # and was invisible in --format json). ADR-043/9.0.1 first-run honesty fix.
+    will_scaffold_evidence = with_evidence and detected_platform in EVIDENCE_PLATFORMS
+    if with_evidence and detected_platform not in EVIDENCE_PLATFORMS:
+        extra_notes.append(
+            "Evidence templates are only scaffolded for github / azure / aws targets; "
+            f"skipped --with-evidence because the detected platform is {detected_platform}. "
+            "Pass --platform github|azure|aws to scaffold evidence.",
+        )
+
     signal_ids = [s.get("id", "") for s in recommendation.signals_detected if s.get("id")]
 
     return InitPlan(
@@ -337,7 +354,7 @@ def build_init_plan(
         output_dir=output_dir,
         write_config=True,
         write_waivers=with_waivers,
-        scaffold_evidence=with_evidence,
+        scaffold_evidence=will_scaffold_evidence,
         write_workflow=will_write_workflow,
         workflow_filename=GITHUB_WORKFLOW_FILENAME,
         force=force,

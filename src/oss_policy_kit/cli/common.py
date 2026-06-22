@@ -214,6 +214,25 @@ def print_operational_warning_summary(warnings: list[str]) -> None:
             c.print(f"[dim]  {cont}[/dim]")
 
 
+def _looks_like_path(token: str) -> bool:
+    """Heuristic: does *token* look like a filesystem path (vs a mistyped subcommand)?
+
+    Used by :func:`prepare_cli_args` to decide whether a bare leading argument should be
+    routed to ``evaluate`` as a target. A real target path contains a separator / home /
+    drive prefix, or already exists on disk; a mistyped command name (e.g. ``recommend``
+    for ``recommend-profile``) does none of these and is better surfaced as
+    ``No such command`` than as a confusing "Not a directory" path error.
+    """
+
+    if any(sep in token for sep in ("/", "\\")):
+        return True
+    if token in {".", ".."} or token.startswith(("~", ".")):
+        return True
+    if len(token) >= 2 and token[1] == ":":  # Windows drive prefix, e.g. C:\repo
+        return True
+    return Path(token).exists()
+
+
 def prepare_cli_args(args: list[str]) -> list[str]:
     """Normalize argv so a leading repository path dispatches to the `evaluate` subcommand.
 
@@ -254,6 +273,12 @@ def prepare_cli_args(args: list[str]) -> list[str]:
     if first in ("--help", "-h", "--version", "-V"):
         return args
     if first.startswith("-"):
+        return args
+    if not _looks_like_path(first):
+        # A bare token that is neither a known subcommand nor a path-like value: treat it
+        # as a mistyped command and let Click raise a clear "No such command" instead of
+        # routing it to `evaluate` as a target (which yielded a confusing
+        # "Not a directory or does not exist" path error). 9.0.1 UX fix.
         return args
     return ["evaluate", *args]
 

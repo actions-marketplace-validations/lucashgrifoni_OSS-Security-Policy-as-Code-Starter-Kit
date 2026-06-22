@@ -32,11 +32,13 @@ def test_resolver_accepts_2_0() -> None:
 
 
 def test_resolver_default_is_2_0() -> None:
-    """reports/2.0 is the only contract (ADR-043, v9.0.0): an empty contract resolves to 2.0,
-    and a removed legacy contract (e.g. 1.0) is a hard error (no silent fallback)."""
-    assert report_json_schema_url("") == REPORT_JSON_SCHEMA_URL_V2_0
+    """reports/2.0 is the only contract (ADR-043, v9.0.0): a removed legacy contract
+    (e.g. 1.0) is a hard error, and a blank value fails closed instead of silently
+    mapping to the default (9.0.1: the default is the explicit '2.0' Option default)."""
     with pytest.raises(LoadError, match=r"removed in v9.0.0"):
         report_json_schema_url("1.0")
+    with pytest.raises(LoadError):
+        report_json_schema_url("")
 
 
 def test_resolver_unknown_mentions_2_0_in_error() -> None:

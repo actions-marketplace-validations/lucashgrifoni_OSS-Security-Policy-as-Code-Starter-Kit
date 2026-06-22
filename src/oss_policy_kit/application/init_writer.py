@@ -31,6 +31,7 @@ from oss_policy_kit.application.evidence_scaffold import (
 from oss_policy_kit.application.init_planner import (
     CONFIG_FILENAME,
     CONFIG_SCHEMA_VERSION,
+    EVIDENCE_PLATFORMS,
     GITHUB_WORKFLOW_FILENAME,
     WAIVERS_FILENAME,
     InitPlan,
@@ -242,7 +243,7 @@ def execute_init_plan(plan: InitPlan) -> InitOutcome:
             outcome=outcome,
         )
 
-    if plan.scaffold_evidence and plan.platform in {"github", "azure", "aws"}:
+    if plan.scaffold_evidence and plan.platform in EVIDENCE_PLATFORMS:
         scaffold = scaffold_evidence_files(plan.target, plan.platform, force=plan.force)
         outcome.evidence_outcome = scaffold
         outcome.created.extend(scaffold.created)

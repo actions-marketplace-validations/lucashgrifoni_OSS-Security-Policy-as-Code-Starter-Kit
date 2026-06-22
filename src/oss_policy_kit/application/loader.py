@@ -239,7 +239,19 @@ def resolve_profile_file(kit_root: Path, profile_id: str) -> Path:
     dirname = PROFILE_DIRECTORY_ALIASES.get(profile_id, profile_id)
     candidate = kit_root / "profiles" / dirname / "profile.yaml"
     if not candidate.is_file():
-        raise LoadError(f"Unknown profile '{profile_id}' (missing {candidate})")
+        # Sanitize the location: report a repo-relative path, never the absolute
+        # install/site-packages path (which would leak the OS username). A value that
+        # looks like an external YAML path gets a clearer "file not found" message
+        # instead of the confusing "<id>.yaml/profile.yaml" double-suffix.
+        if profile_id.strip().lower().endswith((".yaml", ".yml")):
+            raise LoadError(
+                f"Profile file not found: '{profile_id}'. Pass the path to an existing YAML profile, "
+                "or a bundled profile id (run 'oss-policy-kit profiles' to list bundled ids)."
+            )
+        raise LoadError(
+            f"Unknown profile '{profile_id}' (no bundled profile at data/profiles/{dirname}/profile.yaml). "
+            "Run 'oss-policy-kit profiles' to list available ids."
+        )
     return candidate
 
 

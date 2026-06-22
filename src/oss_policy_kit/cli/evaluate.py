@@ -137,7 +137,10 @@ def cli_root(
     report_json_contract: str = typer.Option(
         "2.0",
         "--report-json-contract",
-        help=("evaluation-report.json contract: 2.0 (default), 1.0, 0.3, or 0.2. '0.1' was removed in v5."),
+        help=(
+            "evaluation-report.json contract: only '2.0' is valid since v9.0.0 (ADR-043). "
+            "Any other value (incl. the removed 0.1/0.2/0.3/1.0) exits 2."
+        ),
         case_sensitive=False,
         rich_help_panel=OPT_PANEL_OUTPUT,
     ),
@@ -341,7 +344,10 @@ def evaluate_cmd(
     report_json_contract: str = typer.Option(
         "2.0",
         "--report-json-contract",
-        help=("evaluation-report.json contract: 2.0 (default), 1.0, 0.3, or 0.2. '0.1' was removed in v5."),
+        help=(
+            "evaluation-report.json contract: only '2.0' is valid since v9.0.0 (ADR-043). "
+            "Any other value (incl. the removed 0.1/0.2/0.3/1.0) exits 2."
+        ),
         case_sensitive=False,
         rich_help_panel=OPT_PANEL_OUTPUT,
     ),

@@ -119,6 +119,22 @@ def test_prepare_cli_args() -> None:
     assert common.prepare_cli_args(["--help"]) == ["--help"]
     assert common.prepare_cli_args(["--profile", "p"]) == ["--profile", "p"]
     assert common.prepare_cli_args(["./repo", "-p", "x"]) == ["evaluate", "./repo", "-p", "x"]
+    # 9.0.1: a bare token that is neither a known command nor path-like is left untouched
+    # so Click can raise "No such command" instead of routing it to evaluate as a target.
+    assert common.prepare_cli_args(["recommend"]) == ["recommend"]
+    assert common.prepare_cli_args(["scan-tf", "-p", "x"]) == ["scan-tf", "-p", "x"]
+    # ...but real subcommands and path-like values still route exactly as before.
+    assert common.prepare_cli_args(["recommend-profile", "-t", "."]) == ["recommend-profile", "-t", "."]
+    assert common.prepare_cli_args(["../repo"]) == ["evaluate", "../repo"]
+
+
+def test_prepare_cli_args_bare_path_routing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (tmp_path / "myrepo").mkdir()
+    monkeypatch.chdir(tmp_path)
+    # A bare token that exists on disk is a target -> route to evaluate.
+    assert common.prepare_cli_args(["myrepo", "-p", "x"]) == ["evaluate", "myrepo", "-p", "x"]
+    # A bare token that does NOT exist (no separator) is treated as a mistyped command.
+    assert common.prepare_cli_args(["myrepoo"]) == ["myrepoo"]
 
 
 def test_warn_missing_scan_evidence(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
