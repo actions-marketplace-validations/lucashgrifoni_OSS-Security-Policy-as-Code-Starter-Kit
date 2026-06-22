@@ -1,9 +1,16 @@
 id: cra-eu-ready-2-1
-title: EU CRA readiness v2 — Article 11 + 13 + 14 signals (advisory, NOT a conformity assessment)
+title: EU CRA conformance-evidence — Article 11 + 13 + 14 obligations (advisory; evidence mapped to CRA, NOT certification)
 description: >
-  **Advisory profile. Do NOT use as a release gate or as a conformity
-  assessment substitute.** Successor to ``cra-eu-ready-1`` that bundles the
-  EU Cyber Resilience Act readiness signals added in Cycle 2:
+  **Advisory profile. Evidence mapped to EU CRA obligations — NOT a conformity
+  assessment, NOT certification, NOT a legal verdict (ADR-029).** Tightened in
+  v9.0.0 from "readiness" to **conformance-evidence**: it now also requires the
+  obligation-evidence controls (published VDP / `security.txt`, SBOM, 10-year
+  document retention, incident-reporting readiness, artifact-integrity
+  verification), so a repository that passed the old readiness bundle may need
+  more evidence to pass this one. Honest assurance labels: signals that cannot be
+  proven from a clone stay `signal`/`evidence-backed` and are never inflated to a
+  pass. (Renames to ``cra-eu-conformance-evidence-1`` with a deprecated alias in a
+  follow-up v9.0.0 slice.) Bundles the EU Cyber Resilience Act controls:
   - ``CRA-ART13-SBD-001`` — security-by-design intent declared (Article 13).
   - ``CRA-ART13-DEFAULTS-002`` — secure-by-default configuration documented.
   - ``CRA-ART13-SUPPORT-003`` — security-update support period declared (Annex I).
@@ -21,8 +28,8 @@ description: >
   **Recommended `--fail-on`:** ``degraded`` only.
 audience: >
   Manufacturers preparing for EU CRA obligations who want a clone-side
-  readiness snapshot across Articles 11, 13, and 14. ``cra-eu-ready-1``
-  remains for compatibility; this v2 profile is the canonical CRA bundle.
+  conformance-evidence snapshot across Articles 11, 13, and 14. ``cra-eu-ready-1``
+  remains for compatibility; this profile is the canonical, stricter CRA bundle.
 controls:
   # CRA Article 13 — security by design / default / support period
   - CRA-ART13-SBD-001
@@ -34,6 +41,13 @@ controls:
   - GOV-DISC-065
   # CRA product classification
   - CRA-PRODUCT-CLASS-001
+  # CRA conformance-evidence obligations (ADR-029, v9.0.0): published VDP / security.txt,
+  # SBOM, 10-year doc retention, incident-reporting readiness, artifact integrity.
+  - CISA-SBD-VDP-001
+  - BUILD-SBOM-QUAL-003
+  - RELEASE-ARCHIVE-063
+  - AUDIT-STREAM-060
+  - PROV-VERIFY-061
   # Release + dependency hygiene
   - REL-CHANGE-012
   - SAST-OSV-068

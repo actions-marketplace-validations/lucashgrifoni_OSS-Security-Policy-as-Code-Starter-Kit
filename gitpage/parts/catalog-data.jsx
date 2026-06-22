@@ -1506,6 +1506,7 @@ window.CATALOG_DATA = {
         "azure-release-hardening-3",
         "cis-supply-chain-1",
         "cra-eu-ready-1",
+        "cra-eu-ready-2-1",
         "cra-eu-reporting-1",
         "cra-eu-strict-1",
         "github-level-3",
@@ -1539,6 +1540,7 @@ window.CATALOG_DATA = {
         "azure-level-3",
         "azure-release-hardening-3",
         "cra-eu-ready-1",
+        "cra-eu-ready-2-1",
         "cra-eu-reporting-1",
         "cra-eu-strict-1",
         "github-level-3",
@@ -1564,6 +1566,7 @@ window.CATALOG_DATA = {
         "azure-release-hardening-3",
         "cis-supply-chain-1",
         "cra-eu-ready-1",
+        "cra-eu-ready-2-1",
         "cra-eu-strict-1",
         "github-level-3",
         "github-release-hardening-3",
@@ -1605,6 +1608,7 @@ window.CATALOG_DATA = {
         "azure-release-hardening-3",
         "cis-supply-chain-1",
         "cra-eu-ready-1",
+        "cra-eu-ready-2-1",
         "cra-eu-strict-1",
         "github-release-hardening-3",
         "gitlab-release-hardening-3"
@@ -3106,6 +3110,7 @@ window.CATALOG_DATA = {
       "lifecycle": "experimental",
       "weight": 2,
       "profiles": [
+        "cra-eu-ready-2-1",
         "oss-publish-readiness-1"
       ]
     },
