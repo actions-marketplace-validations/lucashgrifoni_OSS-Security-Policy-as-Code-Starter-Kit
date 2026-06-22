@@ -11,7 +11,7 @@ For the canonical regulatory text, see the [EU Commission's CRA page](https://di
 | Date | Obligation | Profile that maps |
 |---|---|---|
 | **2026-09-11** | Manufacturers of products with digital elements placed on the EU market must report **actively exploited vulnerabilities** to ENISA and designated national CSIRTs within **24 hours** of becoming aware. | `cra-eu-reporting-1` |
-| **2027-12-11** | Full CRA obligations apply: SBOM in machine-readable format, vulnerability handling documentation, security-by-default, conformity assessment, CE-marking. | `cra-eu-ready-1`, `cra-eu-strict-1` |
+| **2027-12-11** | Full CRA obligations apply: SBOM in machine-readable format, vulnerability handling documentation, security-by-default, conformity assessment, CE-marking. | `cra-eu-conformance-evidence-1`, `cra-eu-ready-1`, `cra-eu-strict-1` |
 
 Both deadlines apply to manufacturers placing **commercial products** on the EU market. Purely non-commercial, non-monetized OSS development is exempt; OSS incorporated into a commercial product is in scope through the manufacturer.
 
@@ -19,7 +19,9 @@ Non-compliance penalties: up to **€15M or 2.5% of global turnover**, whichever
 
 ---
 
-## What the three CRA-aligned profiles cover
+## What the CRA-aligned profiles cover
+
+> **Sequencing (ADR-029):** `cra-eu-reporting-1` targets the **2026-09-11** 24h-reporting deadline; `cra-eu-strict-1` and the canonical `cra-eu-conformance-evidence-1` target the broader **2027-12-11** full-obligations evidence. All are advisory — evidence mapped to CRA obligations, never a conformity assessment or certification.
 
 ### `cra-eu-reporting-1` — 24h reporting readiness (2026-09-11)
 
