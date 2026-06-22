@@ -79,7 +79,7 @@ Common starting points:
 | `oss-publish-readiness-1` | Release/publish readiness for OSS packages |
 | `appsec-sast-sca-1` | Compose SAST/SCA/secrets scanner evidence |
 | `osps-baseline-2026-1` | OpenSSF OSPS Baseline 2026-oriented review |
-| `cra-eu-ready-2-1` | EU CRA Article 13/14 readiness signals |
+| `cra-eu-conformance-evidence-1` | EU CRA Article 13/14 conformance-evidence signals |
 | `ai-agent-baseline-1` | Source-side checks for AI agent repositories |
 | `appsec-mcp-server-1` | MCP server security readiness |
 
