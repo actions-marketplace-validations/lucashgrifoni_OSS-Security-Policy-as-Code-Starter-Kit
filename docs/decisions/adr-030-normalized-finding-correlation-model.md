@@ -1,6 +1,6 @@
 # ADR-030 - Normalized finding model with cross-scanner correlation (v10.0.0)
 
-- **Status**: proposed (targets v10.0.0, BREAKING) — pending maintainer ratification (roadmap plan §11.5, §11.6)
+- **Status**: accepted (targets v10.0.0, BREAKING) — ratified 2026-06-19; sequenced **after** v9.0.0 (ADR-029 + ADR-043). Implementation begins once v9.0.0 ships, so v10.0.0 carries exactly one major's worth of breaking surface (the finding-shape change).
 - **Date**: 2026-05-25
 - **Context window**: v10.x roadmap horizon — "AI/agentic depth & correlation maturity"
 - **Related**: ADR-021 (EPSS/KEV prioritization), ADR-001 (SCA scanner choice), ADR-012 (export-evidence), `ROADMAP.md`
