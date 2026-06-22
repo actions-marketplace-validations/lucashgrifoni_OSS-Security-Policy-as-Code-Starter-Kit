@@ -39,9 +39,9 @@ Focused exclusively on the September 2026 deadline. Bundles 11 controls covering
 
 Bundles 12 controls; a discovery surface for CRA preparation before September 2026. Less reporting-specific than `cra-eu-reporting-1`, more aligned with the documentation expectations of the full 2027 deadline.
 
-### `cra-eu-ready-2-1` — Article 11/13/14 signals (advisory)
+### `cra-eu-conformance-evidence-1` — Article 11/13/14 obligations (advisory)
 
-The canonical CRA bundle. Among its Article 13 signals, `CRA-ART13-SUPPORT-003` looks for a **declared security-update support period** — a clone-visible `Supported Versions` table or a support-window statement in `SECURITY.md`/`SUPPORT.md` (CRA Annex I, Part I obligation to declare a support period). A separately-published RFC 9116 `.well-known/security.txt` (`CISA-SBD-VDP-001`) doubles as a CRA Art.13/14 disclosure-channel readiness signal — it is **mapped, not duplicated**. All are `signal`-grade readiness indicators: a declared period is not proof it is honoured, and **none asserts CRA conformity**.
+The canonical, stricter CRA bundle. **Renamed in v9.0.0 from `cra-eu-ready-2-1`** when it tightened from "readiness" to **conformance-evidence** (ADR-029); the old `cra-eu-ready-2-1` id still resolves as a **deprecated alias** (with a warning, removed in v10.0.0). It now also requires the obligation-evidence controls: published VDP / `security.txt` (`CISA-SBD-VDP-001`), SBOM (`BUILD-SBOM-QUAL-003`), 10-year document retention (`RELEASE-ARCHIVE-063`), incident-reporting readiness (`AUDIT-STREAM-060`), and artifact-integrity verification (`PROV-VERIFY-061`) — so a repository that passed the old readiness bundle may need more evidence to pass this one. Among its Article 13 signals, `CRA-ART13-SUPPORT-003` looks for a **declared security-update support period** (a clone-visible `Supported Versions` table or a support-window statement in `SECURITY.md`/`SUPPORT.md`; CRA Annex I). Honest assurance: signals that cannot be proven from a clone stay `signal`/`evidence-backed` and are never inflated to a pass, and **the profile maps evidence to CRA obligations — it never asserts CRA conformity or certification**.
 
 ### `cra-eu-strict-1` — full obligations alignment (2027-12-11)
 

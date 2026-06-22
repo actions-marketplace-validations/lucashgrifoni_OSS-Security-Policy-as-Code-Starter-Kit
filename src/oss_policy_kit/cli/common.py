@@ -23,6 +23,7 @@ from oss_policy_kit.application.engine import evaluate_repository
 from oss_policy_kit.application.input_limits import MAX_EVIDENCE_BYTES, oversize_reason
 from oss_policy_kit.application.insights_evidence import load_insights_evidence
 from oss_policy_kit.application.loader import (
+    PROFILE_DIRECTORY_ALIASES,
     load_catalog,
     load_profile_by_id,
     merge_kit_root,
@@ -267,6 +268,21 @@ _SCAN_EVIDENCE_MAP: tuple[tuple[str, str, str], ...] = (
 )
 
 
+def _warn_deprecated_profile_alias(profile_id: str) -> None:
+    """Emit a stderr deprecation notice when the requested profile is a deprecated alias (ADR-029).
+
+    The alias still resolves to the canonical profile (existing CI keeps working); the notice goes to
+    stderr so it never corrupts JSON stdout. Aliases are removed in the next major (v10.0.0).
+    """
+    canonical = PROFILE_DIRECTORY_ALIASES.get(profile_id)
+    if canonical is None:
+        return
+    stderr_console().print(
+        f"[yellow]warning:[/yellow] profile '{profile_id}' is deprecated and was renamed to "
+        f"'{canonical}'. The alias still resolves but is removed in v10.0.0 — update your config/CI."
+    )
+
+
 def _warn_missing_scan_evidence(repo_root: Path, control_ids: set[str], machine_stdout: bool) -> None:
     """Print a prominent banner when the profile bundles scan-* controls but the
     corresponding evidence file is missing. Prevents the UX gap where evaluate
@@ -485,6 +501,7 @@ def _run_evaluate(req: EvaluateRequest) -> None:
         _emit_plugin_load_warnings()
     repo_root = _resolve_eval_target(req)
     resolved_profile = _resolve_eval_profile(req, repo_root)
+    _warn_deprecated_profile_alias(resolved_profile)
     root = merge_kit_root(req.kit_root)
     catalog = load_catalog(root / "controls" / "catalog.yaml")
     prof = load_profile_by_id(root, resolved_profile)

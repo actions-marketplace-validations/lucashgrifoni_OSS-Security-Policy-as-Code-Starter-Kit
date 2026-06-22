@@ -5,10 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-from hypothesis import HealthCheck, given, settings
+from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 
-from oss_policy_kit.application.loader import load_profile
+from oss_policy_kit.application.loader import REMOVED_CONTROL_IDS, load_profile
 
 control_id_strategy = st.from_regex(r"[A-Z]{2,8}-[A-Z0-9]{2,12}-\d{3}", fullmatch=True)
 
@@ -44,6 +44,9 @@ def test_external_profile_yaml_roundtrip_preserves_control_ids(controls: list[st
 )
 @settings(max_examples=30, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
 def test_profile_loader_trims_non_empty_control_ids(controls: list[str], tmp_path: Path) -> None:
+    # Control ids removed in a prior major are rejected by load_profile by design (ProfileLoadError);
+    # that guard is not what this trimming property test exercises, so skip such examples.
+    assume(not any(c.strip() in REMOVED_CONTROL_IDS for c in controls))
     expected = tuple(str(c).strip() for c in controls if str(c).strip())
     path = tmp_path / "profile.yaml"
     path.write_text(

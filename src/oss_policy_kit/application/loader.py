@@ -206,10 +206,14 @@ def load_profile(path: Path, *, validate_external_schema: bool = False) -> Profi
     )
 
 
-# Bundled profile id -> directory name under ``profiles/`` (same id except legacy aliases).
-# In v5.0.0 the legacy alias `github-release-hardening` was removed; the mapping is empty
-# and kept only as a public symbol for downstream tooling that imports it.
-PROFILE_DIRECTORY_ALIASES: dict[str, str] = {}
+# Bundled profile id -> canonical directory name under ``profiles/`` for DEPRECATED aliases.
+# An entry means the key is an old, deprecated profile id that resolves (with a warning) to the
+# canonical profile dir. ADR-029 (v9.0.0): `cra-eu-ready-2-1` was renamed to
+# `cra-eu-conformance-evidence-1` when it tightened to a conformance-evidence posture; the old id
+# stays as a deprecated alias through the v9.x line and is removed in v10.0.0.
+PROFILE_DIRECTORY_ALIASES: dict[str, str] = {
+    "cra-eu-ready-2-1": "cra-eu-conformance-evidence-1",
+}
 BUNDLED_PROFILE_LEGACY_IDS: frozenset[str] = frozenset(PROFILE_DIRECTORY_ALIASES.keys())
 
 # Profile ids that were removed in v5.0.0. Resolving these raises a hard error with

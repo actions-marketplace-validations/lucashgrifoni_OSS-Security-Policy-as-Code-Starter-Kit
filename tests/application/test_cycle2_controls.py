@@ -87,7 +87,7 @@ def test_new_profiles_load_with_expected_controls() -> None:
     root = bundled_kit_root()
     cases = {
         "osps-baseline-2026-1": "OSPS-SCORECARD-V6-001",
-        "cra-eu-ready-2-1": "CRA-ART14-CSAF-001",
+        "cra-eu-conformance-evidence-1": "CRA-ART14-CSAF-001",
         "slsa-source-l2-1": "SLSA-SRC-007",
         "appsec-mcp-server-1": "MCP-TOOL-HASH-001",
         "appsec-agentic-asi-1": "AGENT-ASI-GOAL-001",
@@ -95,6 +95,19 @@ def test_new_profiles_load_with_expected_controls() -> None:
     for pid, expected in cases.items():
         spec = load_profile_by_id(root, pid)
         assert expected in spec.control_ids, f"{pid} should bundle {expected}"
+
+
+def test_cra_ready_2_1_is_a_deprecated_alias_for_conformance_evidence() -> None:
+    """ADR-029 v9.0.0: the old `cra-eu-ready-2-1` id still resolves (deprecated alias) to the
+    renamed, tightened `cra-eu-conformance-evidence-1` profile."""
+    root = bundled_kit_root()
+    aliased = load_profile_by_id(root, "cra-eu-ready-2-1")
+    canonical = load_profile_by_id(root, "cra-eu-conformance-evidence-1")
+    assert aliased.id == canonical.id == "cra-eu-conformance-evidence-1"
+    assert aliased.control_ids == canonical.control_ids
+    # the tightened obligation-evidence controls are present
+    for cid in ("CISA-SBD-VDP-001", "BUILD-SBOM-QUAL-003", "RELEASE-ARCHIVE-063"):
+        assert cid in canonical.control_ids
 
 
 def test_extended_profiles_include_new_controls() -> None:

@@ -386,7 +386,9 @@ def _iter_bundled_profiles() -> list[_ProfileDisplayRow]:
         aud_clean = terminal_ui.sanitize_cli_display_text(" ".join(profile.audience.split()))
         rows.append(
             _ProfileDisplayRow(
-                profile_id=profile.id,
+                # Display the deprecated alias id (not the canonical profile.id) so the row renders
+                # "<legacy-id> (legacy -> <canonical-id>)"; the canonical lookup keys off this id.
+                profile_id=legacy_id,
                 title=title_clean,
                 platform=_profile_platform(profile.id),
                 level=_profile_level(profile.id),
