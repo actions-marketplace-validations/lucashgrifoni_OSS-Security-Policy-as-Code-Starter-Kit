@@ -47,7 +47,7 @@ def test_new_controls_have_expected_assurance() -> None:
     assert catalog["PLAT-BRPROT-015"].assurance == "evidence-backed"
 
 
-def test_report_json_v03_includes_assurance_per_result() -> None:
+def test_report_json_includes_assurance_per_control() -> None:
     root = bundled_kit_root()
     catalog = load_catalog(root / "controls" / "catalog.yaml")
     profile = load_profile_by_id(root, "github-level-1")
@@ -59,8 +59,8 @@ def test_report_json_v03_includes_assurance_per_result() -> None:
         scorecard=None,
     )
     payload = report_to_dict(report)
-    assert "reports/0.3" in payload["schema_version"]
-    for row in payload["results"]:
+    assert "reports/2.0" in payload["schema_version"]
+    for row in payload["controls"]:
         assert row["assurance"] in _ALLOWED
-        assert row["control_id"] in catalog
-        assert row["assurance"] == catalog[row["control_id"]].assurance
+        assert row["id"] in catalog
+        assert row["assurance"] == catalog[row["id"]].assurance

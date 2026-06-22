@@ -83,10 +83,6 @@ def _hard_gate_evidence_warning(profile_id: str, repo_root: Path) -> str | None:
     )
 
 
-REPORT_JSON_SCHEMA_URL_V0_1 = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/0.1"
-REPORT_JSON_SCHEMA_URL_V0_2 = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/0.2"
-REPORT_JSON_SCHEMA_URL_V0_3 = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/0.3"
-REPORT_JSON_SCHEMA_URL_V1_0 = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/1.0"
 REPORT_JSON_SCHEMA_URL_V2_0 = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/2.0"
 
 
@@ -124,27 +120,19 @@ def map_status_to_reports_v2(status: str) -> tuple[str, str | None]:
 def report_json_schema_url(contract: str) -> str:
     """Return the full ``schema_version`` URL for an evaluation JSON report contract.
 
-    v5.0.0 default: ``1.0``. Selectable: ``1.0``, ``0.3``, ``0.2``. Removed: ``0.1``.
-    v6.0.0 (PR-16, V6-05): ``2.0`` selectable, opt-in.
-    v7.0.0 (ADR-027, BREAKING): ``2.0`` is now the **default** (empty contract maps to
-    ``2.0``); ``1.0`` remains explicitly selectable for one minor cycle, then deprecates.
+    v9.0.0 (ADR-043, BREAKING): ``reports/2.0`` is the **only** contract. The legacy
+    selectable contracts (``0.1``/``0.2``/``0.3``/``1.0``) were removed; an empty
+    contract maps to ``2.0`` and any other value is a hard error (no silent fallback).
     """
 
     c = contract.strip().lower().removeprefix("v")
     if c in {"", "2.0"}:
         return REPORT_JSON_SCHEMA_URL_V2_0
-    if c == "1.0":
-        return REPORT_JSON_SCHEMA_URL_V1_0
-    if c == "0.3":
-        return REPORT_JSON_SCHEMA_URL_V0_3
-    if c == "0.2":
-        return REPORT_JSON_SCHEMA_URL_V0_2
-    if c == "0.1":
-        raise LoadError(
-            "Report JSON contract '0.1' was removed in v5.0.0. Use '1.0' (default), '2.0', '0.3', or '0.2'. "
-            "See docs/v5.0.0-migration-guide.md."
-        )
-    raise LoadError(f"Unknown report JSON contract {contract!r}; expected '1.0', '2.0', '0.3', or '0.2'.")
+    raise LoadError(
+        f"Report JSON contract {contract!r} was removed in v9.0.0 (ADR-043); 'reports/2.0' is the only "
+        "contract. Drop --report-json-contract (2.0 is the default) or pass '2.0'. "
+        "See docs/v9.0.0-migration-guide.md."
+    )
 
 
 def _apply_waiver(
@@ -360,12 +348,9 @@ def evaluate_repository(
     *,
     external_waiver_path: str | None = None,
     verbose_emit: Callable[[str], None] | None = None,
-    # Programmatic default is kept at "0.3" for ExecutionReport callers that
-    # were written against the v4.x report shape. The CLI, ``oss-policy-kit.yaml``
-    # config loader, and ``init`` template all default to "1.0" — pass
-    # ``report_json_contract="1.0"`` explicitly when invoking this engine
-    # function from new code paths.
-    report_json_contract: str = "0.3",
+    # v9.0.0 (ADR-043): ``reports/2.0`` is the only contract; the programmatic default
+    # matches the CLI / config / init default. Any other value is a hard error.
+    report_json_contract: str = "2.0",
     live_collection: LiveCollectionMetadata | None = None,
     insights_evidence: InsightsEvidence | None = None,
     applicability_engine: bool = False,

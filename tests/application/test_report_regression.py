@@ -65,11 +65,11 @@ def test_hardened_github_level_1_report_projection_matches_golden() -> None:
     )
     payload = report_to_dict(report)
     projection = {
-        "profile_id": payload["profile_id"],
-        "profile_title": payload["profile_title"],
+        "profile_id": payload["profile"]["id"],
+        "profile_title": payload["profile"]["title"],
         "summary_by_status": payload["summary_by_status"],
-        "result_status_by_control": {row["control_id"]: row["status"] for row in payload["results"]},
-        "result_lifecycle_by_control": {row["control_id"]: row["lifecycle"] for row in payload["results"]},
+        "result_status_by_control": {row["id"]: row["state"] for row in payload["controls"]},
+        "result_lifecycle_by_control": {row["id"]: row["lifecycle"] for row in payload["controls"]},
     }
     expected = json.loads(GOLDEN_REPORT_PROJECTION.read_text(encoding="utf-8"))
     assert projection == expected

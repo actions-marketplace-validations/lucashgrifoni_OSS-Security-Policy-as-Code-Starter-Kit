@@ -14,19 +14,11 @@ from rich.table import Table
 from oss_policy_kit.application.drift import ControlDelta, DriftReport
 from oss_policy_kit.application.evidence_projection import (
     EVIDENCE_PROVENANCE_VERSION,
-    gate_role_for,
     normalize_confidence,
     project_evidence,
 )
 from oss_policy_kit.domain.models import ControlResult, ControlStatus, ExecutionReport, LiveCollectionMetadata
 
-_REPORTS_V03_DIR = "reports/0.3"
-_REPORTS_V10_DIR = "reports/1.0"
-
-REPORT_JSON_SCHEMA_URL_V0_1 = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/0.1"
-REPORT_JSON_SCHEMA_URL_V0_2 = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/0.2"
-REPORT_JSON_SCHEMA_URL_V0_3 = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/0.3"
-REPORT_JSON_SCHEMA_URL_V1_0 = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/1.0"
 REPORT_JSON_SCHEMA_URL_V2_0 = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/2.0"
 
 REPORTS_V2_STATUS_MAP: dict[str, tuple[str, str | None]] = {
@@ -68,110 +60,11 @@ def _sanitize_target_path_for_payload(absolute: str, *, include_absolute: bool) 
         return Path(absolute).name or absolute
 
 
-def _effective_schema_version(report: ExecutionReport, schema_version_override: str | None) -> str:
-    if schema_version_override is None:
-        return report.schema_version
-    o = schema_version_override.strip()
-    if "reports/0.1" in o or o.rstrip("/").endswith("0.1"):
-        return REPORT_JSON_SCHEMA_URL_V0_1
-    if "reports/0.2" in o or o.rstrip("/").endswith("0.2"):
-        return REPORT_JSON_SCHEMA_URL_V0_2
-    if _REPORTS_V03_DIR in o or o.rstrip("/").endswith("0.3"):
-        return REPORT_JSON_SCHEMA_URL_V0_3
-    if _REPORTS_V10_DIR in o or o.rstrip("/").endswith("1.0"):
-        return REPORT_JSON_SCHEMA_URL_V1_0
-    return report.schema_version
-
-
-def _emit_contract_v2(schema_version_effective: str) -> bool:
-    # v0.2 and v0.3 share the same per-control extension fields (assurance, etc.).
-    return "reports/0.2" in schema_version_effective or _REPORTS_V03_DIR in schema_version_effective
-
-
-def _emit_contract_v3(schema_version_effective: str) -> bool:
-    return _REPORTS_V03_DIR in schema_version_effective
-
-
-def _emit_contract_v1_0(schema_version_effective: str) -> bool:
-    return _REPORTS_V10_DIR in schema_version_effective
-
-
-def _emit_contract_v2_0(schema_version_effective: str) -> bool:
-    return "reports/2.0" in schema_version_effective
-
-
 def _map_status_to_reports_v2(status: str) -> tuple[str, str | None]:
     key = status.strip().lower()
     if key in REPORTS_V2_STATUS_MAP:
         return REPORTS_V2_STATUS_MAP[key]
     return ("UNKNOWN", "unmapped-source-status")
-
-
-def compute_summary_by_gate_role(summary_by_status: dict[str, int]) -> dict[str, int]:
-    """Aggregate status counts under explicit CI-gate-focused roles (reports/0.3 extension)."""
-
-    def _n(key: str) -> int:
-        return int(summary_by_status.get(key, 0))
-
-    out = {
-        "ci_blocking_fail": _n("fail"),
-        "human_review_gate": _n("manual-review-required"),
-        # ATTESTED (ADR-028) rolls up under passed_observation at the gate dimension; the
-        # standalone "attested" count stays visible in summary_by_status.
-        "passed_observation": _n("pass") + _n("attested"),
-        "self_attested_declarative": _n("self-attested"),
-        "not_evaluated_limit": _n("not-evaluated"),
-        "waived": _n("waived"),
-        "not_applicable": _n("not-applicable"),
-        "not_observable": _n("not-observable"),
-    }
-    return {k: v for k, v in out.items() if v}
-
-
-GATE_EXECUTION_MODEL_V1: dict[str, Any] = {
-    "model_version": 1,
-    "report_contract": _REPORTS_V03_DIR,
-    "fail_on_semantics": {
-        "none": {"exit_1_from_results": False},
-        "fail": {
-            "exit_1_when": "ci_blocking_fail > 0",
-            "maps_to_summary_status": "fail",
-        },
-        "degraded": {
-            "exit_1_when": "ci_blocking_fail > 0 OR human_review_gate > 0",
-            "maps_to_summary_statuses": ["fail", "manual-review-required"],
-        },
-    },
-    "trust_boundary_notes": [
-        "`not-evaluated` never triggers fail-on by itself - it signals evaluation limits or missing evidence.",
-        "`self-attested` is declarative and is not the same as verifier-backed pass.",
-        "Waivers may convert `fail` to `waived` before summaries are computed.",
-    ],
-}
-
-
-GATE_EXECUTION_MODEL_V2: dict[str, Any] = {
-    "model_version": 2,
-    "report_contract": _REPORTS_V10_DIR,
-    "fail_on_semantics": {
-        "none": {"exit_1_from_results": False},
-        "fail": {
-            "exit_1_when": "ci_blocking_fail > 0",
-            "maps_to_summary_status": "fail",
-        },
-        "degraded": {
-            "exit_1_when": "ci_blocking_fail > 0 OR human_review_gate > 0",
-            "maps_to_summary_statuses": ["fail", "manual-review-required"],
-        },
-    },
-    "trust_boundary_notes": [
-        "`not-evaluated` never triggers fail-on by itself - it signals evaluation limits or missing evidence.",
-        "`self-attested` is declarative and is not the same as verifier-backed pass.",
-        "Waivers may convert `fail` to `waived` before summaries are computed.",
-        "`assurance: signal` controls cannot project to `trust_level: verified` in the v1 evidence model.",
-        "`evidence.freshness_status: stale` reduces trust to `declared` even when collection method is live.",
-    ],
-}
 
 
 _GITHUB_PROFILE_PREFIX = "github-"
@@ -337,145 +230,6 @@ def compute_priority_insights(report: ExecutionReport) -> dict[str, Any]:
     }
 
 
-def _result_to_dict(r: ControlResult, *, contract_v2: bool) -> dict[str, Any]:
-    d: dict[str, Any] = {
-        "control_id": r.control_id,
-        "title": r.title,
-        "category": r.category,
-        "status": r.status.value,
-        "lifecycle": r.lifecycle,
-        "profile": r.profile,
-        "evidence_sources": r.evidence_sources,
-        "confidence": r.confidence,
-        "reason": r.reason,
-        "remediation": r.remediation,
-        "owner": r.owner,
-        "expires_at": r.expires_at.isoformat() if r.expires_at else None,
-        "extra": r.extra,
-    }
-    if r.waiver:
-        d["waiver"] = {
-            "control_id": r.waiver.control_id,
-            "justification": r.waiver.justification,
-            "owner": r.waiver.owner,
-            "status": r.waiver.status,
-            "expires_at": r.waiver.expires_at.isoformat() if r.waiver.expires_at else None,
-            "applies_to": r.waiver.applies_to,
-        }
-    else:
-        d["waiver"] = None
-    if contract_v2:
-        d["evidence_collection_method"] = r.evidence_collection_method
-        d["assurance"] = r.assurance
-        d["weight"] = r.weight
-        if r.deprecation_note is not None:
-            d["deprecation_note"] = r.deprecation_note
-    return d
-
-
-def _result_to_dict_v1(r: ControlResult) -> dict[str, Any]:
-    """Project a ControlResult into the reports/1.0 control_result_v1 shape."""
-
-    waiver_dict: dict[str, Any] | None = None
-    if r.waiver:
-        waiver_dict = {
-            "control_id": r.waiver.control_id,
-            "justification": r.waiver.justification,
-            "owner": r.waiver.owner,
-            "status": r.waiver.status,
-            "expires_at": r.waiver.expires_at.isoformat() if r.waiver.expires_at else None,
-            "applies_to": r.waiver.applies_to,
-        }
-
-    payload: dict[str, Any] = {
-        "control_id": r.control_id,
-        "title": r.title,
-        "category": r.category,
-        "lifecycle": r.lifecycle,
-        "profile": r.profile,
-        "status": r.status.value,
-        "gate_role": gate_role_for(r.status),
-        "assurance": r.assurance,
-        "confidence": normalize_confidence(r.confidence),
-        "weight": r.weight,
-        "reason": r.reason,
-        "remediation": r.remediation,
-        "evidence": project_evidence(r),
-        "owner": r.owner,
-        "expires_at": r.expires_at.isoformat() if r.expires_at else None,
-        "waiver": waiver_dict,
-        "extra": dict(r.extra) if isinstance(r.extra, dict) else {},
-    }
-    if r.deprecation_note is not None:
-        payload["deprecation_note"] = r.deprecation_note
-    payload["finding_id"] = f"{r.control_id}@{r.profile}"
-    return payload
-
-
-def report_to_dict_v1(
-    report: ExecutionReport,
-    *,
-    include_absolute_path: bool = False,
-) -> dict[str, Any]:
-    """Serialize execution report under the reports/1.0 contract.
-
-    By default the emitted ``target_path`` is sanitized to the basename of the
-    target directory (or ``"."`` if the target is CWD) so that report files do
-    not leak the auditor's home directory. Pass ``include_absolute_path=True``
-    to keep the full absolute path.
-    """
-
-    profile_meta = derive_profile_metadata(report.profile_id)
-    profile_block = {
-        "id": report.profile_id,
-        "title": report.profile_title,
-        "family": profile_meta["family"],
-        "level": profile_meta["level"],
-        "posture": profile_meta["posture"],
-        "is_release_track": profile_meta["is_release_track"],
-        "recommended_gate": profile_meta["recommended_gate"],
-    }
-
-    scorecard_block = {
-        "path": report.scorecard_path,
-        "supplemental": report.scorecard_supplemental,
-    }
-
-    weighted_score_block: dict[str, Any] | None = None
-    if report.weighted_score is not None:
-        weighted_score_block = {
-            "earned": report.weighted_score.earned,
-            "possible": report.weighted_score.possible,
-            "percent": report.weighted_score.percent,
-        }
-
-    results_v1 = [_result_to_dict_v1(r) for r in report.results]
-
-    payload: dict[str, Any] = {
-        "schema_version": REPORT_JSON_SCHEMA_URL_V1_0,
-        "evidence_provenance_version": EVIDENCE_PROVENANCE_VERSION,
-        "generated_at": report.generated_at,
-        "kit_version": report.kit_version,
-        "target_path": _sanitize_target_path_for_payload(report.target_path, include_absolute=include_absolute_path),
-        "profile": profile_block,
-        "summary_by_status": report.summary_by_status,
-        "controls_total": sum(report.summary_by_status.values()),
-        "summary_by_gate_role": compute_summary_by_gate_role(report.summary_by_status),
-        "gate_execution_model": GATE_EXECUTION_MODEL_V2,
-        "results": results_v1,
-        "results_digest": compute_results_digest(report.results),
-        "operational_warnings": report.operational_warnings,
-        "scorecard": scorecard_block,
-        "external_waiver_path": report.external_waiver_path,
-        "action_insights": compute_priority_insights(report),
-        "live_collection": _live_collection_dict(report.live_collection),
-        "weighted_score": weighted_score_block,
-        "migration": None,
-        "extensions": {},
-    }
-    return payload
-
-
 def _result_to_dict_v2_0(r: ControlResult) -> dict[str, Any]:
     state, reason = _map_status_to_reports_v2(r.status.value)
     payload: dict[str, Any] = {
@@ -570,7 +324,7 @@ def report_to_dict_v2_0(
         "live_collection": _live_collection_dict(report.live_collection),
         "weighted_score": weighted_score_block,
         "migration": {
-            "from": _REPORTS_V10_DIR,
+            "from": "reports/1.0",
             "status_mapping": "docs/reports-contract-v2.0.md#mapping-from-reports10-to-reports20",
         },
         "extensions": {},
@@ -583,54 +337,18 @@ def report_to_dict(
     schema_version_override: str | None = None,
     include_absolute_path: bool = False,
 ) -> dict[str, Any]:
-    """Serialize execution report to a JSON-compatible dict.
+    """Serialize execution report to a JSON-compatible ``reports/2.0`` dict.
 
-    When *schema_version_override* is a string containing ``reports/0.1`` (or ends
-    with ``0.1``), emit the legacy ``reports/0.1`` payload shape without v0.2-only keys,
-    even if the in-memory report object targets ``reports/0.2``.
+    v9.0.0 (ADR-043, BREAKING): ``reports/2.0`` is the only report contract — the legacy
+    pre-2.0 contracts (0.1/0.2/0.3/1.0) were removed. ``schema_version_override`` is accepted
+    for signature compatibility but no longer selects a legacy shape (contract validation now
+    happens upstream in :func:`engine.report_json_schema_url`).
 
-    When *schema_version_override* targets ``reports/1.0``, dispatch to the v1
-    projection which uses a structured ``evidence`` object per result.
-
-    ``include_absolute_path`` controls whether ``target_path`` in the payload is
-    sanitized to a basename (default, privacy-by-default) or kept as the full
-    absolute path.
+    ``include_absolute_path`` controls whether ``target_path`` in the payload is sanitized to a
+    basename (default, privacy-by-default) or kept as the full absolute path.
     """
 
-    effective = _effective_schema_version(report, schema_version_override)
-    if _emit_contract_v2_0(effective):
-        return report_to_dict_v2_0(report, include_absolute_path=include_absolute_path)
-    if _emit_contract_v1_0(effective):
-        return report_to_dict_v1(report, include_absolute_path=include_absolute_path)
-    contract_v2 = _emit_contract_v2(effective)
-    payload: dict[str, Any] = {
-        "schema_version": effective,
-        "generated_at": report.generated_at,
-        "kit_version": report.kit_version,
-        "target_path": _sanitize_target_path_for_payload(report.target_path, include_absolute=include_absolute_path),
-        "profile_id": report.profile_id,
-        "profile_title": report.profile_title,
-        "summary_by_status": report.summary_by_status,
-        "results": [_result_to_dict(r, contract_v2=contract_v2) for r in report.results],
-        "operational_warnings": report.operational_warnings,
-        "scorecard_path": report.scorecard_path,
-        "scorecard_supplemental": report.scorecard_supplemental,
-        "external_waiver_path": report.external_waiver_path,
-        "action_insights": compute_priority_insights(report),
-    }
-    if contract_v2:
-        payload["live_collection"] = _live_collection_dict(report.live_collection)
-        if report.weighted_score is not None:
-            ws = report.weighted_score
-            payload["weighted_score"] = {
-                "earned": ws.earned,
-                "possible": ws.possible,
-                "percent": ws.percent,
-            }
-    if _emit_contract_v3(effective):
-        payload["summary_by_gate_role"] = compute_summary_by_gate_role(report.summary_by_status)
-        payload["gate_execution_model"] = GATE_EXECUTION_MODEL_V1
-    return payload
+    return report_to_dict_v2_0(report, include_absolute_path=include_absolute_path)
 
 
 def write_json_report(
@@ -678,20 +396,6 @@ def write_markdown_report(  # noqa: C901
     for k, v in report.summary_by_status.items():
         lines.append(f"| `{k}` | {v} |")
     lines.append("")
-    if _emit_contract_v3(report.schema_version):
-        lines.append("### Gate-oriented summary (reports/0.3)")
-        lines.append("")
-        lines.append(
-            "Explicit gate roles complement `summary_by_status`. "
-            "`ci_blocking_fail` aligns with `--fail-on fail`; "
-            "`human_review_gate` contributes only when `--fail-on degraded`."
-        )
-        lines.append("")
-        lines.append("| Gate role | Count |")
-        lines.append("| --- | ---: |")
-        for k, v in compute_summary_by_gate_role(report.summary_by_status).items():
-            lines.append(f"| `{k}` | {v} |")
-        lines.append("")
     if report.weighted_score is not None:
         ws = report.weighted_score
         lines.append("## Weighted posture score")

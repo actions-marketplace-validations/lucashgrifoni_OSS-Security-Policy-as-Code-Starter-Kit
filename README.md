@@ -98,11 +98,11 @@ Action reference: [docs/github-action.md](docs/github-action.md). Starter workfl
 
 ## Reports and Contracts
 
-By default, `evaluate` writes `reports/2.0` JSON (the default flipped from `reports/1.0` in v7.0.0 — ADR-027). `reports/1.0` stays selectable via `--report-json-contract=1.0` for one minor cycle, then deprecates. Contracts and migration:
+`evaluate` writes `reports/2.0` JSON — the **only** report contract since v9.0.0 (ADR-043). The legacy pre-2.0 contracts (`0.1`/`0.2`/`0.3`/`1.0`) were removed; `--report-json-contract` accepts only `2.0` (any other value is a clean exit-2 error, never a silent fallback). Contracts and migration:
 
-- [docs/reports-contract-v2.0.md](docs/reports-contract-v2.0.md) — current default
-- [docs/reports-contract-v1.0.md](docs/reports-contract-v1.0.md) — previous default (still selectable)
-- [docs/v7.0.0-migration-guide.md](docs/v7.0.0-migration-guide.md) — upgrading across the flip
+- [docs/reports-contract-v2.0.md](docs/reports-contract-v2.0.md) — the report contract
+- [docs/v9.0.0-migration-guide.md](docs/v9.0.0-migration-guide.md) — removing pinned legacy contracts + the CRA rename
+- [docs/v7.0.0-migration-guide.md](docs/v7.0.0-migration-guide.md) — the earlier reports/2.0 default flip
 - [docs/sample-reports/](docs/sample-reports/README.md)
 
 Exit codes:

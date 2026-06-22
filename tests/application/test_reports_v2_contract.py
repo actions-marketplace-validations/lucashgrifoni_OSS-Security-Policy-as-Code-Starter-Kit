@@ -11,7 +11,6 @@ import pytest
 from tests.conftest import EXAMPLE_HARDENED
 
 from oss_policy_kit.application.engine import (
-    REPORT_JSON_SCHEMA_URL_V1_0,
     REPORT_JSON_SCHEMA_URL_V2_0,
     evaluate_repository,
     map_status_to_reports_v2,
@@ -24,8 +23,7 @@ from oss_policy_kit.domain.errors import LoadError
 # --- URL constants + resolver ----------------------------------------------
 
 
-def test_v2_url_distinct_from_v1() -> None:
-    assert REPORT_JSON_SCHEMA_URL_V2_0 != REPORT_JSON_SCHEMA_URL_V1_0
+def test_v2_url_is_reports_2_0() -> None:
     assert REPORT_JSON_SCHEMA_URL_V2_0.endswith("/reports/2.0")
 
 
@@ -34,10 +32,11 @@ def test_resolver_accepts_2_0() -> None:
 
 
 def test_resolver_default_is_2_0() -> None:
-    """v7.0.0 (ADR-027) flipped the default report contract to reports/2.0: an empty
-    contract now resolves to 2.0. reports/1.0 stays explicitly selectable for one cycle."""
+    """reports/2.0 is the only contract (ADR-043, v9.0.0): an empty contract resolves to 2.0,
+    and a removed legacy contract (e.g. 1.0) is a hard error (no silent fallback)."""
     assert report_json_schema_url("") == REPORT_JSON_SCHEMA_URL_V2_0
-    assert report_json_schema_url("1.0") == REPORT_JSON_SCHEMA_URL_V1_0
+    with pytest.raises(LoadError, match=r"removed in v9.0.0"):
+        report_json_schema_url("1.0")
 
 
 def test_resolver_unknown_mentions_2_0_in_error() -> None:
@@ -114,7 +113,7 @@ def _sample_v1_report() -> dict:
     # (see report_to_dict_v1). The earlier sample used a ``controls``/``id`` shape the kit
     # never produces, which masked a bug in the migration script.
     return {
-        "schema_version": REPORT_JSON_SCHEMA_URL_V1_0,
+        "schema_version": "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/1.0",
         "summary_by_status": {"pass": 5, "fail": 1, "degraded": 1, "manual-review-required": 2},
         "results": [
             {

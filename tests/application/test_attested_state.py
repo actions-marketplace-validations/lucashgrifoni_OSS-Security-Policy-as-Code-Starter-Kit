@@ -15,7 +15,6 @@ from typer.testing import CliRunner
 
 from oss_policy_kit.application import engine
 from oss_policy_kit.application.evidence_projection import gate_role_for
-from oss_policy_kit.application.reporting import compute_summary_by_gate_role
 from oss_policy_kit.cli import terminal_ui
 from oss_policy_kit.cli.main import app
 from oss_policy_kit.domain.models import ControlResult, ControlStatus, ExecutionReport
@@ -76,12 +75,6 @@ def test_attested_gate_role_is_passed_observation() -> None:
     assert gate_role_for(ControlStatus.ATTESTED) == "passed_observation"
 
 
-def test_attested_rolls_into_passed_observation_summary() -> None:
-    out = compute_summary_by_gate_role({"pass": 2, "attested": 3, "fail": 1})
-    assert out["passed_observation"] == 5
-    assert out["ci_blocking_fail"] == 1
-
-
 def test_attested_maps_to_reports_v2_state() -> None:
     assert engine.map_status_to_reports_v2("attested") == ("ATTESTED", None)
 
@@ -119,7 +112,7 @@ def test_reports_v1_schema_accepts_attested() -> None:
 
 def test_attested_control_renders_without_crash() -> None:
     report = ExecutionReport(
-        schema_version="reports/1.0",
+        schema_version="reports/2.0",
         generated_at="2026-06-08T00:00:00Z",
         kit_version="test",
         target_path="/tmp/repo",

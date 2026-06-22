@@ -86,17 +86,6 @@ def test_sanitize_target_path_fallback_on_invalid() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# _effective_schema_version overrides (lines 77, 79)
-# --------------------------------------------------------------------------- #
-
-
-def test_effective_schema_version_v02_and_v03() -> None:
-    rep = _rich_report()
-    assert rp._effective_schema_version(rep, "https://x/reports/0.2") == rp.REPORT_JSON_SCHEMA_URL_V0_2
-    assert rp._effective_schema_version(rep, "https://x/reports/0.3") == rp.REPORT_JSON_SCHEMA_URL_V0_3
-
-
-# --------------------------------------------------------------------------- #
 # _profile_posture + _structural_bucket (lines 206, 284, 286)
 # --------------------------------------------------------------------------- #
 
@@ -115,25 +104,11 @@ def test_structural_bucket_azure_and_aws() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_report_to_dict_v03_includes_waiver_and_deprecation() -> None:
+def test_report_to_dict_includes_waiver_and_deprecation() -> None:
     payload = rp.report_to_dict(_rich_report())
-    waived = next(r for r in payload["results"] if r["control_id"] == "CI-PIN-008")
+    waived = next(r for r in payload["controls"] if r["id"] == "CI-PIN-008")
     assert waived["waiver"]["owner"] == "appsec"
     assert waived["deprecation_note"] == "superseded by CI-PIN-009"
-
-
-def test_report_to_dict_v1_includes_waiver_and_deprecation() -> None:
-    payload = rp.report_to_dict_v1(_rich_report())
-    waived = next(r for r in payload["results"] if r["control_id"] == "CI-PIN-008")
-    assert waived["waiver"]["owner"] == "appsec"
-    assert waived["deprecation_note"] == "superseded by CI-PIN-009"
-
-
-def test_report_to_dict_v2_includes_waiver_and_deprecation() -> None:
-    payload = rp.report_to_dict(_rich_report(), schema_version_override="https://x/reports/2.0")
-    waived = next(r for r in payload["results"] if r["control_id"] == "CI-PIN-008")
-    assert waived["waiver"] is not None
-    assert waived.get("deprecation_note") == "superseded by CI-PIN-009"
 
 
 # --------------------------------------------------------------------------- #
