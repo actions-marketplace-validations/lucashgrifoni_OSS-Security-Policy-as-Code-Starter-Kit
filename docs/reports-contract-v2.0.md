@@ -1,13 +1,13 @@
 # Reports contract `reports/2.0`
 
-> **Default report contract since v7.0.0 (BREAKING).** `reports/2.0` shipped opt-in in v6.0.0 and became the **default** in v7.0.0 (ADR-027). Unpinned consumers now receive `reports/2.0` JSON. `reports/1.0` remains explicitly selectable via `--report-json-contract=1.0` for one minor cycle, then deprecates. The standalone `scripts/migrate-1.0-to-2.0.py` converts existing `1.0` reports offline. See ADR-013 (contract design) and ADR-027 (default-flip rationale).
+> **The only report contract since v9.0.0 (BREAKING).** `reports/2.0` shipped opt-in in v6.0.0, became the **default** in v7.0.0 (ADR-027), and became the **only** contract in v9.0.0 (ADR-043). The legacy `0.1`/`0.2`/`0.3`/`1.0` contracts were removed; `--report-json-contract` now accepts only `2.0`, and any other value exits 2. The standalone `scripts/migrate-1.0-to-2.0.py` still converts existing stored `1.0` reports offline. See ADR-013 (contract design), ADR-027 (default-flip rationale), and ADR-043 (legacy-contract removal).
 
 ## TL;DR
 
 - `reports/2.0` is a **new JSON report contract** that replaces the seven-state vocabulary of `reports/1.0` with a tighter five-state vocabulary aligned with Scorecard v6.
 - Five states: **`PASS` / `FAIL` / `UNKNOWN` / `NOT_APPLICABLE` / `ATTESTED`**.
 - `UNKNOWN` gains a sub-field `reason` so the granularity of the old seven states is preserved where it matters (`manual-review-required`, `not-observable-in-clone`, etc.).
-- **Default contract since v7.0.0**: `reports/2.0`. `reports/1.0` is still selectable via `--report-json-contract=1.0` for one deprecation cycle.
+- **The only contract since v9.0.0 (ADR-043)**: `reports/2.0`. The legacy `0.1`/`0.2`/`0.3`/`1.0` were removed; `--report-json-contract` accepts only `2.0` and any other value exits 2.
 - A **migration script** (`scripts/migrate-1.0-to-2.0.py`) converts existing `reports/1.0` JSON to `reports/2.0` for adopters with long-lived dashboards.
 
 ## Why a new contract
@@ -46,12 +46,9 @@ oss-policy-kit evaluate --target . --profile github-level-1
 # Explicit reports/2.0 (same as the default)
 oss-policy-kit evaluate --target . --profile github-level-1 --report-json-contract=2.0
 
-# Explicit legacy selection: reports/1.0 (selectable for one deprecation cycle)
+# Legacy contracts were REMOVED in v9.0.0 (ADR-043); selecting one exits 2:
 oss-policy-kit evaluate --target . --profile github-level-1 --report-json-contract=1.0
-
-# Legacy contracts also remain selectable:
-oss-policy-kit evaluate --target . --profile github-level-1 --report-json-contract=0.3
-oss-policy-kit evaluate --target . --profile github-level-1 --report-json-contract=0.2
+#   Error: Report JSON contract '1.0' was removed in v9.0.0 (ADR-043); 'reports/2.0' is the only contract.  (exit 2)
 ```
 
 ## Deprecation timeline
@@ -61,8 +58,9 @@ oss-policy-kit evaluate --target . --profile github-level-1 --report-json-contra
 | v6.0.0 GA | `reports/1.0` is the **default**; `reports/2.0` is opt-in via `--report-json-contract=2.0`. |
 | v6.0.x – v6.7.0 | Unchanged — `reports/1.0` **remained the default** through the v6.x line. The earlier plan to remove `1.0` in v6.1.0 was **not** carried out; no removal shipped. |
 | v7.0.0 (BREAKING) | `reports/2.0` becomes the **default** (ADR-027). `reports/1.0` stays selectable via `--report-json-contract=1.0` for one minor cycle, then is deprecated with a warning, then removed in a later major. SARIF/Markdown output and exit-code semantics are unaffected. |
+| v9.0.0 (BREAKING) | `reports/1.0` (and `0.3`/`0.2`/`0.1`) **removed** (ADR-043). `reports/2.0` is the only contract; `--report-json-contract` accepts only `2.0` and any other value exits 2 (no silent fallback). |
 
-`reports/0.3` and `0.2` continue to be selectable per existing precedent; they are legacy contracts kept for older dashboard compatibility and have separate removal cycles.
+`reports/0.3` and `0.2` were also removed in v9.0.0 (ADR-043); like `1.0`, selecting them now exits 2. They survive only as historical contract docs.
 
 ## Migration script
 
@@ -85,7 +83,7 @@ It is intentionally **lossless** — every distinction in `reports/1.0` survives
 
 For each consumer of `evaluation-report.json`:
 
-1. **Decide migration cadence**. As of v7.0.0 `reports/2.0` is the default, so unpinned consumers receive it now. Pin `--report-json-contract=1.0` to defer migration for one more cycle, or migrate consumers to `reports/2.0` (the migration script below converts stored `1.0` reports).
+1. **Migrate any remaining `reports/1.0` consumers.** Since v9.0.0 `reports/2.0` is the only contract — pinning `--report-json-contract=1.0` is no longer possible (it exits 2). Convert any previously stored `1.0` reports with the offline migration script below.
 2. **Update the contract identifier check**. `reports/2.0` advertises `"contract_version": "reports/2.0"` at the top.
 3. **Re-map status switches**. Use the mapping table above. The most common gotcha: `degraded` is now `FAIL` with `degraded: true`; consumers that treated `degraded` as PASS-ish must switch to the explicit flag.
 4. **Handle `UNKNOWN.reason`** for any logic that previously branched on `manual-review-required`, `skipped`, or `error`. All three converge under `UNKNOWN` with distinct `reason` values.
@@ -99,6 +97,6 @@ For each consumer of `evaluation-report.json`:
 
 - ADR-013 — design rationale, breaking-change justification, deprecation timeline
 - [Scorecard v6 result vocabulary](https://github.com/ossf/scorecard) (the alignment source for the five states)
-- Existing `reports/1.0` schema: `src/oss_policy_kit/data/schema/evaluation-report-v1.schema.json`
+- Legacy (removed) `reports/1.0` schema, kept for historical reference: `src/oss_policy_kit/data/schema/evaluation-report-v1.schema.json`
 - [`v7.0.0-migration-guide.md`](v7.0.0-migration-guide.md) — the migration guide for the v7.0.0 default flip (ADR-027)
 - [`v6.0.0-migration-guide.md`](v6.0.0-migration-guide.md) — earlier guide that documented this contract's introduction (ADR-013) plus M-003 (ADR-008)

@@ -126,27 +126,26 @@ Do not use the results as a substitute for:
 
 ## Report JSON schema
 
-Top-level keys in the current report contract:
+Top-level keys in the report contract (`reports/2.0`):
 
-- `schema_version`: identifies the report wire contract URL (`reports/0.1`, `0.2`, or `0.3`, or `1.0`).
+- `schema_version`: the report wire-contract URL (ends in `/reports/2.0`).
+- `contract_version`: the contract id string, `"reports/2.0"`.
 - `generated_at`: UTC timestamp for report generation.
 - `kit_version`: OSS Policy Kit version used in evaluation.
-- `target_path`: absolute evaluated repository path.
-- `profile_id`: bundled or custom profile id used in the run.
-- `profile_title`: human title of the selected profile.
-- `summary_by_status`: aggregate counts by status value (`pass`, `fail`, etc.).
-- `results`: per-control result array (**controls live under `results`, not under `controls`**).
+- `target_path`: evaluated repository path (basename by default; full path with `--include-absolute-path`).
+- `profile`: object describing the selected profile (`id`, `title`, `family`, `level`, `posture`, `is_release_track`, `recommended_gate`).
+- `summary_by_status`: aggregate counts keyed by the five states (`PASS`, `FAIL`, `UNKNOWN`, `NOT_APPLICABLE`, `ATTESTED`).
+- `controls_total`: total number of evaluated controls.
+- `controls`: per-control result array — each entry carries `id`, `title`, `state`, `assurance`, `message`, `remediation`, the projected `evidence` object, and a stable `finding_id`.
+- `results_digest`: `sha256:` fingerprint over canonical control fields, stable across runs.
 - `operational_warnings`: non-blocking warnings surfaced during evaluation.
-- `scorecard_path`: resolved path to Scorecard JSON when provided (else null).
-- `scorecard_supplemental`: summary of scorecard influence on outcomes (else null).
-- `external_waiver_path`: path to externally supplied `--waivers` file (else null).
+- `scorecard`: summary of supplied OpenSSF Scorecard JSON and its (never grade-elevating) influence, when provided.
+- `external_waiver_path`: path to an externally supplied `--waivers` file, when used.
 - `action_insights`: suggested next actions derived from result patterns.
-- `live_collection`: metadata about API-backed evidence collection when available (else null).
+- `live_collection`: metadata about API-backed evidence collection, when available.
 - `weighted_score`: risk-adjusted scoring block (`earned`, `possible`, `percent`).
-- `summary_by_gate_role`: `reports/0.3` gate-role aggregation for CI semantics.
-- `gate_execution_model`: `reports/0.3` documentation object for `--fail-on` mapping.
 
-For the full v1.0 contract details see [reports-contract-v1.0.md](reports-contract-v1.0.md); the v0.3 wire shape stays documented at [reports-contract-v0.3.md](reports-contract-v0.3.md).
+The full contract is documented in [reports-contract-v2.0.md](reports-contract-v2.0.md). The removed legacy contracts (`reports/1.0`, `reports/0.3`) are kept only as historical references.
 
 ## Examples And Fixtures
 

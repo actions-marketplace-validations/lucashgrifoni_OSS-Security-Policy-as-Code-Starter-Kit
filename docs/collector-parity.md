@@ -17,7 +17,7 @@ control as `pass` only when the JSON is **API-collected** (`attested_by:
 <platform>-api-collection` or `collection.evidence_collection_method: live`). A
 hand-edited file passes through the engine as `self_attested` / `trust_level: declared`,
 which the report Markdown surfaces honestly. See [results-guide.md](results-guide.md) and
-[reports-contract-v1.0.md](reports-contract-v1.0.md) for the projection rules.
+[reports-contract-v2.0.md](reports-contract-v2.0.md) for the projection rules.
 
 When a collector does **not** retrieve a given endpoint, the operator has two options:
 
@@ -122,9 +122,9 @@ that is by design, not a parity gap. The fixture README documents the same bound
 - **GitHub / Azure / AWS**: `org-mfa-posture` stays `self-attested` until you wire your IdP /
   organization-level evidence manually (**GitLab collects it** from the groups API).
 
-## How to read the evidence projection in `reports/1.0`
+## How to read the evidence projection in `reports/2.0`
 
-Each control in `reports/1.0` carries an `evidence` object. The fields below decide whether
+Each control in `reports/2.0` carries an `evidence` object. The fields below decide whether
 that control's `trust_level` becomes `verified` or stays `declared`:
 
 ```json
@@ -139,7 +139,7 @@ that control's `trust_level` becomes `verified` or stays `declared`:
 }
 ```
 
-Consult [reports-contract-v1.0.md](reports-contract-v1.0.md) for the complete projection
+Consult [reports-contract-v2.0.md](reports-contract-v2.0.md) for the complete projection
 rules and [signal-controls-audit.md](signal-controls-audit.md) for the rule that `signal`
 controls cannot project to `verified` regardless of the collector path.
 

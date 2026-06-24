@@ -13,7 +13,7 @@ A **policy-as-code starter kit** that evaluates clone-visible OSS repository gov
 Concretely, in the current release:
 
 - **56 bundled profiles** organized in ladders (`*-level-1` to `*-level-3`, including the first-class GitLab CI family `gitlab-level-1/2/3`), release-hardening tracks (`*-release-hardening-1/2/3`, including `gitlab-release-hardening-1/2/3`), regulatory advisories (`cra-eu-ready-1`, `cra-eu-strict-1`, `cra-eu-reporting-1`, EU CRA Art.13/14 and EU AI Act Art.11 readiness), framework-aligned advisories (`osps-baseline-1`, OSPS Baseline 2026, `slsa-build-l2-1`, SLSA Source L1/L2, `ssdf-baseline-1`, NIST 800-218A AI SSDF, `cis-supply-chain-1`, `owasp-cicd-top10-1`, `s2c2f-l1-1`), IaC posture profiles (Terraform, CloudFormation, Pulumi, Bicep), Kubernetes / container baselines, webhook hardening (`webhook-security-1`), an AppSec SAST/SCA bundle (`appsec-sast-sca-1`), and AI/agent source-side baselines (`ai-agent-baseline-1`, `appsec-mcp-server-1`, OWASP Agentic ASI). For the authoritative list see [profiles/overview.md](profiles/overview.md).
-- **221 controls** each labelled `deterministic` (clone-truth, no inference), `signal` (directional, not verified), or `evidence-backed` (consumes a structured evidence file with a schema). The grade flows into the `reports/1.0` JSON and Markdown output so consumers can reason about proof strength.
+- **221 controls** each labelled `deterministic` (clone-truth, no inference), `signal` (directional, not verified), or `evidence-backed` (consumes a structured evidence file with a schema). The grade flows into the `reports/2.0` JSON and Markdown output so consumers can reason about proof strength.
 - **Evidence model with explicit trust levels** — `static_clone`, `api_collected`, `user_supplied`, `derived`, `heuristic_signal`, `manual_review`, `not_observable` — and per-control collection metadata (`collected_at`, `collection_method`).
 - **Waiver registry** with owner, reason, and expiry, integrated with the gating decision.
 - **SARIF 2.1.0 output** for Code Scanning ingestion and **CycloneDX VEX 1.6** emission via `emit-vex`.
@@ -102,7 +102,7 @@ This is the sharpest question, because this kit *is* "policy-as-code" and so are
 | **Trust grading** | None built in (a rule passes or fails) | None built in | Every control labelled `deterministic` / `signal` / `evidence-backed`; grade flows into the report |
 | **Evidence model** | You design it | You design it | Built-in trust levels (`static_clone`, `api_collected`, `user_supplied`, …) + per-control collection metadata |
 | **Waivers** | You build the exception mechanism | PolicyException CRD (cluster) | Waiver registry with owner + reason + expiry, integrated into the gate decision |
-| **Output** | Whatever you emit | Admission verdict / CLI report | `reports/1.0` JSON + Markdown + SARIF 2.1.0 + CycloneDX VEX |
+| **Output** | Whatever you emit | Admission verdict / CLI report | `reports/2.0` JSON + Markdown + SARIF 2.1.0 + CycloneDX VEX |
 
 **The relationship is complementary, not competitive.** OPA/Conftest and Kyverno are *engines*: maximally flexible, zero opinion, and you own the entire policy library and its maintenance against moving frameworks (Scorecard, SLSA, SSDF, CRA, …). This kit is an *opinionated pack* for one domain — it ships the control catalog, the framework mappings, the trust taxonomy, and the waiver discipline so an adopter gets a defensible OSS-supply-chain gate from `pip install` rather than from months of Rego authoring.
 

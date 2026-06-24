@@ -6,7 +6,7 @@ This page is the v5.0.0 audit decision record for every signal-grade control bun
 
 ## How v5.0.0 reflects signal-grade limits in reports
 
-Under `reports/1.0`, every signal-grade result projects through `oss_policy_kit.application.evidence_projection` with these guarantees:
+Under `reports/2.0`, every signal-grade result projects through `oss_policy_kit.application.evidence_projection` with these guarantees:
 
 - `evidence.source_type = "heuristic_signal"` (when the underlying method is `static`).
 - `evidence.trust_level = "inferred"` — never `"verified"`, regardless of `confidence` text.
@@ -47,7 +47,7 @@ Hard-gate profiles (`github-level-3`, `github-release-hardening-3`, `aws-level-3
 - The `evidence.limitations` array on each result explicitly states the signal-cap rule.
 - The runtime `_HARD_GATE_EVIDENCE_PROFILES` warning continues to fire when `.oss-policy-kit/evidence/` is missing or contains placeholders.
 
-A `summary_by_status.fail == 0` result on a hard-gate profile is therefore not equivalent to "platform posture verified" when signal controls are present in the profile. The Markdown `Limitations` text and the v1 JSON `evidence.limitations` field are the load-bearing surface for that distinction.
+A `summary_by_status.fail == 0` result on a hard-gate profile is therefore not equivalent to "platform posture verified" when signal controls are present in the profile. The Markdown `Limitations` text and the `reports/2.0` JSON `evidence.limitations` field are the load-bearing surface for that distinction.
 
 ## When signal controls should be upgraded
 
@@ -64,5 +64,5 @@ Until those four conditions hold, a control stays `signal` in the catalog. Miscl
 
 - Catalog: `src/oss_policy_kit/data/controls/catalog.yaml` (`assurance: signal`).
 - Projection rules: `src/oss_policy_kit/application/evidence_projection.py` (`_source_type_from_result`, `_trust_level`, `_limitations`).
-- Schema: `src/oss_policy_kit/data/schema/evaluation-report-v1.schema.json` (`results[].evidence.trust_level` enum).
+- Schema: `src/oss_policy_kit/data/schema/reports/2.0.json` (`controls[].evidence.trust_level` enum).
 - Tests: `tests/application/test_evidence_projection.py` (every signal × static combination has a regression test).

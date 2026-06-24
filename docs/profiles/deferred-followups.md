@@ -9,7 +9,7 @@ Items intentionally deferred in earlier documentation rounds. Several items belo
 
 ## Reports and scoring
 
-- *(Targeted for v4.0.0)* JSON report contract **`reports/0.3`** with `summary_by_gate_role` and `gate_execution_model` (see **`docs/reports-contract-v0.3.md`**).
+- *(Shipped in v4.0.0; the `reports/0.3` contract and its `summary_by_gate_role`/`gate_execution_model` objects were removed in v9.0.0, ADR-043)* — see **`docs/reports-contract-v0.3.md`** (historical).
 - Score aggregation or merged role of gate beyond current `fail-on` mapping.
 
 ## Policy data

@@ -19,17 +19,17 @@ The **catalog `assurance` field** classifies how a control proves its conclusion
 - **`signal`**: keyword or heuristic posture in CI files; PASS is directional, not proof of execution.
 - **`evidence-backed`**: requires `.oss-policy-kit/evidence/*.json` (manual attestation or `collect-evidence` API exports) for a credible PASS.
 
-The **`reports/1.0` Evidence Model v2** (visible per result in `evaluation-report.json` when the default contract is used) projects a richer trust picture using these keys (full reference in [docs/reports-contract-v1.0.md](../reports-contract-v1.0.md)):
+The **`reports/2.0` Evidence Model v2** (visible per result in `evaluation-report.json` under `project_evidence`) projects a richer trust picture using these keys (full reference in [docs/reports-contract-v2.0.md](../reports-contract-v2.0.md)):
 
 - **`source_type`**: where the conclusion came from — `clone_file`, `workflow_yaml`, `pipeline_yaml`, `evidence_json`, `api_collected`, `heuristic_signal`, etc.
 - **`collection_method`**: how it was gathered — `clone_inspection`, `workflow_yaml_parse`, `evidence_attestation`, `api_collected`, `keyword_match`, etc.
 - **`trust_level`**: derived semantic level — `verified` (high), `attested`, `observed`, `heuristic` (lowest). Keyword-only matches cap trust at `heuristic` even when the status is `pass`.
 - **`attestation_status`**: `signed`, `self_attested`, `none`. Promoted from `self_attested` to `signed` only when the control source is `api_collected` and an `attested_by` value is present.
 - **`freshness_status`**: `fresh`, `stale`, `unknown`. Driven by `extra.collected_at` (ISO8601) on live evidence; without it, the projection emits `unknown`.
-- **`evidence_required`**: boolean — true on `evidence-backed` catalog controls; surfaces explicitly in `reports/1.0`.
+- **`evidence_required`**: boolean — true on `evidence-backed` catalog controls; surfaces explicitly in `reports/2.0`.
 - **`limitations`**: free-form strings explaining why a result cannot project to a higher trust level (for example, `keyword-only signal cannot project to verified`).
 
-These projection fields are **read on emission** from the evaluator's existing `evidence_sources`, `evidence_collection_method`, `assurance`, `status`, and the `extra` mapping. Existing evaluator plugins do not need to change. They are not present in `reports/0.3` or `reports/0.2` payloads.
+These projection fields are **read on emission** from the evaluator's existing `evidence_sources`, `evidence_collection_method`, `assurance`, `status`, and the `extra` mapping. Existing evaluator plugins do not need to change.
 
 Two consequences worth keeping in mind:
 

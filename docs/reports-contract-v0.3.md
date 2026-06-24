@@ -1,6 +1,6 @@
 # Evaluation report contract `reports/0.3`
 
-> **`reports/1.0` is the v5.0.0 default contract.** `0.3` remains selectable for the entire `5.x` line via `--report-json-contract 0.3`. New integrations should target [reports/1.0](reports-contract-v1.0.md).
+> **Removed in v9.0.0 (ADR-043).** `reports/0.3` was a legacy evaluation-report contract (the v4.0.0-line default). It was removed in **v9.0.0**: `--report-json-contract=0.3` now exits 2. This page is kept as a historical reference; current integrations use [`reports/2.0`](reports-contract-v2.0.md). See the [v9.0.0 migration guide](v9.0.0-migration-guide.md).
 
 Version **0.3** is the default JSON contract for `evaluation-report.json` **for the v4.0.0 release line** once published; until **`v4.0.0`** is tagged and released, treat defaults on this branch as **implementation preview** alongside **`CHANGELOG.md`**.
 
