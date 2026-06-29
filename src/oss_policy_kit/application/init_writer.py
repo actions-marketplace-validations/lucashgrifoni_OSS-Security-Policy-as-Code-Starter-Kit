@@ -130,9 +130,9 @@ def _render_waivers_stub() -> str:
 
     return (
         "# oss-policy-kit waivers\n"
-        "# Each entry must have: control_id, owner, reason, expires_on (YYYY-MM-DD).\n"
+        "# Each entry must have: control_id, owner, justification, expires_at (YYYY-MM-DD).\n"
         "# Waived findings remain visible in reports but stop tripping --fail-on.\n"
-        "# Remove or update entries before the expires_on date.\n"
+        "# Remove or update entries before the expires_at date.\n"
         "\n"
         "waivers: []\n"
         "\n"
@@ -140,8 +140,8 @@ def _render_waivers_stub() -> str:
         "# waivers:\n"
         "#   - control_id: GH-PIN-007\n"
         "#     owner: appsec-team\n"
-        "#     reason: Pinned-by-tag is acceptable for internal-only repository.\n"
-        "#     expires_on: 2026-12-31\n"
+        "#     justification: Pinned-by-tag is acceptable for internal-only repository.\n"
+        "#     expires_at: 2026-12-31\n"
     )
 
 
@@ -284,7 +284,7 @@ def _build_next_steps(plan: InitPlan) -> list[str]:
         )
     if plan.write_waivers:
         steps.append(
-            "Add real entries to waivers.yaml (owner, reason, expires_on) only when remediation is deferred.",
+            "Add real entries to waivers.yaml (owner, justification, expires_at) only when remediation is deferred.",
         )
     if plan.platform == "unknown":
         steps.append(

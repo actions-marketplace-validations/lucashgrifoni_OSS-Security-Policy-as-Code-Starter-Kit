@@ -60,6 +60,69 @@ def _sanitize_target_path_for_payload(absolute: str, *, include_absolute: bool) 
         return Path(absolute).name or absolute
 
 
+def _sanitize_embedded_path_in_text(text: str, *, include_absolute: bool) -> str:
+    """Sanitize any absolute paths embedded in a free-text string (M-002).
+
+    The scorecard supplemental ``explanation`` interpolates the raw scorecard
+    path into prose (e.g. ``"Loaded N entries from <abs-path>."``). When
+    ``include_absolute`` is False, replace each whitespace-delimited token that
+    looks like a filesystem path with its sanitized basename so the surrounding
+    sentence stays readable while the auditor's home directory / username does
+    not leak into shareable reports.
+    """
+
+    if include_absolute or not text:
+        return text
+    out: list[str] = []
+    for token in text.split(" "):
+        # Strip a single trailing sentence punctuation char so "<path>." sanitizes cleanly.
+        suffix = ""
+        core = token
+        if core and core[-1] in ".,;:":
+            core, suffix = core[:-1], core[-1]
+        if _looks_like_rooted_path(core):
+            core = _sanitize_target_path_for_payload(core, include_absolute=False)
+        out.append(core + suffix)
+    return " ".join(out)
+
+
+def _looks_like_rooted_path(token: str) -> bool:
+    """Heuristic: is this whitespace-delimited token a rooted filesystem path?
+
+    Only rooted (absolute or home-anchored) paths leak the auditor's home
+    directory / username, so the embedded-path sanitizer targets exactly those
+    and leaves prose fragments like ``entr(y/ies)`` untouched.
+    """
+
+    if not token:
+        return False
+    if token.startswith(("/", "\\", "~/", "~\\")):
+        return True
+    # Windows drive-rooted path: a drive letter, a colon, then a path separator.
+    return len(token) >= 3 and token[1] == ":" and token[0].isalpha() and token[2] in "/\\"
+
+
+def _sanitize_scorecard_supplemental(
+    supplemental: dict[str, Any] | None, *, include_absolute: bool
+) -> dict[str, Any] | None:
+    """Return a copy of the scorecard supplemental with paths sanitized (M-002).
+
+    Routes the embedded ``path`` and ``explanation`` through the privacy
+    sanitizer so absolute paths only survive when ``include_absolute`` is True.
+    """
+
+    if supplemental is None:
+        return None
+    sanitized = dict(supplemental)
+    raw_path = sanitized.get("path")
+    if isinstance(raw_path, str):
+        sanitized["path"] = _sanitize_target_path_for_payload(raw_path, include_absolute=include_absolute)
+    explanation = sanitized.get("explanation")
+    if isinstance(explanation, str):
+        sanitized["explanation"] = _sanitize_embedded_path_in_text(explanation, include_absolute=include_absolute)
+    return sanitized
+
+
 def _map_status_to_reports_v2(status: str) -> tuple[str, str | None]:
     key = status.strip().lower()
     if key in REPORTS_V2_STATUS_MAP:
@@ -316,10 +379,20 @@ def report_to_dict_v2_0(
         "results_digest": compute_results_digest(report.results),
         "operational_warnings": report.operational_warnings,
         "scorecard": {
-            "path": report.scorecard_path,
-            "supplemental": report.scorecard_supplemental,
+            "path": (
+                _sanitize_target_path_for_payload(report.scorecard_path, include_absolute=include_absolute_path)
+                if report.scorecard_path
+                else report.scorecard_path
+            ),
+            "supplemental": _sanitize_scorecard_supplemental(
+                report.scorecard_supplemental, include_absolute=include_absolute_path
+            ),
         },
-        "external_waiver_path": report.external_waiver_path,
+        "external_waiver_path": (
+            _sanitize_target_path_for_payload(report.external_waiver_path, include_absolute=include_absolute_path)
+            if report.external_waiver_path
+            else report.external_waiver_path
+        ),
         "action_insights": compute_priority_insights(report),
         "live_collection": _live_collection_dict(report.live_collection),
         "weighted_score": weighted_score_block,
@@ -387,7 +460,10 @@ def write_markdown_report(  # noqa: C901
     lines.append(f"- **Target**: `{_target_display}`")
     lines.append(f"- **Profile**: `{report.profile_id}` - {report.profile_title}")
     if report.scorecard_path:
-        lines.append(f"- **Scorecard file**: `{report.scorecard_path}`")
+        _scorecard_display = _sanitize_target_path_for_payload(
+            report.scorecard_path, include_absolute=include_absolute_path
+        )
+        lines.append(f"- **Scorecard file**: `{_scorecard_display}`")
     lines.append("")
     lines.append("## Summary")
     lines.append("")
@@ -414,8 +490,11 @@ def write_markdown_report(  # noqa: C901
     )
     lines.append("")
     if report.external_waiver_path:
+        _waiver_display = _sanitize_target_path_for_payload(
+            report.external_waiver_path, include_absolute=include_absolute_path
+        )
         lines.append(
-            f"- **External waiver file loaded for this run** (`--waivers`): `{report.external_waiver_path}`. "
+            f"- **External waiver file loaded for this run** (`--waivers`): `{_waiver_display}`. "
             "That file is **not** the same as **versioned in-repo** waiver policy."
         )
         lines.append(
@@ -435,7 +514,7 @@ def write_markdown_report(  # noqa: C901
         for w in report.operational_warnings:
             lines.append(f"- {w}")
         lines.append("")
-    lines.extend(_md_scorecard_supplemental_lines(report))
+    lines.extend(_md_scorecard_supplemental_lines(report, include_absolute_path=include_absolute_path))
     lines.extend(_md_controls_table_lines(report))
     lines.extend(_md_control_detail_lines(report))
     path.write_text("\n".join(lines), encoding="utf-8")
@@ -463,12 +542,12 @@ def _md_prioritization_lines(report: ExecutionReport) -> list[str]:
     return out
 
 
-def _md_scorecard_supplemental_lines(report: ExecutionReport) -> list[str]:
+def _md_scorecard_supplemental_lines(report: ExecutionReport, *, include_absolute_path: bool = False) -> list[str]:
     """Markdown lines for the optional Scorecard-supplemental section (empty when absent)."""
 
     if not report.scorecard_supplemental:
         return []
-    ss = report.scorecard_supplemental
+    ss = _sanitize_scorecard_supplemental(report.scorecard_supplemental, include_absolute=include_absolute_path) or {}
     influenced = ss.get("influenced_control_ids") or []
     influenced_line = (
         f"- **Influenced controls**: {', '.join(f'`{c}`' for c in influenced)}"

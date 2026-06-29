@@ -24,7 +24,7 @@ from typing import Any
 
 import yaml
 
-from oss_policy_kit.domain.errors import InvalidInputError
+from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
 
 #: Filename of the persisted project config; matches ``init_planner``.
 CONFIG_FILENAME = "oss-policy-kit.yaml"
@@ -115,7 +115,7 @@ def load_project_config(path: Path) -> ProjectConfig:
 
     try:
         raw = path.read_text(encoding="utf-8")
-    except OSError as exc:
+    except (OSError, UnicodeDecodeError) as exc:
         raise InvalidInputError(f"Could not read {path}: {exc}.") from exc
 
     try:
@@ -146,6 +146,16 @@ def load_project_config(path: Path) -> ProjectConfig:
 
     output_dir = _require_str(payload, "output_dir", where=path)
     report_contract = _optional_str(payload, "report_json_contract") or "2.0"
+    # Validate against the engine's report-contract allow-list (reports/2.0 only in
+    # v9.0.0, ADR-043). Imported lazily to avoid a load-time import cycle.
+    from oss_policy_kit.application.engine import report_json_schema_url
+
+    try:
+        report_json_schema_url(report_contract)
+    except OssPolicyKitError as exc:
+        raise InvalidInputError(
+            f"{path.name}: report_json_contract must be '2.0' (got {report_contract!r}).",
+        ) from exc
 
     detected = payload.get("detected", {}) or {}
     if not isinstance(detected, dict):

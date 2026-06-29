@@ -183,7 +183,7 @@ def warn_if_batch_skipped_directories(batch_json_path: Path) -> None:
     try:
         with batch_json_path.open("r", encoding="utf-8") as fh:
             payload = json.load(fh)
-    except (OSError, json.JSONDecodeError):
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return
     skipped = payload.get("skipped_directories")
     if not isinstance(skipped, list) or not skipped:

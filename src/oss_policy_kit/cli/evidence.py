@@ -197,6 +197,17 @@ def scaffold_evidence_cmd(
     except OssPolicyKitError as exc:
         stderr_console().print(f"[red]Error:[/red] {exc.message}")
         raise typer.Exit(code=2) from exc
+    except typer.Exit:
+        raise
+    except OSError as exc:
+        # A filesystem error on a user-supplied --target (e.g. .oss-policy-kit
+        # pre-exists as a file so mkdir fails) is a usage error, not internal.
+        # Use exc.strerror so the absolute path / username is never echoed.
+        stderr_console().print(f"[red]Error:[/red] cannot write output ({exc.strerror or 'filesystem error'}).")
+        raise typer.Exit(code=2) from exc
+    except Exception as exc:  # noqa: BLE001 - last-resort user message, no traceback leak
+        stderr_console().print(f"[red]Unexpected error:[/red] {exc}")
+        raise typer.Exit(code=3) from exc
 
 
 def _build_evidence_collector(

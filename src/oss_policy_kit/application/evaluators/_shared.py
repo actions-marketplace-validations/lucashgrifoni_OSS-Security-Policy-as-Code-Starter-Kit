@@ -549,7 +549,7 @@ def _parse_branch_protection_evidence(evidence: Path) -> EvalOutcome:
     """Validate and interpret a branch-protection evidence file."""
     try:
         data = json.loads(evidence.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         return EvalOutcome(
             status=ControlStatus.MANUAL_REVIEW_REQUIRED,
             reason=f"Branch protection evidence file is unreadable or invalid JSON: {exc}",

@@ -39,7 +39,7 @@ def _load_evidence(repo_root: Path) -> tuple[dict[str, Any] | None, EvalOutcome 
         )
     try:
         data = json.loads(evidence.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         return None, EvalOutcome(
             status=ControlStatus.MANUAL_REVIEW_REQUIRED,
             reason=f"Could not parse Bicep IaC evidence file: {exc}",

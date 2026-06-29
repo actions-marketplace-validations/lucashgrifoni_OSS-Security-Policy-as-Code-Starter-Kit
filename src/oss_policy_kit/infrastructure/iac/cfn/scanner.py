@@ -166,14 +166,42 @@ def _looks_like_cfn(doc: Any) -> bool:
     return any(isinstance(entry, dict) and isinstance(entry.get("Type"), str) for entry in resources.values())
 
 
+class CfnParseError(Exception):
+    """A file that looks intended to be a CloudFormation template failed to parse.
+
+    Distinguishes a malformed CFN *candidate* (which must surface as a parse
+    error so the scan does not silently drop a real misconfig) from a file that
+    merely is not CloudFormation (a legitimate silent skip).
+    """
+
+
+def _looks_like_cfn_text(text: str) -> bool:
+    """Heuristic over raw text: does an *unparseable* file look intended as CFN?
+
+    Used only when YAML/JSON parsing fails, so the parsed shape is unavailable.
+    Requires a CloudFormation top-level marker (``AWSTemplateFormatVersion`` or a
+    ``Resources`` key) so arbitrary malformed YAML/JSON stays a silent skip.
+    """
+
+    return "AWSTemplateFormatVersion" in text or "Resources:" in text or '"Resources"' in text
+
+
 def _load_cfn(path: Path) -> dict[str, Any] | None:
-    """Parse one candidate file. Return the template dict, or ``None`` if not CFN."""
+    """Parse one candidate file.
+
+    Return the template dict, or ``None`` if the file is simply not a
+    CloudFormation template (a legitimate silent skip). Raise
+    :class:`CfnParseError` if the file *looks* intended as CloudFormation but
+    failed to parse, so the caller can surface it instead of dropping it.
+    """
 
     text = path.read_text(encoding="utf-8", errors="replace")
     if path.suffix.lower() == ".json":
         try:
             parsed = _json.loads(text)
-        except _json.JSONDecodeError:
+        except _json.JSONDecodeError as exc:
+            if _looks_like_cfn_text(text):
+                raise CfnParseError(f"invalid JSON: {exc}") from exc
             return None
         return parsed if _looks_like_cfn(parsed) else None
     try:
@@ -182,7 +210,9 @@ def _load_cfn(path: Path) -> dict[str, Any] | None:
         # SafeLoader semantics are preserved; yaml.load is required so the
         # custom Loader= argument can be passed (yaml.safe_load forbids it).
         parsed = yaml.load(text, Loader=_CfnSafeLoader)  # nosec B506
-    except yaml.YAMLError:
+    except yaml.YAMLError as exc:
+        if _looks_like_cfn_text(text):
+            raise CfnParseError(f"invalid YAML: {exc}") from exc
         return None
     return parsed if _looks_like_cfn(parsed) else None
 
@@ -579,7 +609,7 @@ def run_scan(
     for f in files:
         try:
             tpl = _load_cfn(f)
-        except OSError as exc:
+        except (OSError, CfnParseError) as exc:
             parse_errors.append({"file": _normalize_target(repo_root, f), "error": str(exc)})
             continue
         if tpl is None:

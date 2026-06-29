@@ -82,7 +82,7 @@ def _load_evaluation_report(target: Path, explicit_report: Path | None) -> dict[
         if c.is_file():
             try:
                 parsed = json.loads(c.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError) as exc:
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
                 raise InvalidInputError(f"Failed to parse {c}: {exc}") from exc
             if not isinstance(parsed, dict):
                 raise InvalidInputError(
@@ -134,6 +134,19 @@ def _render_chainloop(report: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# reports/2.0 state (normalized upper-case, hyphens -> underscores) -> SARIF level.
+# FAIL and MANUAL_REVIEW_REQUIRED are actionable (error/warning); everything else is a note.
+_SARIF_LEVEL_MAP: dict[str, str] = {
+    "FAIL": "error",
+    "MANUAL_REVIEW_REQUIRED": "warning",
+}
+
+
+def _sarif_level(state: str) -> str:
+    """Map a normalized control state to a SARIF result level (default ``note``)."""
+    return _SARIF_LEVEL_MAP.get(state, "note")
+
+
 def _render_sarif(report: dict[str, Any]) -> dict[str, Any]:
     """Re-export the report's SARIF projection, if present.
 
@@ -149,20 +162,28 @@ def _render_sarif(report: dict[str, Any]) -> dict[str, Any]:
             "version": "2.1.0",
             "runs": runs,
         }
-    # Synthesize from controls.
+    # Synthesize from controls. reports/2.0 controls use ``state``/``message``;
+    # fall back to reports/1.0 ``status``/``reason`` for legacy inputs.
     results = []
+    rule_ids: list[str] = []
+    seen_rules: set[str] = set()
     for c in report.get("controls", []) or []:
         if not isinstance(c, dict):
             continue
-        status = c.get("status", "unknown")
-        level = "warning" if status in {"fail", "manual-review-required"} else "note"
+        state = str(c.get("state") or c.get("status") or "unknown").strip().upper().replace("-", "_")
+        level = _sarif_level(state)
+        rule_id = str(c.get("id", "UNKNOWN"))
+        text = c.get("message") or c.get("reason") or ""
         results.append(
             {
-                "ruleId": c.get("id", "UNKNOWN"),
+                "ruleId": rule_id,
                 "level": level,
-                "message": {"text": c.get("reason", "")},
+                "message": {"text": str(text)},
             }
         )
+        if rule_id not in seen_rules:
+            seen_rules.add(rule_id)
+            rule_ids.append(rule_id)
     return {
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
         "version": "2.1.0",
@@ -172,6 +193,7 @@ def _render_sarif(report: dict[str, Any]) -> dict[str, Any]:
                     "driver": {
                         "name": "oss-policy-kit",
                         "informationUri": "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit",
+                        "rules": [{"id": rid} for rid in rule_ids],
                     }
                 },
                 "results": results,
@@ -681,6 +703,20 @@ def _run_export_evidence(target: Path, fmt: str, output: Path, report: Path | No
         raise InvalidInputError(f"Unsupported --format {fmt!r}. Supported: {', '.join(_SUPPORTED_FORMATS)}.")
 
     report_data = _load_evaluation_report(target_path, report)
+
+    if validate:
+        # Fail-closed gate so every format is consistent: validating a contentless
+        # report (0 controls) silently produced an "empty" but structurally valid
+        # oscal/spdx/sarif document, while gemara already rejected it. Reject here
+        # (exit 2) before rendering so all formats behave the same under --validate.
+        controls = report_data.get("controls")
+        if not isinstance(controls, list) or not controls:
+            raise InvalidInputError(
+                "Evaluation report has no controls to export. Run "
+                "`oss-policy-kit evaluate --target <repo>` to produce a report with results, "
+                "or pass a non-empty --report."
+            )
+
     rendered = _RENDERERS[fmt](report_data)
 
     if validate:
@@ -691,7 +727,12 @@ def _run_export_evidence(target: Path, fmt: str, output: Path, report: Path | No
                 c.print(f"[red]export-evidence validation error:[/red] {e}")
             raise typer.Exit(code=1)
 
-    output.write_text(json.dumps(rendered, indent=2) + "\n", encoding="utf-8")
+    try:
+        output.write_text(json.dumps(rendered, indent=2) + "\n", encoding="utf-8")
+    except OSError as exc:
+        # A filesystem error on a user-supplied --output path is a usage error
+        # (exit 2), not an internal crash (exit 3). Use exc.strerror, not the path.
+        raise InvalidInputError(f"Cannot write --output: {exc.strerror or 'filesystem error'}") from exc
     if fmt == "chainloop":
         c = stderr_console()
         c.print(

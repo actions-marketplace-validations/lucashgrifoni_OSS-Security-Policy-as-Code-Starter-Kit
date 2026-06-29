@@ -574,7 +574,7 @@ def eval_sast_semgrep_064(ctx: EvalContext) -> EvalOutcome:
 
     try:
         data = json.loads(evidence.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         return EvalOutcome(
             status=ControlStatus.MANUAL_REVIEW_REQUIRED,
             reason=f"Could not parse Semgrep evidence file: {exc}",
@@ -633,7 +633,7 @@ def eval_sast_semgrep_064(ctx: EvalContext) -> EvalOutcome:
             ),
             remediation=(
                 "Review evaluation-report.md and fix HIGH/CRITICAL findings, or document an "
-                "explicit waiver in waivers.yaml with owner, reason, and expires_on."
+                "explicit waiver in waivers.yaml with owner, justification, and expires_at."
             ),
             evidence_sources=[str(evidence.resolve())],
             confidence="high",

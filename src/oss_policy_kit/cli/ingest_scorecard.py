@@ -25,6 +25,7 @@ from typing import Any
 
 import typer
 
+from oss_policy_kit.application.input_limits import MAX_EVIDENCE_BYTES, oversize_reason
 from oss_policy_kit.application.scorecard_ingest import (
     EVIDENCE_MAX_AGE_DAYS,
     ScorecardIngestReport,
@@ -138,6 +139,10 @@ def _run_ingest_scorecard(target: Path, input_path: Path | None, output_format: 
         else:
             _render_not_found(target_path)
         return
+
+    r = oversize_reason(chosen, MAX_EVIDENCE_BYTES, label="Scorecard JSON")
+    if r:
+        raise InvalidInputError(r)
 
     try:
         report = ingest_scorecard(chosen, now=datetime.now(UTC))

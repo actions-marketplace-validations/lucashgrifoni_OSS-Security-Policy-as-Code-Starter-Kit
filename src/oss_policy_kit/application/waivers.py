@@ -83,7 +83,9 @@ def _parse_waiver_record(idx: int, item: object, today: date, warnings: list[str
     if not cid:
         warnings.append(f"Waiver entry {idx} ignored: missing control_id")
         return None
-    justification = str(item.get("justification", "")).strip()
+    # Accept both the canonical ``justification`` key and the legacy ``reason``
+    # spelling that the scaffolded stub/docs historically documented (v9.0.2).
+    justification = str(item.get("justification") or item.get("reason") or "").strip()
     if not justification:
         warnings.append(f"Waiver for {cid} ignored: empty justification")
         return None
@@ -91,8 +93,10 @@ def _parse_waiver_record(idx: int, item: object, today: date, warnings: list[str
     if not owner:
         warnings.append(f"Waiver for {cid} ignored: empty owner")
         return None
+    # Accept the canonical ``expires_at`` key and the legacy ``expires_on`` spelling.
+    expires_value = item.get("expires_at") if "expires_at" in item else item.get("expires_on")
     try:
-        expires_at = _parse_date(item.get("expires_at"))
+        expires_at = _parse_date(expires_value)
     except ValueError as exc:
         warnings.append(f"Waiver for {cid} ignored: invalid expires_at ({exc})")
         return None

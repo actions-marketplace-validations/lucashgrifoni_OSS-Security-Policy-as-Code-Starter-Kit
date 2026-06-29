@@ -58,7 +58,7 @@ def _load_evidence(repo_root: Path) -> tuple[dict[str, Any] | None, EvalOutcome 
         )
     try:
         data = json.loads(evidence.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         return None, EvalOutcome(
             status=ControlStatus.MANUAL_REVIEW_REQUIRED,
             reason=f"Could not parse Terraform IaC evidence file: {exc}",
@@ -139,7 +139,7 @@ def _make_iac_evaluator(rule_id: str, summary: str) -> Callable[[Any], EvalOutco
             reason=(f"{rule_id} ({summary}) raised {count} finding(s) on the scanned Terraform sources.{files_hint}"),
             remediation=(
                 "Review evaluation-report.md for details and remediate the listed resources, "
-                "or document an explicit waiver in waivers.yaml with owner, reason, and expires_on."
+                "or document an explicit waiver in waivers.yaml with owner, justification, and expires_at."
             ),
             evidence_sources=sources,
             confidence="high",

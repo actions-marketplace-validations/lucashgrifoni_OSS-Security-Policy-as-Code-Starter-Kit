@@ -104,7 +104,7 @@ def validate_json_evidence(
         return None, oversize, []
     try:
         data = json.loads(evidence.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         return None, f"{evidence_name} evidence is unreadable or invalid JSON: {exc}", []
     if not isinstance(data, dict):
         return None, f"{evidence_name} evidence root must be a JSON object.", []

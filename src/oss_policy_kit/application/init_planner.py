@@ -23,11 +23,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from oss_policy_kit.application.loader import (
+    bundled_kit_root,
+    resolve_profile_file,
+)
 from oss_policy_kit.application.profile_hints import (
     ProfileRecommendation,
     build_profile_recommendation,
 )
-from oss_policy_kit.domain.errors import InvalidInputError
+from oss_policy_kit.domain.errors import InvalidInputError, LoadError
 
 #: Schema version for the persisted ``oss-policy-kit.yaml`` config file.
 CONFIG_SCHEMA_VERSION = "oss-policy-kit/config/v1"
@@ -219,6 +223,33 @@ def _pick_profile(
     return DEFAULT_FALLBACK_PROFILE, "fallback"
 
 
+def _validate_user_profile(profile_id: str) -> None:
+    """Reject an unknown ``--profile`` before any filesystem write (incl. dry-run).
+
+    Uses the SAME lookup ``evaluate`` relies on so the two commands agree on what
+    is a valid profile:
+
+    - An external YAML path (``.yaml`` / ``.yml`` that exists on disk) is accepted
+      verbatim; ``evaluate`` loads it directly via :func:`load_profile_by_id`.
+    - Otherwise the value must resolve to a bundled
+      ``data/profiles/<id>/profile.yaml`` through
+      :func:`resolve_profile_file`, which also honors deprecated aliases (e.g.
+      ``cra-eu-ready-2-1``). A miss is converted into a friendly
+      :class:`InvalidInputError` (exit 2) instead of writing a poisoned
+      ``oss-policy-kit.yaml`` that ``evaluate`` would later reject.
+    """
+
+    candidate = Path(profile_id)
+    if candidate.suffix.lower() in {".yaml", ".yml"} and candidate.is_file():
+        return
+    try:
+        resolve_profile_file(bundled_kit_root(), profile_id)
+    except LoadError as exc:
+        raise InvalidInputError(
+            f"Unknown profile '{profile_id}'. Run 'oss-policy-kit profiles' to list available ids."
+        ) from exc
+
+
 def _detect_platform_from_signals(signals: list[dict[str, str]]) -> str:
     """Pick the strongest platform from the list of detected signal IDs.
 
@@ -315,6 +346,13 @@ def build_init_plan(
         forced_platform=platform_forced,
         recommendation=recommendation,
     )
+
+    # A user-supplied --profile must be a real bundled id (or external YAML path)
+    # before we write oss-policy-kit.yaml. Validating here — using the same lookup
+    # evaluate uses — keeps init from emitting a poisoned config that evaluate would
+    # later reject, and runs ahead of every write path (including --dry-run).
+    if profile_source == "user":
+        _validate_user_profile(profile)
 
     # Workflow generation only makes sense for GitHub in this iteration
     # because the bundled templates live under ``.github/workflows/``. We

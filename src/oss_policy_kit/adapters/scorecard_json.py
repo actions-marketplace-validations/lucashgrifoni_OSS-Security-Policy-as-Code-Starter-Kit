@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from oss_policy_kit.domain.errors import LoadError
 from oss_policy_kit.infrastructure.yaml_io import load_yaml_file
 
 
@@ -87,8 +88,14 @@ def _coerce_date(value: Any) -> str | None:
 def load_scorecard_json(path: Path) -> ScorecardBundle:
     """Load Scorecard JSON (common CLI export shapes)."""
 
-    text = path.read_text(encoding="utf-8")
-    data = json.loads(text)
+    try:
+        text = path.read_text(encoding="utf-8")
+        data = json.loads(text)
+    except UnicodeDecodeError as exc:
+        # UTF-16/non-UTF-8 input: surface a clean LoadError (-> exit 2) instead of an exit-3
+        # crash. OSError and json.JSONDecodeError keep propagating to the existing evaluate-path
+        # handler (cli/common.py) which already renders the friendly "could not be parsed" message.
+        raise LoadError(f"Scorecard JSON {path.name} could not be decoded as UTF-8: {exc}") from exc
     checks: list[ScorecardCheck] = []
     aggregate: float | None = None
     result_date: str | None = None

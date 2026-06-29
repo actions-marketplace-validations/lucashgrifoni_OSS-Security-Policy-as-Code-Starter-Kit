@@ -43,7 +43,7 @@ import yaml
 from oss_policy_kit.application.insights_evidence import INSIGHTS_SCHEMA_VERSION as _INSIGHTS_SCHEMA_VERSION
 from oss_policy_kit.cli.common import app, stderr_console, write_stdout_text
 from oss_policy_kit.cli.help_text import CMD_PANEL_EXPORT
-from oss_policy_kit.domain.errors import InvalidInputError
+from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
 
 _GITHUB_DIR = ".github"
 
@@ -251,6 +251,32 @@ def _build_insights_fragment(target: Path) -> dict[str, Any]:
     return doc
 
 
+def _run_emit_insights(target: Path, output: Path, validate: bool, merge: bool) -> None:
+    target_path = target.resolve()
+    if not target_path.is_dir():
+        raise InvalidInputError(f"--target {target_path} is not a directory.")
+
+    if merge:
+        fragment = _build_insights_fragment(target_path)
+        yaml_text = _FRAGMENT_BANNER + yaml.safe_dump(fragment, sort_keys=True, allow_unicode=True)
+        output.write_text(yaml_text, encoding="utf-8")
+        write_stdout_text(f"emit-insights: wrote merge fragment {output}\n")
+        return
+
+    doc = _build_insights_document(target_path)
+    if validate:
+        errs = _validate_insights_structure(doc)
+        if errs:
+            c = stderr_console()
+            for e in errs:
+                c.print(f"[red]insights validation error:[/red] {e}")
+            raise typer.Exit(code=1)
+
+    yaml_text = yaml.safe_dump(doc, sort_keys=False, allow_unicode=True)
+    output.write_text(yaml_text, encoding="utf-8")
+    write_stdout_text(f"emit-insights: wrote {output}\n")
+
+
 @app.command("emit-insights", rich_help_panel=CMD_PANEL_EXPORT)
 def emit_insights_cmd(
     target: Path = typer.Option(
@@ -282,27 +308,20 @@ def emit_insights_cmd(
 
     PR-8 (Onda 2, V6-03) — see docs/insights-emission.md for adopter guidance.
     With --merge, emit a partial fragment (clone-backed fields only) instead.
+
+    Exit codes: 0 success; 1 validation failure (--validate); 2 usage error
+    (bad --target or unwritable --output); 3 unexpected internal error.
     """
-    target_path = target.resolve()
-    if not target_path.is_dir():
-        raise InvalidInputError(f"--target {target_path} is not a directory.")
-
-    if merge:
-        fragment = _build_insights_fragment(target_path)
-        yaml_text = _FRAGMENT_BANNER + yaml.safe_dump(fragment, sort_keys=True, allow_unicode=True)
-        output.write_text(yaml_text, encoding="utf-8")
-        write_stdout_text(f"emit-insights: wrote merge fragment {output}\n")
-        return
-
-    doc = _build_insights_document(target_path)
-    if validate:
-        errs = _validate_insights_structure(doc)
-        if errs:
-            c = stderr_console()
-            for e in errs:
-                c.print(f"[red]insights validation error:[/red] {e}")
-            raise typer.Exit(code=1)
-
-    yaml_text = yaml.safe_dump(doc, sort_keys=False, allow_unicode=True)
-    output.write_text(yaml_text, encoding="utf-8")
-    write_stdout_text(f"emit-insights: wrote {output}\n")
+    try:
+        _run_emit_insights(target, output, validate, merge)
+    except OssPolicyKitError as exc:
+        stderr_console().print(f"[red]Error:[/red] {exc.message}")
+        raise typer.Exit(code=2) from exc
+    except typer.Exit:
+        raise
+    except OSError as exc:
+        stderr_console().print(f"[red]Error:[/red] cannot write output ({exc.strerror or 'filesystem error'}).")
+        raise typer.Exit(code=2) from exc
+    except Exception as exc:  # noqa: BLE001 - last-resort user message, no traceback leak
+        stderr_console().print(f"[red]Unexpected error:[/red] {exc}")
+        raise typer.Exit(code=3) from exc
