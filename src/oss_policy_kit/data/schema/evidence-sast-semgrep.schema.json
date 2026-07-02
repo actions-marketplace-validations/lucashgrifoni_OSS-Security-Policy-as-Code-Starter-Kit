@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oss-policy-kit/schemas/evidence-sast-semgrep.schema.json",
+  "title": "Semgrep SAST scan evidence",
+  "description": "Versioned shape of .oss-policy-kit/evidence/sast-semgrep.json written by `oss-policy-kit scan-sast` and consumed by the SAST-SEMGREP-064 evaluator and the finding-normalization layer. Severity is Semgrep's own pass-through vocabulary (INFO | WARNING | ERROR today); normalization to the kit vocabulary happens in the x-severity-map, never in this contract.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "tool",
+    "status",
+    "target",
+    "scanned_at",
+    "attested_at",
+    "attested_by",
+    "findings_total",
+    "findings"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^oss-policy-kit/evidence/sast-semgrep/v\\d+$"
+    },
+    "tool": { "type": "string", "const": "semgrep" },
+    "tool_version": { "type": ["string", "null"] },
+    "status": {
+      "type": "string",
+      "enum": ["ok", "not_available", "error", "timeout"]
+    },
+    "rulesets": { "type": "array", "items": { "type": "string" } },
+    "target": { "type": "string", "minLength": 1 },
+    "scanned_at": { "type": "string", "minLength": 1 },
+    "attested_at": { "type": "string", "minLength": 1 },
+    "attested_by": { "type": "string", "minLength": 1 },
+    "findings_total": { "type": "integer", "minimum": 0 },
+    "findings_by_severity": {
+      "type": "object",
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["rule_id", "severity", "message", "file", "line_start", "line_end", "cwe", "owasp"],
+        "additionalProperties": false,
+        "properties": {
+          "rule_id": { "type": "string", "minLength": 1 },
+          "severity": { "type": "string", "minLength": 1 },
+          "message": { "type": "string" },
+          "file": { "type": "string" },
+          "line_start": { "type": "integer", "minimum": 0 },
+          "line_end": { "type": "integer", "minimum": 0 },
+          "cwe": { "type": "array", "items": { "type": "string" } },
+          "owasp": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "diagnostics": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "raw_stderr_excerpt": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

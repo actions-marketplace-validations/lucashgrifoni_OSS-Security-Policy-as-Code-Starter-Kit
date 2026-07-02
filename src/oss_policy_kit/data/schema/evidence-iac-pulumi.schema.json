@@ -62,7 +62,8 @@
           "message": { "type": "string", "minLength": 1 },
           "file": { "type": "string" },
           "resource_type": { "type": "string" },
-          "resource_name": { "type": "string" }
+          "resource_name": { "type": "string" },
+          "line_start": { "type": ["integer", "null"], "minimum": 1 }
         }
       }
     },

@@ -55,6 +55,9 @@ class PulumiFinding:
     file: str
     resource_type: str
     resource_name: str
+    # Source line of the resource constructor call (v9.x captured it in PulumiCall but
+    # dropped it at the evidence boundary; surfaced additively for the finding model).
+    line_start: int | None = None
 
 
 @dataclass(slots=True)
@@ -238,6 +241,7 @@ def _pulumi_finding(rule_id: str, severity: str, message: str, *, repo_root: Pat
         file=_normalize_target(repo_root, c.source),
         resource_type=c.resource_type,
         resource_name=c.resource_name,
+        line_start=c.line if c.line > 0 else None,
     )
 
 
@@ -288,6 +292,7 @@ def _rule_iac_pul_001_public_storage(repo_root: Path, calls: list[PulumiCall]) -
                     file=_normalize_target(repo_root, c.source),
                     resource_type=c.resource_type,
                     resource_name=c.resource_name,
+                    line_start=c.line if c.line > 0 else None,
                 )
             )
     return findings
@@ -396,6 +401,7 @@ def _rule_iac_pul_005_default_network(repo_root: Path, calls: list[PulumiCall]) 
                     file=_normalize_target(repo_root, c.source),
                     resource_type=c.resource_type,
                     resource_name=c.resource_name,
+                    line_start=c.line if c.line > 0 else None,
                 )
             )
     return findings
@@ -415,6 +421,7 @@ def _rule_iac_pul_006_public_ip(repo_root: Path, calls: list[PulumiCall]) -> lis
                         file=_normalize_target(repo_root, c.source),
                         resource_type=c.resource_type,
                         resource_name=c.resource_name,
+                        line_start=c.line if c.line > 0 else None,
                     )
                 )
         elif _is_instance(c):
@@ -428,6 +435,7 @@ def _rule_iac_pul_006_public_ip(repo_root: Path, calls: list[PulumiCall]) -> lis
                         file=_normalize_target(repo_root, c.source),
                         resource_type=c.resource_type,
                         resource_name=c.resource_name,
+                        line_start=c.line if c.line > 0 else None,
                     )
                 )
     return findings
