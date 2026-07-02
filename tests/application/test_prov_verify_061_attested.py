@@ -9,19 +9,19 @@ FAIL / MANUAL_REVIEW_REQUIRED outcome and never becomes ATTESTED.
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 from oss_policy_kit.application.engine import evaluate_repository
 from oss_policy_kit.application.evaluators import EvalContext, eval_prov_verify_061
 from oss_policy_kit.application.loader import ProfileSpec, bundled_kit_root, load_catalog
-from oss_policy_kit.domain.models import ControlStatus
+from oss_policy_kit.domain.models import ControlStatus, utc_now
 from oss_policy_kit.infrastructure.aws_ci_parser import AwsCiAnalysis
 from oss_policy_kit.infrastructure.azure_pipeline_parser import AzurePipelineAnalysis
 from oss_policy_kit.infrastructure.workflow_parser import WorkflowAnalysis
 
 _CATALOG = load_catalog(bundled_kit_root() / "controls" / "catalog.yaml")
-_FRESH_TS = (datetime.now(UTC) - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+_FRESH_TS = (utc_now() - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _ctx(tmp_path: Path, *, enable_attested: bool) -> EvalContext:
@@ -104,7 +104,7 @@ def test_no_transparency_log_stays_fail_even_with_attested(tmp_path: Path) -> No
 
 
 def test_stale_verification_stays_fail_even_with_attested(tmp_path: Path) -> None:
-    stale = (datetime.now(UTC) - timedelta(days=200)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    stale = (utc_now() - timedelta(days=200)).strftime("%Y-%m-%dT%H:%M:%SZ")
     _write_evidence(tmp_path, _gh_payload(verified_at=stale))
     out = eval_prov_verify_061(_ctx(tmp_path, enable_attested=True))
     assert out.status == ControlStatus.FAIL

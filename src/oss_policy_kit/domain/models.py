@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from enum import StrEnum
@@ -127,7 +128,28 @@ class ExecutionReport:
     weighted_score: WeightedScore | None = None
 
 
-def utc_today() -> date:
-    """Current UTC date for waiver expiry checks."""
+def utc_now() -> datetime:
+    """Current UTC datetime, honouring ``SOURCE_DATE_EPOCH`` (reproducible builds).
 
-    return datetime.now(UTC).date()
+    Every clock read that can change an evaluation OUTCOME (evidence freshness,
+    waiver expiry, attestation-freshness windows) flows through this helper so a
+    reproducible-build environment — or the test suite — can pin the evaluation
+    date via the standard ``SOURCE_DATE_EPOCH`` environment variable. With the
+    variable unset, behaviour is unchanged (``datetime.now(UTC)``).
+    """
+
+    raw = os.environ.get("SOURCE_DATE_EPOCH")
+    if raw:
+        try:
+            epoch = int(raw.strip())
+        except ValueError:
+            epoch = -1
+        if epoch >= 0:
+            return datetime.fromtimestamp(epoch, tz=UTC)
+    return datetime.now(UTC)
+
+
+def utc_today() -> date:
+    """Current UTC date for waiver expiry checks (honours ``SOURCE_DATE_EPOCH``)."""
+
+    return utc_now().date()

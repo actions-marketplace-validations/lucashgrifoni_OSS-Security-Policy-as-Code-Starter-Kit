@@ -11,7 +11,7 @@ from datetime import date
 from pathlib import Path
 
 from oss_policy_kit.application.evaluators import governance as gov
-from oss_policy_kit.domain.models import ControlStatus, EvidenceCollectionMethod
+from oss_policy_kit.domain.models import ControlStatus, EvidenceCollectionMethod, utc_now
 from oss_policy_kit.infrastructure.aws_ci_parser import AwsCiAnalysis
 from oss_policy_kit.infrastructure.azure_pipeline_parser import AzurePipelineAnalysis
 from oss_policy_kit.infrastructure.workflow_parser import WorkflowAnalysis
@@ -83,7 +83,7 @@ def test_evidfresh_054_undated_when_json_is_list(tmp_path: Path) -> None:
 
 def test_evidfresh_054_zero_max_age_falls_back(tmp_path: Path) -> None:
     """Negative max_age resets to the default window, so a fresh file PASSes (line 351)."""
-    _evid(tmp_path, "fresh.json", {"collected_at": date.today().isoformat()})
+    _evid(tmp_path, "fresh.json", {"collected_at": utc_now().date().isoformat()})
     out = gov.eval_gov_evidfresh_054(_ctx(tmp_path, max_age=-1))
     assert out.status == ControlStatus.PASS
 

@@ -43,7 +43,7 @@ from oss_policy_kit.application.evidence_loading import load_evidence_schema
 from oss_policy_kit.application.evidence_placeholders import has_placeholder_values, is_placeholder_digest
 from oss_policy_kit.application.input_limits import MAX_SARIF_BYTES, oversize_reason
 from oss_policy_kit.application.insights_evidence import InsightsEvidence
-from oss_policy_kit.domain.models import ControlStatus, EvalOutcome, EvidenceCollectionMethod
+from oss_policy_kit.domain.models import ControlStatus, EvalOutcome, EvidenceCollectionMethod, utc_now
 from oss_policy_kit.infrastructure.aws_ci_parser import AwsCiAnalysis
 from oss_policy_kit.infrastructure.azure_pipeline_parser import AzurePipelineAnalysis
 from oss_policy_kit.infrastructure.gitlab_ci_parser import GitLabCiAnalysis
@@ -981,7 +981,7 @@ def _verification_freshness_status(verified_at: str, *, max_age_days: int) -> st
         return "unparseable"
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=UTC)
-    now = datetime.now(UTC)
+    now = utc_now()
     age = (now - dt).days
     if age < 0:
         return "future"

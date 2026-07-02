@@ -8,13 +8,13 @@ windows) are easier to pin down — and keep pinned — with focused unit tests.
 from __future__ import annotations
 
 import json
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
 
 from oss_policy_kit.application.evaluators import _shared as s
-from oss_policy_kit.domain.models import ControlStatus
+from oss_policy_kit.domain.models import ControlStatus, utc_now
 from oss_policy_kit.infrastructure.aws_ci_parser import AwsCiAnalysis
 from oss_policy_kit.infrastructure.azure_pipeline_parser import AzurePipelineAnalysis
 from oss_policy_kit.infrastructure.gitlab_ci_parser import GitLabCiAnalysis
@@ -335,7 +335,7 @@ def test_prov_verify_lookup_order() -> None:
 
 
 def test_verification_freshness_status() -> None:
-    now = datetime.now(UTC)
+    now = utc_now()
     assert s._verification_freshness_status((now - timedelta(days=1)).isoformat(), max_age_days=90) == "fresh"
     assert s._verification_freshness_status((now - timedelta(days=200)).isoformat(), max_age_days=90) == "stale"
     assert s._verification_freshness_status((now + timedelta(days=5)).isoformat(), max_age_days=90) == "future"

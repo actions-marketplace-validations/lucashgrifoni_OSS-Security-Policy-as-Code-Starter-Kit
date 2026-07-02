@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from oss_policy_kit.domain.models import ControlResult, ControlStatus
+from oss_policy_kit.domain.models import ControlResult, ControlStatus, utc_now
 
 EVIDENCE_PROVENANCE_VERSION = "evidence/2.0"
 
@@ -131,7 +131,7 @@ def _freshness_status(
         return "not_applicable"
     if collected_at is None:
         return "unknown"
-    now = datetime.now(UTC)
+    now = utc_now()
     if now - collected_at > timedelta(days=ctx.window_days):
         return "stale"
     return "fresh"

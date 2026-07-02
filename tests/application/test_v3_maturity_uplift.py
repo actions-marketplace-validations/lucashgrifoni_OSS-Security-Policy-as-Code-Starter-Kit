@@ -13,7 +13,7 @@ or ambiguous, while preserving legitimate PASS/SELF_ATTESTED paths when real evi
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 from textwrap import dedent
 
@@ -37,7 +37,7 @@ from oss_policy_kit.application.evaluators import (
     eval_gov_evidfresh_054,
     eval_org_mfa_001,
 )
-from oss_policy_kit.domain.models import ControlStatus
+from oss_policy_kit.domain.models import ControlStatus, utc_now
 from oss_policy_kit.infrastructure.aws_ci_parser import (
     AwsCiAnalysis,
     analyze_aws_ci,
@@ -773,7 +773,7 @@ def test_az_wifev_057_accepts_populated_proof_fields(tmp_path: Path) -> None:
 
 
 def test_gov_evidfresh_054_uses_configured_max_age(tmp_path: Path) -> None:
-    stale_day = (datetime.now(UTC).date() - timedelta(days=45)).isoformat()
+    stale_day = (utc_now().date() - timedelta(days=45)).isoformat()
     _write_evidence(
         tmp_path,
         "branch-protection.json",
@@ -800,7 +800,7 @@ def test_gov_evidfresh_054_uses_configured_max_age(tmp_path: Path) -> None:
 
 
 def test_gov_evidfresh_054_warns_when_close_to_expiry(tmp_path: Path) -> None:
-    recent_but_near_expiry = (datetime.now(UTC).date() - timedelta(days=80)).isoformat()
+    recent_but_near_expiry = (utc_now().date() - timedelta(days=80)).isoformat()
     _write_evidence(
         tmp_path,
         "branch-protection.json",

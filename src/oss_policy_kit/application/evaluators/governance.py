@@ -15,7 +15,6 @@ from oss_policy_kit.application.evaluators._shared import (
     _SCORECARD_MIN_SCORE,
     _SHA_PIN_PATTERN,
     _SUPPLEMENTAL_SIGNAL_WARN,
-    UTC,
     Any,
     Callable,
     ControlStatus,
@@ -52,10 +51,10 @@ from oss_policy_kit.application.evaluators._shared import (
     _workflow_text,
     checks_as_map,
     contextlib,
-    datetime,
     insights_self_attested_outcome,
     json,
 )
+from oss_policy_kit.domain.models import utc_now
 
 _GITHUB_DIR = ".github"
 _KIT_DIR = ".oss-policy-kit"
@@ -378,7 +377,7 @@ def eval_gov_evidfresh_054(ctx: EvalContext) -> EvalOutcome:
             confidence="high",
         )
 
-    today = datetime.now(UTC).date()
+    today = utc_now().date()
     max_age = int(ctx.evidence_max_age_days) if ctx.evidence_max_age_days else _EVIDENCE_MAX_AGE_DAYS
     if max_age <= 0:
         max_age = _EVIDENCE_MAX_AGE_DAYS

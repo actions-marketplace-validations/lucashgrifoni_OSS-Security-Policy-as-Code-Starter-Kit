@@ -12,7 +12,7 @@ be a regression.
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 from oss_policy_kit.application.evidence_placeholders import (
@@ -20,7 +20,7 @@ from oss_policy_kit.application.evidence_placeholders import (
     is_placeholder_digest,
 )
 from oss_policy_kit.application.evidence_projection import project_evidence
-from oss_policy_kit.domain.models import ControlResult, ControlStatus
+from oss_policy_kit.domain.models import ControlResult, ControlStatus, utc_now
 
 
 def _result(
@@ -114,7 +114,7 @@ def test_azure_live_evidence_fresh_projects_to_verified() -> None:
             method="live",
             sources=[".oss-policy-kit/evidence/azure-branch-policies.json"],
             extra={
-                "collected_at": datetime.now(UTC).isoformat(),
+                "collected_at": utc_now().isoformat(),
                 "attested_by": "azure-devops-api-collection",
             },
         )
@@ -126,7 +126,7 @@ def test_azure_live_evidence_fresh_projects_to_verified() -> None:
 
 
 def test_azure_live_evidence_stale_drops_to_declared() -> None:
-    old = datetime.now(UTC) - timedelta(days=180)
+    old = utc_now() - timedelta(days=180)
     ev = project_evidence(
         _result(
             cid="AZ-PLAT-035",
@@ -146,7 +146,7 @@ def test_aws_live_evidence_fresh_projects_to_verified() -> None:
             method="live",
             sources=[".oss-policy-kit/evidence/aws-codepipeline.json"],
             extra={
-                "collected_at": datetime.now(UTC).isoformat(),
+                "collected_at": utc_now().isoformat(),
                 "attested_by": "aws-codepipeline-api-collection",
             },
         )
@@ -163,7 +163,7 @@ def test_aws_manual_evidence_caps_at_declared_self_attested() -> None:
             cid="AWS-CB-045",
             method="manual",
             sources=[".oss-policy-kit/evidence/aws-codebuild-project.json"],
-            extra={"collected_at": datetime.now(UTC).isoformat()},
+            extra={"collected_at": utc_now().isoformat()},
         )
     )
     assert ev["source_type"] == "user_supplied"

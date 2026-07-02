@@ -38,6 +38,7 @@ from oss_policy_kit.application.input_limits import MAX_SARIF_BYTES, oversize_re
 from oss_policy_kit.cli.common import app, stderr_console, write_stdout_text
 from oss_policy_kit.cli.help_text import CMD_PANEL_EXPORT
 from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
+from oss_policy_kit.domain.models import utc_today
 from oss_policy_kit.infrastructure.yaml_io import load_yaml_file
 
 # Canonical evidence path the SAST-OSV-068 adapter consumes.
@@ -289,7 +290,7 @@ def _load_vuln_waivers(path: Path) -> tuple[dict[str, _VulnWaiver], list[str]]:
     entries = raw.get("waivers")
     if not isinstance(entries, list):
         return {}, warnings
-    today = datetime.now(UTC).date()
+    today = utc_today()
     out: dict[str, _VulnWaiver] = {}
     for idx, item in enumerate(entries):
         parsed = _parse_vuln_waiver_entry(idx, item, today, warnings)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 from oss_policy_kit.application.evidence_projection import (
     DEFAULT_FRESHNESS_WINDOW_DAYS,
@@ -12,7 +12,7 @@ from oss_policy_kit.application.evidence_projection import (
     normalize_confidence,
     project_evidence,
 )
-from oss_policy_kit.domain.models import ControlResult, ControlStatus
+from oss_policy_kit.domain.models import ControlResult, ControlStatus, utc_now
 
 
 def _r(
@@ -80,7 +80,7 @@ def test_api_collected_fresh_with_attestation_is_verified() -> None:
             assurance="evidence-backed",
             method="live",
             sources=[".oss-policy-kit/evidence/branch-protection.json"],
-            extra={"collected_at": datetime.now(UTC).isoformat(), "attested_by": "github-api"},
+            extra={"collected_at": utc_now().isoformat(), "attested_by": "github-api"},
         )
     )
     assert ev["source_type"] == "api_collected"
@@ -90,7 +90,7 @@ def test_api_collected_fresh_with_attestation_is_verified() -> None:
 
 
 def test_api_collected_stale_drops_to_declared() -> None:
-    old = datetime.now(UTC) - timedelta(days=DEFAULT_FRESHNESS_WINDOW_DAYS + 5)
+    old = utc_now() - timedelta(days=DEFAULT_FRESHNESS_WINDOW_DAYS + 5)
     ev = project_evidence(
         _r(
             cid="PLAT-BRPROT-015",
@@ -215,7 +215,7 @@ def test_gate_role_mapping_is_complete() -> None:
 def test_freshness_context_override_applies() -> None:
     """Custom freshness window can tighten the staleness boundary."""
 
-    recent = (datetime.now(UTC) - timedelta(days=10)).isoformat()
+    recent = (utc_now() - timedelta(days=10)).isoformat()
     r = _r(
         cid="PLAT-BRPROT-015",
         assurance="evidence-backed",

@@ -1,6 +1,16 @@
 """Shared pytest fixtures."""
 
+import os
 from pathlib import Path
+
+# Freeze the evaluation clock for the whole suite (incl. subprocess CLI tests, which
+# inherit the environment). The kit honours SOURCE_DATE_EPOCH (reproducible-builds
+# convention; see domain.models.utc_now) for every outcome-affecting clock read —
+# evidence freshness, waiver expiry, attestation windows, report generated_at. Pinning
+# it here makes fixture dates in tests/ and examples/ immune to calendar rot (the
+# GOV-EVIDFRESH-054 90-day window silently expired on 2026-07-01 and broke the suite).
+# 1781524800 == 2026-06-15T12:00:00Z; every bundled fixture date is on or before it.
+os.environ.setdefault("SOURCE_DATE_EPOCH", "1781524800")
 
 import pytest
 
