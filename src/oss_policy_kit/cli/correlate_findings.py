@@ -1,0 +1,195 @@
+"""``oss-policy-kit correlate-findings`` subcommand (ADR-030 A-S6).
+
+The first user-visible surface of the normalized finding model. It reads the
+scanner evidence already on disk (the six kit evidence JSONs + the four external
+SARIF drops), normalizes and correlates them into one deduplicated, ranked set,
+and writes the ``oss-policy-kit/findings/1.0`` artifact.
+
+Stateless and read-only (anti-ASPM fence): a single clone-only run, no network,
+no persistence beyond the one output file, no cross-run state. It composes
+scanner verdicts — it never re-scans, never re-scores, and never changes any
+``evaluate`` control state or gate. The optional ``--fail-on-*`` flags gate on
+the correlated finding set only.
+
+Exit codes: 0 ok (incl. no sources / no findings); 1 a ``--fail-on-*`` gate
+tripped; 2 usage/validation (bad ``--format``/``--fail-on-severity``, bad
+``--target``, unwritable ``--output``); 3 unexpected internal error.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+import typer
+
+from oss_policy_kit import __version__ as _KIT_VERSION
+from oss_policy_kit.application.finding_normalization import NORMALIZED_SEVERITIES
+from oss_policy_kit.application.findings_report import build_findings_report
+from oss_policy_kit.cli.common import app, stderr_console, write_stdout_text
+from oss_policy_kit.cli.help_text import CMD_PANEL_EXPORT
+from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
+
+_DEFAULT_OUTPUT = Path(".oss-policy-kit") / "findings.json"
+_HUMAN_TABLE_CAP = 25
+
+# Severity rank (higher = more urgent); index into the ordered vocabulary.
+_SEVERITY_RANK = {name: len(NORMALIZED_SEVERITIES) - i for i, name in enumerate(NORMALIZED_SEVERITIES)}
+_GATE_SEVERITIES = ("critical", "high", "medium", "low")
+
+
+def _render_human(report: dict[str, Any], output: Path) -> None:
+    findings = report["findings"]
+    by_sev = report["findings_by_severity"]
+    sources = report["sources_read"]
+    ok = sum(1 for s in sources if s["status"] == "ok")
+    corr = report["correlation"]
+
+    lines = [
+        f"Normalized findings - {report['findings_total']} total "
+        f"(from {len(sources)} sources: {ok} ok, {len(sources) - ok} not read; "
+        f"{corr['merged_groups']} merged, {corr['cross_tool_merges']} cross-tool)",
+        "  by severity: " + "  ".join(f"{name}={by_sev[name]}" for name in NORMALIZED_SEVERITIES if by_sev[name]),
+    ]
+    if report["findings_total"] == 0:
+        lines.append("  (no findings correlated from the available scanner evidence)")
+    for f in findings[:_HUMAN_TABLE_CAP]:
+        loc = f["location"]
+        where = loc["file"] or (loc["logical"]["resource_name"] or loc["logical"]["name"] or "-")
+        if loc["file"] and loc["line_start"]:
+            where = f"{loc['file']}:{loc['line_start']}"
+        tags = []
+        if f["kev"]:
+            tags.append("KEV")
+        if f["epss"] is not None:
+            tags.append(f"EPSS={f['epss']:.2f}")
+        if f["correlation"]["merged_from"] > 1:
+            tags.append(f"merged x{f['correlation']['merged_from']}")
+        suffix = f"   ({', '.join(tags)})" if tags else ""
+        lines.append(
+            f"  #{f['priority']['rank']:<3} [{f['severity']['normalized'].upper():<8}] {f['rule']}  {where}{suffix}"
+        )
+    remaining = report["findings_total"] - _HUMAN_TABLE_CAP
+    if remaining > 0:
+        lines.append(f"  ... and {remaining} more (see {output})")
+    lines.append("")
+    lines.append(f"Wrote findings/1.0 artifact: {output}")
+    write_stdout_text("\n".join(lines) + "\n")
+
+
+def _write_artifact(report: dict[str, Any], output: Path) -> None:
+    payload = json.dumps(report, indent=2, sort_keys=True) + "\n"
+    try:
+        if output.parent != Path(""):
+            output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(payload, encoding="utf-8")
+    except OSError as exc:
+        # strerror only: never leak the absolute path / username (v9.0.2 M-002).
+        raise InvalidInputError(f"cannot write --output ({exc.strerror or 'filesystem error'})") from exc
+
+
+def _gate_tripped(report: dict[str, Any], fail_on_severity: str | None, fail_on_kev: bool) -> str | None:
+    """Return a gate message if a --fail-on-* threshold is met, else None."""
+
+    if fail_on_kev and any(f["kev"] for f in report["findings"]):
+        n = sum(1 for f in report["findings"] if f["kev"])
+        return f"{n} KEV-listed finding(s) present (--fail-on-kev)."
+    if fail_on_severity:
+        threshold = _SEVERITY_RANK[fail_on_severity]
+        hits = [f for f in report["findings"] if _SEVERITY_RANK.get(f["severity"]["normalized"], 0) >= threshold]
+        if hits:
+            return f"{len(hits)} finding(s) at or above severity '{fail_on_severity}' (--fail-on-severity)."
+    return None
+
+
+def _run_correlate_findings(
+    target: Path,
+    output: Path,
+    output_format: str,
+    fail_on_severity: str | None,
+    fail_on_kev: bool,
+    include_absolute_path: bool,
+) -> None:
+    fmt = output_format.lower().strip()
+    if fmt not in {"human", "json"}:
+        raise InvalidInputError("--format must be human or json.")
+    sev = fail_on_severity.lower().strip() if fail_on_severity else None
+    if sev is not None and sev not in _GATE_SEVERITIES:
+        raise InvalidInputError("--fail-on-severity must be one of: critical, high, medium, low.")
+
+    target_path = target.resolve()
+    if not target_path.is_dir():
+        raise InvalidInputError(f"--target {target_path} is not a directory.")
+
+    report = build_findings_report(target_path, kit_version=_KIT_VERSION, include_absolute_path=include_absolute_path)
+    _write_artifact(report, output)
+
+    if fmt == "json":
+        write_stdout_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    else:
+        _render_human(report, output)
+
+    message = _gate_tripped(report, sev, fail_on_kev)
+    if message is not None:
+        stderr_console().print(f"[yellow]Gate:[/yellow] {message}")
+        raise typer.Exit(code=1)
+
+
+@app.command("correlate-findings", rich_help_panel=CMD_PANEL_EXPORT)
+def correlate_findings_cmd(
+    target: Path = typer.Option(
+        Path("."),
+        "--target",
+        help="Repository clone to correlate scanner evidence for. Defaults to current directory.",
+    ),
+    output: Path = typer.Option(
+        _DEFAULT_OUTPUT,
+        "--output",
+        "-o",
+        help="Path to write the findings/1.0 JSON artifact. Default: .oss-policy-kit/findings.json.",
+    ),
+    output_format: str = typer.Option(
+        "human",
+        "--format",
+        help="stdout view: human (ranked summary, default) or json (the full artifact).",
+    ),
+    fail_on_severity: str | None = typer.Option(
+        None,
+        "--fail-on-severity",
+        help="Exit 1 if any correlated finding is at or above this severity (critical|high|medium|low).",
+    ),
+    fail_on_kev: bool = typer.Option(
+        False,
+        "--fail-on-kev",
+        help="Exit 1 if any correlated finding is CISA KEV-listed.",
+    ),
+    include_absolute_path: bool = typer.Option(
+        False,
+        "--include-absolute-path",
+        help="Emit the absolute target path in the artifact instead of the privacy-default basename.",
+    ),
+) -> None:
+    """Correlate scanner evidence into one deduplicated, ranked findings/1.0 artifact.
+
+    Reads the six kit evidence JSONs plus the four external SARIF drops under
+    ``--target``, normalizes them into one vocabulary, deduplicates/correlates
+    across scanners by a deterministic key, ranks by KEV then EPSS then severity,
+    and writes ``findings/1.0`` to ``--output``. Read-only and stateless — it
+    composes scanner verdicts and changes no ``evaluate`` control state or gate.
+    Missing or unreadable evidence is recorded honestly in ``sources_read``, never
+    raised. The optional ``--fail-on-*`` flags gate on the correlated set only.
+
+    Exit codes: 0 ok; 1 a --fail-on-* gate tripped; 2 usage/validation; 3 internal.
+    """
+
+    try:
+        _run_correlate_findings(target, output, output_format, fail_on_severity, fail_on_kev, include_absolute_path)
+    except OssPolicyKitError as exc:
+        stderr_console().print(f"[red]Error:[/red] {exc.message}")
+        raise typer.Exit(code=2) from exc
+    except typer.Exit:
+        raise
+    except Exception as exc:  # noqa: BLE001 - last-resort user message, no traceback leak
+        stderr_console().print(f"[red]Unexpected error:[/red] {exc}")
+        raise typer.Exit(code=3) from exc

@@ -15,6 +15,7 @@ from contextlib import suppress
 # Importing each module triggers Typer command registration via decorators.
 from oss_policy_kit.cli import (  # noqa: F401  (import side-effects: command registration)
     batch,
+    correlate_findings,
     diff_catalogs,
     emit_insights,
     emit_vex,
@@ -65,6 +66,7 @@ _COMMAND_DISPLAY_ORDER: tuple[str, ...] = (
     "emit-insights",
     "ingest-insights",
     "ingest-scorecard",
+    "correlate-findings",
     "export-evidence",
     "export-policy",
 )

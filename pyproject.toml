@@ -126,6 +126,7 @@ max-complexity = 12
 "src/oss_policy_kit/cli/emit_insights.py" = ["B008"]
 "src/oss_policy_kit/cli/ingest_insights.py" = ["B008"]
 "src/oss_policy_kit/cli/ingest_scorecard.py" = ["B008"]
+"src/oss_policy_kit/cli/correlate_findings.py" = ["B008"]
 "src/oss_policy_kit/cli/export_evidence.py" = ["B008"]
 "src/oss_policy_kit/cli/export_policy.py" = ["B008"]
 "src/oss_policy_kit/cli/diff_catalogs.py" = ["B008"]
