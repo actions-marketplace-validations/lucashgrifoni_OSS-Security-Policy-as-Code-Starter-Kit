@@ -1,6 +1,6 @@
 # ADR-021 - EPSS + CISA KEV prioritization in SCA
 
-- **Status**: proposed (v6.0.0 Cycle 2)
+- **Status**: accepted — implemented in v6.0.0 Cycle 2 (`SCA-KEV-001`, `SCA-EPSS-001` in `appsec-sast-sca-1`); status flipped 2026-07-01 during the ADR-030 amendment pass, which also records the implementation audit (spot logic, hardcoded 0.5/7.0 thresholds, prose-only output, no reachability parsing).
 - **Date**: 2026-05-20
 - **Context window**: v6.0.0 Cycle 2, PR-23
 - **Related**: `SAST-OSV-068`, `docs/triage-cvss-epss-kev.md`
