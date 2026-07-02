@@ -96,10 +96,12 @@ def test_evaluate_report_contract_2_0_emits_projected_controls() -> None:
     assert out["contract_version"] == "reports/2.0"
     assert "controls" in out
     assert "results" not in out
-    assert set(out["summary_by_status"]) <= {"PASS", "FAIL", "UNKNOWN", "NOT_APPLICABLE", "ATTESTED"}
+    # Full reports/2.0 state vocabulary (six states since v9.0.3: SELF_ATTESTED formalized).
+    states = {"PASS", "FAIL", "UNKNOWN", "NOT_APPLICABLE", "ATTESTED", "SELF_ATTESTED"}
+    assert set(out["summary_by_status"]) <= states
     first = out["controls"][0]
     assert "state" in first
-    assert first["state"] in {"PASS", "FAIL", "UNKNOWN", "NOT_APPLICABLE", "ATTESTED"}
+    assert first["state"] in states
     assert "message" in first
 
 

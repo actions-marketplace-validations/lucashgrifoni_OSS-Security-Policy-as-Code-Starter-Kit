@@ -397,7 +397,10 @@ def report_to_dict_v2_0(
         "live_collection": _live_collection_dict(report.live_collection),
         "weighted_score": weighted_score_block,
         "migration": {
+            # Pointer for consumers converting STORED legacy reports; the pre-2.0
+            # contracts themselves were removed from the kit in v9.0.0 (ADR-043).
             "from": "reports/1.0",
+            "removed_in": "v9.0.0 (ADR-043)",
             "status_mapping": "docs/reports-contract-v2.0.md#mapping-from-reports10-to-reports20",
         },
         "extensions": {},

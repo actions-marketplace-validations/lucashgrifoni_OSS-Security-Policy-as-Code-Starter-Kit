@@ -51,7 +51,7 @@
     "summary_by_status": {
       "type": "object",
       "patternProperties": {
-        "^(PASS|FAIL|UNKNOWN|NOT_APPLICABLE|ATTESTED)$": {
+        "^(PASS|FAIL|UNKNOWN|NOT_APPLICABLE|ATTESTED|SELF_ATTESTED)$": {
           "type": "integer",
           "minimum": 0
         }
@@ -74,7 +74,7 @@
           "lifecycle": { "type": "string" },
           "profile": { "type": "string" },
           "state": {
-            "enum": ["PASS", "FAIL", "UNKNOWN", "NOT_APPLICABLE", "ATTESTED"]
+            "enum": ["PASS", "FAIL", "UNKNOWN", "NOT_APPLICABLE", "ATTESTED", "SELF_ATTESTED"]
           },
           "reason": {
             "type": "string"

@@ -101,15 +101,17 @@ REPORTS_V2_STATUS_MAP: dict[str, tuple[str, str | None]] = {
     "error": ("UNKNOWN", "evaluator-error"),
     "attested": ("ATTESTED", None),  # ADR-028: verified-attestation pass (in-toto+cosign); distinct from PASS
     "self-attested": ("SELF_ATTESTED", None),  # ADR-033: opt-in Insights self-reported evidence
+    "waived": ("UNKNOWN", "waived"),  # parity with reporting.REPORTS_V2_STATUS_MAP (v9.0.3 drift fix)
 }
 
 
 def map_status_to_reports_v2(status: str) -> tuple[str, str | None]:
-    """Map a v5.x status string to the (state, reason) pair of reports/2.0.
+    """Map an internal status string to the (state, reason) pair of reports/2.0.
 
-    See docs/reports-contract-v2.0.md for the full mapping table and the
-    deprecation timeline (reports/1.0 remains the default through v6.x; v7.0.0 is
-    the earliest candidate for a default switch).
+    See docs/reports-contract-v2.0.md for the full mapping table. Since v9.0.0
+    (ADR-043) ``reports/2.0`` is the only report contract; this map is the single
+    source of truth for the state vocabulary and must stay in sync with
+    ``reporting.REPORTS_V2_STATUS_MAP``.
     """
     key = status.strip().lower()
     if key in REPORTS_V2_STATUS_MAP:

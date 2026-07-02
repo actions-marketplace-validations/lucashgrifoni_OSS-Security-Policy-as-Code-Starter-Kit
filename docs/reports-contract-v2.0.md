@@ -5,7 +5,7 @@
 ## TL;DR
 
 - `reports/2.0` is a **new JSON report contract** that replaces the seven-state vocabulary of `reports/1.0` with a tighter five-state vocabulary aligned with Scorecard v6.
-- Five states: **`PASS` / `FAIL` / `UNKNOWN` / `NOT_APPLICABLE` / `ATTESTED`**.
+- Six states: **`PASS` / `FAIL` / `UNKNOWN` / `NOT_APPLICABLE` / `ATTESTED` / `SELF_ATTESTED`** (`SELF_ATTESTED` was emitted since the ADR-033 wiring but only formally added to the published schema in v9.0.3).
 - `UNKNOWN` gains a sub-field `reason` so the granularity of the old seven states is preserved where it matters (`manual-review-required`, `not-observable-in-clone`, etc.).
 - **The only contract since v9.0.0 (ADR-043)**: `reports/2.0`. The legacy `0.1`/`0.2`/`0.3`/`1.0` were removed; `--report-json-contract` accepts only `2.0` and any other value exits 2.
 - A **migration script** (`scripts/migrate-1.0-to-2.0.py`) converts existing `reports/1.0` JSON to `reports/2.0` for adopters with long-lived dashboards.
@@ -14,15 +14,16 @@
 
 `reports/1.0` accumulated seven possible per-control statuses over the v5.x line: `pass`, `fail`, `degraded`, `manual-review-required`, `not-applicable`, `skipped`, `error`. Adopters writing dashboards repeatedly conflated `degraded` with `fail`, and `manual-review-required` with `not-applicable`. Scorecard v6 standardized on a tighter vocabulary — five states — that closed similar conflations upstream. Aligning is cheaper to do in a major than to keep documenting workarounds.
 
-## The five states
+## The six states
 
 | State | Meaning |
 |---|---|
 | `PASS` | The control's evidence supports a positive verdict at the declared assurance level (deterministic / signal / evidence-backed). |
 | `FAIL` | The control's evidence supports a negative verdict at the declared assurance level. |
-| `UNKNOWN` | The control could not produce a verdict from the available evidence. The required sub-field `reason` explains why. |
+| `UNKNOWN` | The control could not produce a verdict from the available evidence. The required sub-field `reason` explains why (`waived` findings also surface here, with `reason: "waived"` and the waiver block attached). |
 | `NOT_APPLICABLE` | The control does not apply to this target (e.g. GitHub-specific control evaluated against an Azure-only target). |
 | `ATTESTED` | The control's verdict is anchored on an externally signed attestation (Sigstore bundle, GitHub artifact attestation, in-toto envelope). Stronger than `PASS evidence-backed`. |
+| `SELF_ATTESTED` | The control's verdict rests on the project's own self-reported evidence (e.g. a SECURITY-INSIGHTS.yml consumed via `--use-insights-evidence`, ADR-033, or a self-attested azure/aws evidence file). Weaker than `PASS evidence-backed` — the kit records the claim, it does not verify it. Added to the published schema in v9.0.3 (the state was emitted earlier; the schema lagged). |
 
 ## Mapping from `reports/1.0` to `reports/2.0`
 
@@ -36,6 +37,8 @@
 | `skipped` | `UNKNOWN` with `reason: "skipped-by-flag"` | Promoted into `UNKNOWN` with reason; consumers that branched on `skipped` should branch on `reason`. |
 | `error` | `UNKNOWN` with `reason: "evaluator-error"` | Errors are not failures of the target; they are gaps in the kit's ability to evaluate. |
 | (new) | `ATTESTED` | State for controls anchored on a verified attestation. Emitted **opt-in** by `PROV-VERIFY-061` when a fully verified provenance record (transparency-log inclusion + fresh `verified_at`) is present and `evaluate --enable-attested` is set (ADR-028). Default off → that control stays `PASS`. Fail-closed: any verification gap keeps the prior `FAIL`/`UNKNOWN`, never `ATTESTED`. |
+| `self-attested` | `SELF_ATTESTED` | Self-reported evidence (ADR-033 insights wiring, self-attested azure/aws evidence). Recorded as a claim, never verified by the kit. |
+| `waived` | `UNKNOWN` with `reason: "waived"` | The waiver block on the control carries owner/justification/expiry; waived findings stay visible but stop tripping `--fail-on`. |
 
 ## Selecting a contract
 
