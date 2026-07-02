@@ -246,7 +246,7 @@ Fase 4 introduced four SARIF-ingest adapters that read raw SARIF 2.1.0 dropped a
 
 - **`SAST-ZIZMOR-066`** — zizmor (GitHub Actions AST analysis).
 - **`SAST-POUTINE-067`** — poutine (GitHub Actions + GitLab CI).
-- **`SAST-OSV-068`** — OSV-Scanner v2 (reachability-aware SCA).
+- **`SAST-OSV-068`** — OSV-Scanner v2 (SCA; the scanner is reachability-aware in JAR/Go — the kit ingests its SARIF verdicts and does not parse reachability data).
 - **`SAST-GITLEAKS-069`** — Gitleaks (secret leak detection; zero-tolerance — any finding fails).
 
 All four share a single helper `_parse_sarif_findings` in `evaluators.py` and a generic adapter shell `_eval_sarif_adapter`. Adding another SARIF-emitting tool follows a one-line evaluator pattern; see ADR-001 for the scanner selection rationale and `docs/positioning.md` for the broader "compose, not replace" stance.

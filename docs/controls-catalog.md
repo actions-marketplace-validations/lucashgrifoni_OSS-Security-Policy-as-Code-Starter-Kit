@@ -110,7 +110,7 @@ Profile counts in the **Profiles** column reflect how many bundled profiles incl
 | `GOV-DISC-065` | governance | evidence-backed | 2 | 5 | Disclosure channel SLA documented (CRA reporting readiness) |
 | `SAST-ZIZMOR-066` | ci_cd | evidence-backed | 2 | 1 | zizmor SARIF findings (GitHub Actions security AST analysis) |
 | `SAST-POUTINE-067` | ci_cd | evidence-backed | 2 | 2 | poutine SARIF findings (GitHub Actions / GitLab CI pipeline scanner) |
-| `SAST-OSV-068` | supply_chain | evidence-backed | 3 | 6 | OSV-Scanner v2 SARIF findings (reachability-aware SCA) |
+| `SAST-OSV-068` | supply_chain | evidence-backed | 3 | 6 | OSV-Scanner v2 SARIF findings (SCA) |
 | `SAST-GITLEAKS-069` | secure_development | evidence-backed | 3 | 2 | Gitleaks SARIF findings (secret leak detection) |
 | `GL-PIPE-001` | ci_cd | deterministic | 1 | 6 | GitLab CI pipeline files present and parseable |
 | `GL-PIPE-002` | ci_cd | signal | 2 | 6 | GitLab CI image references pinned to a tag or digest |

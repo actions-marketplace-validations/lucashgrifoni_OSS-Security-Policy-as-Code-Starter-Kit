@@ -120,7 +120,7 @@ already listed under Scorecard above.
 |---|---|---|---|
 | CICD-SEC-1: Insufficient Flow Control | `PLAT-BRPROT-015`, `GH-PLAT-024`, `AZ-PLAT-034`, `AWS-CP-044` | YES | Branch protection / rulesets / Azure branch policies / CodePipeline approvals. |
 | CICD-SEC-2: Inadequate IAM | `GH-DEPLOY-022`, `AZ-IDENT-036`, `AZ-WIFEV-057`, `AZ-SCONN-056`, `AWS-CBIDENT-057`, `AWS-PIPEIAM-056`, `ORG-MFA-001` | YES | Federated identity preferred; OIDC enforced; org MFA evidenced. |
-| CICD-SEC-3: Dependency Chain Abuse | `CI-PIN-008`, `SEC-DEPREV-011`, `SEC-PINLOCK-052`, `DEP-UPDATE-001`, `CI-WFCALLSHA-055`, `SAST-OSV-068` (v5.9.0) | YES | Multiple deterministic angles plus reachability-aware SCA via OSV-Scanner v2 SARIF ingestion. |
+| CICD-SEC-3: Dependency Chain Abuse | `CI-PIN-008`, `SEC-DEPREV-011`, `SEC-PINLOCK-052`, `DEP-UPDATE-001`, `CI-WFCALLSHA-055`, `SAST-OSV-068` (v5.9.0) | YES | Multiple deterministic angles plus SCA via OSV-Scanner v2 SARIF ingestion (the scanner is reachability-aware in JAR/Go; the kit ingests its verdicts). |
 | CICD-SEC-4: Poisoned Pipeline Execution | `CI-DANGER-007`, `GH-WF-019`, `AZ-PIPE-029`, `PLAT-BRPROT-015`, `SAST-ZIZMOR-066`, `SAST-POUTINE-067` (v5.9.0) | YES | `pull_request_target` hardening + branch protection plus AST-level workflow analysis via zizmor / poutine SARIF ingestion. |
 | CICD-SEC-5: Insufficient PBAC | `GH-PLAT-026`, `AZ-PLAT-035`, `AWS-CP-044` | YES | Environment approvals, manual approvals on CodePipeline. |
 | CICD-SEC-6: Insufficient Credential Hygiene | `GH-PLAT-025`, `AZ-SEC-031`, `AWS-SECRET-038`, `SEC-SECRETS-050`, `SAST-GITLEAKS-069` (v5.9.0) | YES | Secret scanning + plaintext-secret avoidance plus Gitleaks SARIF (zero-tolerance — any finding blocks). |
@@ -486,9 +486,10 @@ After mapping the catalog to all nine frameworks above, the explicit decisions a
 [`profiles/deferred-followups.md`](profiles/deferred-followups.md) and in local-only
 project planning artifacts that are not part of the public repository):
 
-6. **OSV-Scanner v2 SARIF adapter** — reachability-aware SCA (Java JAR, Go) reduces SCA
-   noise materially. Would integrate as a `signal`/`evidence-backed` source per the
-   `SAST-SEMGREP-064`-style adapter pattern.
+6. **OSV-Scanner v2 SARIF adapter** — SCA via a scanner that is itself
+   reachability-aware in Java JAR / Go (reduces SCA noise materially; the kit ingests
+   its SARIF verdicts, it does not parse reachability data). Would integrate as a
+   `signal`/`evidence-backed` source per the `SAST-SEMGREP-064`-style adapter pattern.
 7. **zizmor SARIF adapter** — deep AST analysis of GitHub Actions; complements the kit's
    own targeted GHA checks rather than replacing them.
 8. **poutine SARIF adapter** — covers GitHub Actions and GitLab CI; combined with a

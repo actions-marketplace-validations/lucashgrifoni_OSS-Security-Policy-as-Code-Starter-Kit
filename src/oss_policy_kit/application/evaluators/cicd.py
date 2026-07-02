@@ -690,7 +690,7 @@ def eval_sast_poutine_067(ctx: EvalContext) -> EvalOutcome:
 
 
 def eval_sast_osv_068(ctx: EvalContext) -> EvalOutcome:
-    """SAST-OSV-068: OSV-Scanner v2 SARIF findings (reachability-aware SCA)."""
+    """SAST-OSV-068: OSV-Scanner v2 SARIF findings (SCA; the kit ingests verdicts, not reachability data)."""
     return _eval_sarif_adapter(
         ctx,
         tool_name="osv-scanner",

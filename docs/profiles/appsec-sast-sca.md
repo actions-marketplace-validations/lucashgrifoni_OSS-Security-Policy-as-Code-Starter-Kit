@@ -16,7 +16,7 @@ Each adapter reads a SARIF 2.1.0 document dropped at a canonical path under `.os
 |---|---|---|---|
 | `SAST-ZIZMOR-066` | [zizmor](https://docs.zizmor.sh/) — GitHub Actions AST analysis | `.oss-policy-kit/evidence/sast/zizmor.sarif.json` | Fail on `error`-level results; `warning`/`note` are tolerated |
 | `SAST-POUTINE-067` | [poutine](https://github.com/boostsecurityio/poutine) — GitHub Actions + GitLab CI pipeline analysis | `.oss-policy-kit/evidence/sast/poutine.sarif.json` | Same as zizmor |
-| `SAST-OSV-068` | [OSV-Scanner v2](https://google.github.io/osv-scanner/) — reachability-aware SCA | `.oss-policy-kit/evidence/sast/osv-scanner.sarif.json` | Fail on `error`-level results |
+| `SAST-OSV-068` | [OSV-Scanner v2](https://google.github.io/osv-scanner/) — SCA (the scanner is reachability-aware in JAR/Go; the kit ingests its SARIF verdicts) | `.oss-policy-kit/evidence/sast/osv-scanner.sarif.json` | Fail on `error`-level results |
 | `SAST-GITLEAKS-069` | [Gitleaks](https://github.com/gitleaks/gitleaks) — secret leak detection | `.oss-policy-kit/evidence/sast/gitleaks.sarif.json` | **Zero-tolerance** — any finding (even `warning`-level) blocks |
 
 If the SARIF file is missing, the corresponding control returns `manual-review-required` — the gap is surfaced honestly, the gate does not silently pass.

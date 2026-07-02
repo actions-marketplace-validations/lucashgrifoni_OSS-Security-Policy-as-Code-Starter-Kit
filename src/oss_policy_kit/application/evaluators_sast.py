@@ -16,7 +16,9 @@ verification, SBOM quality).
 Scope (closed set, alphabetized):
 
 - ``SAST-GITLEAKS-069`` -- Gitleaks SARIF evidence (secret leak detection).
-- ``SAST-OSV-068`` -- OSV-Scanner v2 SARIF evidence (reachability-aware SCA).
+- ``SAST-OSV-068`` -- OSV-Scanner v2 SARIF evidence (SCA). The scanner itself is
+  reachability-aware in JAR/Go; the kit ingests its SARIF verdicts and does not
+  parse reachability data.
 - ``SAST-POUTINE-067`` -- poutine SARIF evidence (GHA / GitLab CI pipeline scanner).
 - ``SAST-SEMGREP-064`` -- Semgrep SAST evidence (kit-emitted wrapper).
 - ``SAST-ZIZMOR-066`` -- zizmor SARIF evidence (GHA static analysis).

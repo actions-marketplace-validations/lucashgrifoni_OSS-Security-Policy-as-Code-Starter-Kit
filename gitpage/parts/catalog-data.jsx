@@ -1689,7 +1689,7 @@ window.CATALOG_DATA = {
     },
     {
       "id": "SAST-OSV-068",
-      "title": "OSV-Scanner v2 SARIF findings (reachability-aware SCA)",
+      "title": "OSV-Scanner v2 SARIF findings (SCA)",
       "category": "supply_chain",
       "assurance": "evidence-backed",
       "lifecycle": "experimental",
