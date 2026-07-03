@@ -114,7 +114,7 @@ def _render_chainloop(report: dict[str, Any]) -> dict[str, Any]:
     return {
         "attestation_type": "https://chainloop.dev/attestations/policy-evaluation/v0.1-experimental",
         "subject": {
-            "name": report.get("target", "unknown"),
+            "name": report.get("target_path", "unknown"),
             "kit": "oss-policy-kit",
             "profile": profile_id,
             "schema_version": report.get("schema_version"),
@@ -123,7 +123,9 @@ def _render_chainloop(report: dict[str, Any]) -> dict[str, Any]:
             "evaluatedAt": now,
             "summary": summary,
             "controls": report.get("controls", []),
-            "waivers": report.get("waivers", []),
+            # reports/2.0 has no top-level waivers array; per-control waiver blocks live
+            # on each control entry. Emitted empty here, honestly.
+            "waivers": [],
         },
         "experimental": True,
         "experimental_note": (
@@ -162,18 +164,17 @@ def _render_sarif(report: dict[str, Any]) -> dict[str, Any]:
             "version": "2.1.0",
             "runs": runs,
         }
-    # Synthesize from controls. reports/2.0 controls use ``state``/``message``;
-    # fall back to reports/1.0 ``status``/``reason`` for legacy inputs.
+    # Synthesize from controls (reports/2.0 ``state``/``message`` — the only contract).
     results = []
     rule_ids: list[str] = []
     seen_rules: set[str] = set()
     for c in report.get("controls", []) or []:
         if not isinstance(c, dict):
             continue
-        state = str(c.get("state") or c.get("status") or "unknown").strip().upper().replace("-", "_")
+        state = str(c.get("state") or "unknown").strip().upper().replace("-", "_")
         level = _sarif_level(state)
         rule_id = str(c.get("id", "UNKNOWN"))
-        text = c.get("message") or c.get("reason") or ""
+        text = c.get("message") or ""
         results.append(
             {
                 "ruleId": rule_id,
@@ -229,7 +230,7 @@ def _render_spdx(report: dict[str, Any]) -> dict[str, Any]:
     """
     now = _now_iso8601_z()
     version = _kit_version(report)
-    target = str(report.get("target", "unknown"))
+    target = str(report.get("target_path", "unknown"))
     profile_id = _profile_id(report)
     creator = f"Tool: oss-policy-kit-{version}"
     annotations = [
@@ -240,8 +241,8 @@ def _render_spdx(report: dict[str, Any]) -> dict[str, Any]:
             "comment": json.dumps(
                 {
                     "control": c.get("id", "UNKNOWN"),
-                    "status": c.get("status", "unknown"),
-                    "reason": c.get("reason", ""),
+                    "state": c.get("state", "UNKNOWN"),
+                    "message": c.get("message", ""),
                 },
                 sort_keys=True,
             ),
@@ -295,7 +296,7 @@ def _oscal_observation(control: dict[str, Any], *, now: str, subject_uuid: str) 
     kit namespace; the observation points at the evaluated repository via ``subjects``.
     """
     cid = str(control.get("id", "UNKNOWN"))
-    state = str(control.get("state") or control.get("status") or "unknown")
+    state = str(control.get("state") or "unknown")
     props: list[dict[str, str]] = [{"name": "kit-state", "value": state, "ns": _OSCAL_KIT_NS}]
     assurance = control.get("assurance")
     if isinstance(assurance, str) and assurance.strip():
@@ -303,7 +304,7 @@ def _oscal_observation(control: dict[str, Any], *, now: str, subject_uuid: str) 
     return {
         "uuid": str(uuid.uuid4()),
         "title": cid,
-        "description": f"{cid}: {state} — {control.get('reason', '')}",
+        "description": f"{cid}: {state} — {control.get('message', '')}",
         "methods": ["EXAMINE"],
         "props": props,
         "subjects": [{"subject-uuid": subject_uuid, "type": "component"}],
@@ -324,7 +325,7 @@ def _render_oscal(report: dict[str, Any]) -> dict[str, Any]:
     now = _now_iso8601_z()
     version = _kit_version(report)
     profile_id = _profile_id(report)
-    target = str(report.get("target", "unknown"))
+    target = str(report.get("target_path", "unknown"))
     subject_uuid = str(uuid.uuid4())
     observations = [
         _oscal_observation(c, now=now, subject_uuid=subject_uuid)
@@ -380,7 +381,7 @@ def _render_intoto_bundle(report: dict[str, Any]) -> dict[str, Any]:
     """
     now = _now_iso8601_z()
     version = _kit_version(report)
-    target = str(report.get("target", "unknown"))
+    target = str(report.get("target_path", "unknown"))
     summary = report.get("summary_by_status", {}) if isinstance(report.get("summary_by_status"), dict) else {}
     return {
         "_type": "https://in-toto.io/Statement/v1",
@@ -426,9 +427,7 @@ _GEMARA_PAIRS: tuple[tuple[str, str], ...] = (
     ("ATTESTED", "Passed"),
 )
 _GEMARA_STATE_MAP: dict[str, str] = {state: result for state, result in _GEMARA_PAIRS}
-# reports/1.0 lowercase-status fallback (for an externally supplied legacy report),
-# derived by lowercasing the state keys so no literal lowercase status appears.
-_GEMARA_STATUS_MAP: dict[str, str] = {state.lower().replace("_", "-"): result for state, result in _GEMARA_PAIRS}
+
 # kit assurance grade -> Gemara ConfidenceLevel ("Undetermined"|"Low"|"Medium"|"High").
 _GEMARA_CONFIDENCE: dict[str, str] = {
     "deterministic": "High",
@@ -442,8 +441,7 @@ def _gemara_result(control: dict[str, Any]) -> str:
     state = str(control.get("state") or "").strip().upper()
     if state in _GEMARA_STATE_MAP:
         return _GEMARA_STATE_MAP[state]
-    status = str(control.get("status") or "").strip().lower()
-    return _GEMARA_STATUS_MAP.get(status, "Unknown")
+    return "Unknown"
 
 
 def _gemara_aggregate(results: list[str]) -> str:
@@ -467,7 +465,7 @@ def _render_gemara(report: dict[str, Any]) -> dict[str, Any]:
     now = _now_iso8601_z()
     version = _kit_version(report)
     profile_id = _profile_id(report)
-    target = str(report.get("target", "unknown"))
+    target = str(report.get("target_path", "unknown"))
     reference_id = f"oss-policy-kit:{profile_id or 'evaluation'}"
     controls = [c for c in (report.get("controls", []) or []) if isinstance(c, dict)]
 

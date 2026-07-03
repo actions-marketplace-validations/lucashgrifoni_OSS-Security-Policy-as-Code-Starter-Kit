@@ -207,19 +207,22 @@ def load_profile(path: Path, *, validate_external_schema: bool = False) -> Profi
 
 
 # Bundled profile id -> canonical directory name under ``profiles/`` for DEPRECATED aliases.
-# An entry means the key is an old, deprecated profile id that resolves (with a warning) to the
-# canonical profile dir. ADR-029 (v9.0.0): `cra-eu-ready-2-1` was renamed to
-# `cra-eu-conformance-evidence-1` when it tightened to a conformance-evidence posture; the old id
-# stays as a deprecated alias through the v9.x line and is removed in v10.0.0.
-PROFILE_DIRECTORY_ALIASES: dict[str, str] = {
-    "cra-eu-ready-2-1": "cra-eu-conformance-evidence-1",
-}
+# EMPTY since v10.0.0: the last alias (`cra-eu-ready-2-1`, ADR-029) completed its one-major
+# deprecation cycle and moved to REMOVED_PROFILE_IDS. The machinery stays so a future rename
+# can reuse the same one-cycle pattern.
+PROFILE_DIRECTORY_ALIASES: dict[str, str] = {}
 BUNDLED_PROFILE_LEGACY_IDS: frozenset[str] = frozenset(PROFILE_DIRECTORY_ALIASES.keys())
 
-# Profile ids that were removed in v5.0.0. Resolving these raises a hard error with
-# explicit migration guidance instead of silently mapping to the canonical id.
+# Profile ids that were removed. Resolving these raises a hard error with explicit
+# migration guidance instead of silently mapping to the canonical id.
 REMOVED_PROFILE_IDS: dict[str, str] = {
     "github-release-hardening": "github-release-hardening-1",
+    # ADR-029: renamed in v9.0.0 (deprecated alias for one major), removed in v10.0.0.
+    "cra-eu-ready-2-1": "cra-eu-conformance-evidence-1",
+}
+_REMOVED_PROFILE_VERSIONS: dict[str, str] = {
+    "github-release-hardening": "v5.0.0",
+    "cra-eu-ready-2-1": "v10.0.0",
 }
 
 
@@ -231,10 +234,11 @@ def resolve_profile_file(kit_root: Path, profile_id: str) -> Path:
 
     if profile_id in REMOVED_PROFILE_IDS:
         canonical = REMOVED_PROFILE_IDS[profile_id]
+        removed_in = _REMOVED_PROFILE_VERSIONS.get(profile_id, "an earlier major")
         raise LoadError(
-            f"Profile id '{profile_id}' was removed in v5.0.0. "
-            f"The canonical profile is '{canonical}' (same control set). "
-            f"Update your scripts and CI workflows. See docs/v5.0.0-migration-guide.md."
+            f"Profile id '{profile_id}' was removed in {removed_in}. "
+            f"The canonical profile is '{canonical}'. "
+            f"Update your scripts and CI workflows. See docs/{removed_in}-migration-guide.md."
         )
     dirname = PROFILE_DIRECTORY_ALIASES.get(profile_id, profile_id)
     candidate = kit_root / "profiles" / dirname / "profile.yaml"

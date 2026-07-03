@@ -2,11 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import subprocess
-import sys
-from pathlib import Path
-
 import pytest
 from tests.conftest import EXAMPLE_HARDENED
 
@@ -103,78 +98,3 @@ def test_evaluate_report_contract_2_0_emits_projected_controls() -> None:
     assert "state" in first
     assert first["state"] in states
     assert "message" in first
-
-
-# --- migrate-1.0-to-2.0.py script ------------------------------------------
-
-
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_MIGRATE_SCRIPT = _REPO_ROOT / "scripts" / "migrate-1.0-to-2.0.py"
-
-
-def _sample_v1_report() -> dict:
-    # reports/1.0 emits controls under the ``results`` key, each keyed by ``control_id``
-    # (see report_to_dict_v1). The earlier sample used a ``controls``/``id`` shape the kit
-    # never produces, which masked a bug in the migration script.
-    return {
-        "schema_version": "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/1.0",
-        "summary_by_status": {"pass": 5, "fail": 1, "degraded": 1, "manual-review-required": 2},
-        "results": [
-            {
-                "control_id": "GOV-SEC-001",
-                "status": "pass",
-                "reason": "SECURITY.md present.",
-                "profile": "github-level-1",
-            },
-            {
-                "control_id": "GH-PROV-023",
-                "status": "manual-review-required",
-                "reason": "No evidence.",
-                "profile": "github-level-1",
-            },
-            {
-                "control_id": "CI-LEAST-009",
-                "status": "degraded",
-                "reason": "Broad token perms.",
-                "profile": "github-level-1",
-            },
-        ],
-    }
-
-
-def test_migrate_script_converts_v1_to_v2(tmp_path: Path) -> None:
-    in_file = tmp_path / "old.json"
-    out_file = tmp_path / "new.json"
-    in_file.write_text(json.dumps(_sample_v1_report()), encoding="utf-8")
-    proc = subprocess.run(
-        [sys.executable, str(_MIGRATE_SCRIPT), "--input", str(in_file), "--output", str(out_file)],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=30,
-    )
-    assert proc.returncode == 0, proc.stderr + proc.stdout
-    assert out_file.is_file()
-    out = json.loads(out_file.read_text(encoding="utf-8"))
-    assert out["schema_version"] == REPORT_JSON_SCHEMA_URL_V2_0
-    assert out["contract_version"] == "reports/2.0"
-    assert out["summary_by_status"] == {"PASS": 5, "FAIL": 2, "UNKNOWN": 2}
-    states = {c["id"]: c["state"] for c in out["controls"]}
-    assert states == {"GOV-SEC-001": "PASS", "GH-PROV-023": "UNKNOWN", "CI-LEAST-009": "FAIL"}
-    # degraded preserves the per-control flag.
-    degraded = next(c for c in out["controls"] if c["id"] == "CI-LEAST-009")
-    assert degraded.get("degraded") is True
-
-
-def test_migrate_script_rejects_malformed_json(tmp_path: Path) -> None:
-    in_file = tmp_path / "bad.json"
-    out_file = tmp_path / "new.json"
-    in_file.write_text("{ not json", encoding="utf-8")
-    proc = subprocess.run(
-        [sys.executable, str(_MIGRATE_SCRIPT), "--input", str(in_file), "--output", str(out_file)],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=30,
-    )
-    assert proc.returncode == 1

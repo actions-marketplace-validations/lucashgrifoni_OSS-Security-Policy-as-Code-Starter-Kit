@@ -233,8 +233,8 @@ def _validate_user_profile(profile_id: str) -> None:
       verbatim; ``evaluate`` loads it directly via :func:`load_profile_by_id`.
     - Otherwise the value must resolve to a bundled
       ``data/profiles/<id>/profile.yaml`` through
-      :func:`resolve_profile_file`, which also honors deprecated aliases (e.g.
-      ``cra-eu-ready-2-1``). A miss is converted into a friendly
+      :func:`resolve_profile_file` (removed ids get the loader's migration pointer
+      verbatim). A miss is converted into a friendly
       :class:`InvalidInputError` (exit 2) instead of writing a poisoned
       ``oss-policy-kit.yaml`` that ``evaluate`` would later reject.
     """
@@ -245,6 +245,10 @@ def _validate_user_profile(profile_id: str) -> None:
     try:
         resolve_profile_file(bundled_kit_root(), profile_id)
     except LoadError as exc:
+        # Preserve the loader's removed-profile guidance verbatim (it names the
+        # canonical replacement id); only genuinely-unknown ids get the generic hint.
+        if "was removed" in exc.message:
+            raise InvalidInputError(exc.message) from exc
         raise InvalidInputError(
             f"Unknown profile '{profile_id}'. Run 'oss-policy-kit profiles' to list available ids."
         ) from exc

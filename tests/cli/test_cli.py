@@ -526,8 +526,8 @@ def test_cli_profiles_recommended_gate_column_renders_without_polluting_json() -
     assert "Recommended" in human_out and "gate" in human_out
     assert "--fail-on fail" in human_out
     assert "--fail-on none" in human_out
-    # v9.0.0 (ADR-029): cra-eu-ready-2-1 is now a deprecated alias, so a '(migrate)' legacy row appears.
-    assert "(migrate)" in human_out
+    # v10.0.0: no deprecated aliases remain, so no '(migrate)' legacy rows render.
+    assert "(migrate)" not in human_out
 
     payload = runner.invoke(app, ["profiles", "--format", "json"])
     assert payload.exit_code == 0, payload.output

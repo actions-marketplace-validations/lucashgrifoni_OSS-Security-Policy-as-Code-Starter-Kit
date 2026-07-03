@@ -8,7 +8,7 @@ bundled profile set using the same lookup ``evaluate`` uses
 (``resolve_profile_file`` over ``data/profiles/<id>/profile.yaml``) BEFORE any
 filesystem write (including under ``--dry-run``). An unknown id raises
 ``InvalidInputError`` -> exit 2 and writes nothing. Valid bundled ids and the
-deprecated ``cra-eu-ready-2-1`` alias keep working; external YAML paths stay
+removed ``cra-eu-ready-2-1`` alias is rejected with a pointer; external YAML paths stay
 valid.
 """
 
@@ -75,8 +75,9 @@ def test_init_valid_bundled_profile_still_succeeds(tmp_path: Path) -> None:
     assert "github-level-2" in cfg.read_text(encoding="utf-8")
 
 
-def test_init_deprecated_alias_profile_still_succeeds(tmp_path: Path) -> None:
-    # cra-eu-ready-2-1 is a deprecated alias (ADR-029) that must keep resolving.
+def test_init_removed_alias_profile_exits_2_with_pointer(tmp_path: Path) -> None:
+    # v10.0.0: the cra-eu-ready-2-1 alias was removed (ADR-029 one-major cycle done);
+    # init must reject it BEFORE writing config, pointing at the canonical id.
     repo = _make_empty_repo(tmp_path, name="alias-repo")
     runner = CliRunner()
 
@@ -85,7 +86,6 @@ def test_init_deprecated_alias_profile_still_succeeds(tmp_path: Path) -> None:
         prepare_cli_args(["init", "--target", str(repo), "--profile", "cra-eu-ready-2-1"]),
     )
 
-    assert result.exit_code == 0, result.output
-    cfg = repo / CONFIG_FILENAME
-    assert cfg.is_file()
-    assert "cra-eu-ready-2-1" in cfg.read_text(encoding="utf-8")
+    assert result.exit_code == 2, result.output
+    assert "cra-eu-conformance-evidence-1" in result.output
+    assert not (repo / CONFIG_FILENAME).is_file()

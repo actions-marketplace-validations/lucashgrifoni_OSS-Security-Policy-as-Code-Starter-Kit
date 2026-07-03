@@ -24,16 +24,22 @@ from oss_policy_kit.domain.errors import InvalidInputError
 
 
 def _sample_report() -> dict:
+    # reports/2.0 shape (the only contract since v9.0.0; v10.0.0 removed the 1.0 fallback reads).
     return {
-        "schema_version": "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/1.0",
-        "target": "examples/hardened-repo",
+        "schema_version": "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/2.0",
+        "contract_version": "reports/2.0",
+        "target_path": "examples/hardened-repo",
         "profile": {"id": "github-level-1"},
-        "summary_by_status": {"pass": 8, "fail": 1, "manual-review-required": 2},
+        "summary_by_status": {"PASS": 8, "FAIL": 1, "UNKNOWN": 2},
         "controls": [
-            {"id": "GOV-SEC-001", "status": "pass", "reason": "SECURITY.md present."},
-            {"id": "GH-PROV-023", "status": "manual-review-required", "reason": "No evidence file."},
+            {"id": "GOV-SEC-001", "state": "PASS", "message": "SECURITY.md present."},
+            {
+                "id": "GH-PROV-023",
+                "state": "UNKNOWN",
+                "reason": "manual-review-required",
+                "message": "No evidence file.",
+            },
         ],
-        "waivers": [],
     }
 
 
@@ -82,7 +88,7 @@ def test_load_evaluation_report_finds_explicit_path(tmp_path: Path) -> None:
     report_file = tmp_path / "report.json"
     report_file.write_text(json.dumps(_sample_report()), encoding="utf-8")
     data = _load_evaluation_report(tmp_path, report_file)
-    assert data["target"] == "examples/hardened-repo"
+    assert data["target_path"] == "examples/hardened-repo"
 
 
 def test_load_evaluation_report_falls_back_to_target_out(tmp_path: Path) -> None:
@@ -153,7 +159,7 @@ def test_render_oscal_carries_assurance_subject_and_log() -> None:
     """T2.2: each observation carries the kit assurance grade + state; the result carries a
     repo subject and an assessment-log."""
     report = {
-        "target": "examples/hardened-repo",
+        "target_path": "examples/hardened-repo",
         "profile": {"id": "github-level-1"},
         "controls": [
             {"id": "GOV-SEC-001", "state": "PASS", "status": "pass", "assurance": "deterministic", "reason": "ok"},
@@ -191,7 +197,7 @@ def test_gemara_is_registered() -> None:
 
 def test_render_gemara_maps_states_grades_and_validates() -> None:
     report = {
-        "target": "examples/hardened-repo",
+        "target_path": "examples/hardened-repo",
         "profile": {"id": "github-level-1"},
         "controls": [
             {"id": "GOV-SEC-001", "state": "PASS", "assurance": "deterministic", "reason": "present"},

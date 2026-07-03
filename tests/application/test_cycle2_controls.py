@@ -97,14 +97,18 @@ def test_new_profiles_load_with_expected_controls() -> None:
         assert expected in spec.control_ids, f"{pid} should bundle {expected}"
 
 
-def test_cra_ready_2_1_is_a_deprecated_alias_for_conformance_evidence() -> None:
-    """ADR-029 v9.0.0: the old `cra-eu-ready-2-1` id still resolves (deprecated alias) to the
-    renamed, tightened `cra-eu-conformance-evidence-1` profile."""
+def test_cra_ready_2_1_alias_was_removed_in_v10() -> None:
+    """ADR-029: the deprecated `cra-eu-ready-2-1` alias completed its one-major cycle
+    (v9.x) and was removed in v10.0.0 — resolving it is a hard error with a pointer."""
+    import pytest
+
+    from oss_policy_kit.domain.errors import LoadError
+
     root = bundled_kit_root()
-    aliased = load_profile_by_id(root, "cra-eu-ready-2-1")
+    with pytest.raises(LoadError, match=r"removed in v10\.0\.0"):
+        load_profile_by_id(root, "cra-eu-ready-2-1")
     canonical = load_profile_by_id(root, "cra-eu-conformance-evidence-1")
-    assert aliased.id == canonical.id == "cra-eu-conformance-evidence-1"
-    assert aliased.control_ids == canonical.control_ids
+    assert canonical.id == "cra-eu-conformance-evidence-1"
     # the tightened obligation-evidence controls are present
     for cid in ("CISA-SBD-VDP-001", "BUILD-SBOM-QUAL-003", "RELEASE-ARCHIVE-063"):
         assert cid in canonical.control_ids
