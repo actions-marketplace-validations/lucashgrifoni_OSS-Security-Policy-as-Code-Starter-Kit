@@ -344,6 +344,7 @@ def report_to_dict_v2_0(
     report: ExecutionReport,
     *,
     include_absolute_path: bool = False,
+    extensions: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     profile_meta = derive_profile_metadata(report.profile_id)
     profile_block = {
@@ -403,7 +404,7 @@ def report_to_dict_v2_0(
             "removed_in": "v9.0.0 (ADR-043)",
             "status_mapping": "docs/reports-contract-v2.0.md#mapping-from-reports10-to-reports20",
         },
-        "extensions": {},
+        "extensions": dict(extensions) if extensions else {},
     }
 
 
@@ -412,6 +413,7 @@ def report_to_dict(
     *,
     schema_version_override: str | None = None,
     include_absolute_path: bool = False,
+    extensions: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Serialize execution report to a JSON-compatible ``reports/2.0`` dict.
 
@@ -424,7 +426,7 @@ def report_to_dict(
     basename (default, privacy-by-default) or kept as the full absolute path.
     """
 
-    return report_to_dict_v2_0(report, include_absolute_path=include_absolute_path)
+    return report_to_dict_v2_0(report, include_absolute_path=include_absolute_path, extensions=extensions)
 
 
 def write_json_report(
@@ -433,6 +435,7 @@ def write_json_report(
     *,
     schema_version_override: str | None = None,
     include_absolute_path: bool = False,
+    extensions: dict[str, Any] | None = None,
 ) -> None:
     """Write evaluation-report.json."""
 
@@ -441,6 +444,7 @@ def write_json_report(
         report,
         schema_version_override=schema_version_override,
         include_absolute_path=include_absolute_path,
+        extensions=extensions,
     )
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
@@ -623,6 +627,7 @@ def write_reports(
     *,
     schema_version_override: str | None = None,
     include_absolute_path: bool = False,
+    extensions: dict[str, Any] | None = None,
 ) -> tuple[Path, Path]:
     """Write JSON and Markdown reports; return paths.
 
@@ -638,6 +643,7 @@ def write_reports(
         json_path,
         schema_version_override=schema_version_override,
         include_absolute_path=include_absolute_path,
+        extensions=extensions,
     )
     write_markdown_report(report, md_path, include_absolute_path=include_absolute_path)
     return json_path, md_path

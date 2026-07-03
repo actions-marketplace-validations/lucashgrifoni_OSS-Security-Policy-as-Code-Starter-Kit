@@ -365,6 +365,11 @@ class EvaluateRequest:
     #: verified attestation record (PROV-VERIFY-061) resolves to ATTESTED instead of PASS.
     #: Never relaxes a FAIL/MRR. Default off.
     enable_attested: bool = False
+    #: ADR-030 (A-S8): opt-in additive ``extensions.findings_summary`` block, computed
+    #: IN-PROCESS from the same clone-local scanner evidence during this invocation.
+    #: evaluate never reads a pre-existing findings artifact (fence FT-1) and no control
+    #: state, summary, digest, or exit code depends on it (fence FT-2). Default off.
+    with_findings_summary: bool = False
 
 
 def _resolve_eval_target(req: EvaluateRequest) -> Path:
@@ -435,9 +440,11 @@ def _make_verbose_emit(verbose: bool) -> Callable[[str], None] | None:
     return emit
 
 
-def _write_eval_reports(report, req: EvaluateRequest, out: Path) -> tuple[Path, Path]:  # type: ignore[no-untyped-def]
+def _write_eval_reports(  # type: ignore[no-untyped-def]
+    report, req: EvaluateRequest, out: Path, extensions: dict[str, Any] | None = None
+) -> tuple[Path, Path]:
     try:
-        return write_reports(report, out, include_absolute_path=req.include_absolute_path)
+        return write_reports(report, out, include_absolute_path=req.include_absolute_path, extensions=extensions)
     except OSError as exc:
         raise InvalidInputError(f"Cannot write to --output-dir '{req.output_dir}': {exc.strerror or exc}") from exc
 
@@ -554,7 +561,13 @@ def _run_evaluate(req: EvaluateRequest) -> None:
         enable_attested=req.enable_attested,
     )
     out = req.output_dir.resolve()
-    json_path, md_path = _write_eval_reports(report, req, out)
+    extensions: dict[str, Any] | None = None
+    if req.with_findings_summary:
+        from oss_policy_kit import __version__ as _kit_version
+        from oss_policy_kit.application.findings_report import build_findings_summary
+
+        extensions = {"findings_summary": build_findings_summary(repo_root, kit_version=_kit_version)}
+    json_path, md_path = _write_eval_reports(report, req, out, extensions)
     _maybe_write_sarif(report, req, out)
     _render_eval_report(report, req, fmt, out, json_path, md_path)
     if fail_on_violated(cast(FailOnPolicy, policy), report.summary_by_status):

@@ -192,6 +192,15 @@ def cli_root(
         ),
         rich_help_panel=OPT_PANEL_EVIDENCE,
     ),
+    with_findings_summary: bool = typer.Option(
+        False,
+        "--with-findings-summary",
+        help=(
+            "Embed an additive extensions.findings_summary block (correlated scanner-finding "
+            "counts), computed in-process from this same run. Never changes control states, "
+            "summary, digest, or exit codes."
+        ),
+    ),
     debug: bool = typer.Option(
         False,
         "--debug",
@@ -246,6 +255,7 @@ def cli_root(
             use_insights_evidence=use_insights_evidence,
             applicability_engine=applicability_engine,
             enable_attested=enable_attested,
+            with_findings_summary=with_findings_summary,
         )
     )
 
@@ -411,6 +421,15 @@ def evaluate_cmd(
         ),
         rich_help_panel=OPT_PANEL_EVIDENCE,
     ),
+    with_findings_summary: bool = typer.Option(
+        False,
+        "--with-findings-summary",
+        help=(
+            "Embed an additive extensions.findings_summary block (correlated scanner-finding "
+            "counts), computed in-process from this same run. Never changes control states, "
+            "summary, digest, or exit codes."
+        ),
+    ),
 ) -> None:
     """Evaluate a local repository clone against a bundled profile.
 
@@ -448,5 +467,6 @@ def evaluate_cmd(
             use_insights_evidence=use_insights_evidence,
             applicability_engine=applicability_engine,
             enable_attested=enable_attested,
+            with_findings_summary=with_findings_summary,
         )
     )

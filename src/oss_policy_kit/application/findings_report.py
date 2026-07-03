@@ -12,6 +12,9 @@ paths, no network, no persistence, no cross-run state.
 
 from __future__ import annotations
 
+import hashlib
+import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -22,8 +25,10 @@ from oss_policy_kit.application.finding_normalization import (
     normalize_kit_evidence,
 )
 from oss_policy_kit.application.finding_sarif import normalize_sarif_sources
+from oss_policy_kit.application.input_limits import MAX_EVIDENCE_BYTES, oversize_reason
 from oss_policy_kit.application.reporting import _sanitize_target_path_for_payload
-from oss_policy_kit.domain.findings import NormalizedFinding, SourceRecord
+from oss_policy_kit.application.vuln_waivers import VulnWaiver, load_vuln_waivers
+from oss_policy_kit.domain.findings import NormalizedFinding, SourceRecord, WaiverLink
 
 FINDINGS_SCHEMA_VERSION = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/findings/1.0"
 FINDINGS_CONTRACT_VERSION = "findings/1.0"
@@ -111,12 +116,69 @@ def collect_normalized_findings(
     return kit_findings + sarif_findings, kit_records + sarif_records
 
 
+def _apply_vuln_waivers(
+    findings: tuple[NormalizedFinding, ...], waivers: dict[str, VulnWaiver]
+) -> tuple[NormalizedFinding, ...]:
+    """Attach waiver links to findings whose vulnerability ids match (FT-3 fence).
+
+    The link is annotation only: rank, severity, and every other field stay
+    untouched, and nothing here can reach the evaluation engine. Waived
+    findings stay fully visible in the artifact.
+    """
+
+    if not waivers:
+        return findings
+    out: list[NormalizedFinding] = []
+    for f in findings:
+        record = next((waivers[v] for v in f.vulnerability_ids if v in waivers), None)
+        if record is None:
+            out.append(f)
+            continue
+        link = WaiverLink(
+            waived=True,
+            matched_by="vulnerability_id",
+            waiver_owner=record.owner,
+            expires_at=record.expires_at.isoformat() if record.expires_at else None,
+        )
+        out.append(replace(f, waiver=link))
+    return tuple(out)
+
+
+def _load_enrichment(path: Path) -> tuple[dict[str, dict[str, Any]], SourceRecord]:
+    """Load an offline EPSS/KEV enrichment snapshot with an honest provenance record.
+
+    Shape: ``{"as_of": "YYYY-MM-DD", "vulnerabilities": {"CVE-X": {"epss": .., "kev": ..}}}``.
+    The record carries the inferred-trust label and the snapshot's as-of date;
+    the data feeds ranking only (see finding_correlation._effective_signals).
+    """
+
+    tool = "user-supplied-enrichment (inferred trust)"
+    rel = path.name  # basename only: never leak the auditor's absolute path
+    if not path.is_file():
+        return {}, SourceRecord(path=rel, kind="enrichment-snapshot", tool=tool, status="missing")
+    if oversize_reason(path, MAX_EVIDENCE_BYTES, label="enrichment snapshot") is not None:
+        return {}, SourceRecord(path=rel, kind="enrichment-snapshot", tool=tool, status="oversize")
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return {}, SourceRecord(path=rel, kind="enrichment-snapshot", tool=tool, status="unreadable")
+    if not isinstance(raw, dict):
+        return {}, SourceRecord(path=rel, kind="enrichment-snapshot", tool=tool, status="unreadable")
+    vulns = raw.get("vulnerabilities")
+    table = {str(k): v for k, v in vulns.items() if isinstance(v, dict)} if isinstance(vulns, dict) else {}
+    as_of = str(raw.get("as_of") or "").strip() or None
+    record = SourceRecord(path=rel, kind="enrichment-snapshot", tool=tool, status="ok", tool_version=as_of)
+    return table, record
+
+
 def build_findings_report(
     repo_root: Path,
     *,
     kit_version: str,
     include_absolute_path: bool = False,
     generated_at: str | None = None,
+    waivers_path: Path | None = None,
+    enrichment_path: Path | None = None,
 ) -> dict[str, Any]:
     """Build the complete findings/1.0 artifact dict for *repo_root*.
 
@@ -126,10 +188,20 @@ def build_findings_report(
     """
 
     findings, records = collect_normalized_findings(repo_root)
-    result = correlate(findings)
+    enrichment: dict[str, dict[str, Any]] | None = None
+    if enrichment_path is not None:
+        enrichment, enrichment_record = _load_enrichment(enrichment_path)
+        records.append(enrichment_record)
+    result = correlate(findings, enrichment)
+
+    correlated = result.findings
+    waiver_warnings: list[str] = []
+    if waivers_path is not None:
+        vuln_waivers, waiver_warnings = load_vuln_waivers(waivers_path)
+        correlated = _apply_vuln_waivers(correlated, vuln_waivers)
 
     by_severity = dict.fromkeys(NORMALIZED_SEVERITIES, 0)
-    for f in result.findings:
+    for f in correlated:
         by_severity[f.severity.normalized] = by_severity.get(f.severity.normalized, 0) + 1
 
     return {
@@ -139,9 +211,34 @@ def build_findings_report(
         "kit_version": kit_version,
         "target_path": _sanitize_target_path_for_payload(str(repo_root), include_absolute=include_absolute_path),
         "sources_read": [_source_record_to_dict(r) for r in records],
-        "findings_total": len(result.findings),
+        "findings_total": len(correlated),
         "findings_by_severity": by_severity,
-        "findings": [_finding_to_dict(f) for f in result.findings],
+        "findings": [_finding_to_dict(f) for f in correlated],
         "correlation": result.to_dict(),
-        "extensions": {},
+        "extensions": ({"waiver_warnings": waiver_warnings} if waiver_warnings else {}),
+    }
+
+
+def build_findings_summary(repo_root: Path, *, kit_version: str) -> dict[str, Any]:
+    """Compute the flag-gated ``extensions.findings_summary`` block IN-PROCESS (A-S8).
+
+    Recomputed from the same clone-local inputs during the same ``evaluate``
+    invocation — it NEVER reads a pre-existing ``findings.json`` (fence FT-1)
+    and implies no linkage to the per-control ``finding_id``. ``kev_count`` and
+    ``high_epss_count`` (EPSS >= 0.5) are source-derived signals, never
+    compliance claims. ``findings_digest`` is the sha256 (16 hex) of the
+    canonical findings array so consumers can pair the summary with a
+    separately produced findings/1.0 artifact.
+    """
+
+    report = build_findings_report(repo_root, kit_version=kit_version)
+    canonical = json.dumps(report["findings"], sort_keys=True).encode("utf-8")
+    return {
+        "findings_total": report["findings_total"],
+        "correlated_groups": report["correlation"]["merged_groups"],
+        "by_severity": report["findings_by_severity"],
+        "kev_count": sum(1 for f in report["findings"] if f["kev"]),
+        "high_epss_count": sum(1 for f in report["findings"] if (f["epss"] or 0) >= 0.5),
+        "artifact": "findings.json",
+        "findings_digest": hashlib.sha256(canonical).hexdigest()[:16],
     }

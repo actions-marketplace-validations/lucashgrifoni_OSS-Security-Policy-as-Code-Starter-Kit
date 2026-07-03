@@ -27,6 +27,7 @@ import typer
 from oss_policy_kit import __version__ as _KIT_VERSION
 from oss_policy_kit.application.finding_normalization import NORMALIZED_SEVERITIES
 from oss_policy_kit.application.findings_report import build_findings_report
+from oss_policy_kit.application.findings_sarif_export import render_findings_sarif
 from oss_policy_kit.cli.common import app, stderr_console, write_stdout_text
 from oss_policy_kit.cli.help_text import CMD_PANEL_EXPORT
 from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
@@ -92,12 +93,15 @@ def _write_artifact(report: dict[str, Any], output: Path) -> None:
 def _gate_tripped(report: dict[str, Any], fail_on_severity: str | None, fail_on_kev: bool) -> str | None:
     """Return a gate message if a --fail-on-* threshold is met, else None."""
 
-    if fail_on_kev and any(f["kev"] for f in report["findings"]):
-        n = sum(1 for f in report["findings"] if f["kev"])
+    # Waived findings stay visible in the artifact but do not trip the gates
+    # (the waiver effect is confined to this surface - FT-3).
+    active = [f for f in report["findings"] if not f["waiver"]["waived"]]
+    if fail_on_kev and any(f["kev"] for f in active):
+        n = sum(1 for f in active if f["kev"])
         return f"{n} KEV-listed finding(s) present (--fail-on-kev)."
     if fail_on_severity:
         threshold = _SEVERITY_RANK[fail_on_severity]
-        hits = [f for f in report["findings"] if _SEVERITY_RANK.get(f["severity"]["normalized"], 0) >= threshold]
+        hits = [f for f in active if _SEVERITY_RANK.get(f["severity"]["normalized"], 0) >= threshold]
         if hits:
             return f"{len(hits)} finding(s) at or above severity '{fail_on_severity}' (--fail-on-severity)."
     return None
@@ -110,10 +114,12 @@ def _run_correlate_findings(
     fail_on_severity: str | None,
     fail_on_kev: bool,
     include_absolute_path: bool,
+    waivers: Path | None,
+    enrichment_file: Path | None,
 ) -> None:
     fmt = output_format.lower().strip()
-    if fmt not in {"human", "json"}:
-        raise InvalidInputError("--format must be human or json.")
+    if fmt not in {"human", "json", "sarif"}:
+        raise InvalidInputError("--format must be human, json, or sarif.")
     sev = fail_on_severity.lower().strip() if fail_on_severity else None
     if sev is not None and sev not in _GATE_SEVERITIES:
         raise InvalidInputError("--fail-on-severity must be one of: critical, high, medium, low.")
@@ -122,11 +128,28 @@ def _run_correlate_findings(
     if not target_path.is_dir():
         raise InvalidInputError(f"--target {target_path} is not a directory.")
 
-    report = build_findings_report(target_path, kit_version=_KIT_VERSION, include_absolute_path=include_absolute_path)
+    waivers_path: Path | None = None
+    if waivers is not None:
+        waivers_path = waivers if waivers.is_absolute() else target_path / waivers
+        if not waivers_path.is_file():
+            raise InvalidInputError(f"--waivers {waivers} is not a file.")
+    if enrichment_file is not None and not enrichment_file.is_file():
+        raise InvalidInputError(f"--enrichment-file {enrichment_file.name} is not a file.")
+    report = build_findings_report(
+        target_path,
+        kit_version=_KIT_VERSION,
+        include_absolute_path=include_absolute_path,
+        waivers_path=waivers_path,
+        enrichment_path=enrichment_file,
+    )
+    for w in report.get("extensions", {}).get("waiver_warnings", []):
+        stderr_console().print(f"[yellow]Waivers:[/yellow] {w}")
     _write_artifact(report, output)
 
     if fmt == "json":
         write_stdout_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    elif fmt == "sarif":
+        write_stdout_text(json.dumps(render_findings_sarif(report), indent=2, sort_keys=True) + "\n")
     else:
         _render_human(report, output)
 
@@ -152,7 +175,7 @@ def correlate_findings_cmd(
     output_format: str = typer.Option(
         "human",
         "--format",
-        help="stdout view: human (ranked summary, default) or json (the full artifact).",
+        help="stdout view: human (ranked summary, default), json (the full artifact), or sarif (aggregator SARIF).",
     ),
     fail_on_severity: str | None = typer.Option(
         None,
@@ -169,6 +192,23 @@ def correlate_findings_cmd(
         "--include-absolute-path",
         help="Emit the absolute target path in the artifact instead of the privacy-default basename.",
     ),
+    waivers: Path | None = typer.Option(
+        None,
+        "--waivers",
+        help=(
+            "Optional waivers.yaml; entries with vulnerability_ids mark matching findings as "
+            "waived (visible, but exempt from --fail-on-* gates). Never affects evaluate."
+        ),
+    ),
+    enrichment_file: Path | None = typer.Option(
+        None,
+        "--enrichment-file",
+        help=(
+            "Optional offline EPSS/KEV snapshot (JSON with as_of + vulnerabilities map). "
+            "Inferred-trust input: refines ranking rationale only; never changes finding "
+            "fields, severities, gates, or any evaluate control state."
+        ),
+    ),
 ) -> None:
     """Correlate scanner evidence into one deduplicated, ranked findings/1.0 artifact.
 
@@ -184,7 +224,16 @@ def correlate_findings_cmd(
     """
 
     try:
-        _run_correlate_findings(target, output, output_format, fail_on_severity, fail_on_kev, include_absolute_path)
+        _run_correlate_findings(
+            target,
+            output,
+            output_format,
+            fail_on_severity,
+            fail_on_kev,
+            include_absolute_path,
+            waivers,
+            enrichment_file,
+        )
     except OssPolicyKitError as exc:
         stderr_console().print(f"[red]Error:[/red] {exc.message}")
         raise typer.Exit(code=2) from exc

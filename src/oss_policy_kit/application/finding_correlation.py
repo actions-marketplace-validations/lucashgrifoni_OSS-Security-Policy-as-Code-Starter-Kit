@@ -193,11 +193,50 @@ def _merge_group(canonical_key: str, group: list[NormalizedFinding]) -> Normaliz
     )
 
 
-def _rank_sort_key(finding: NormalizedFinding) -> tuple[int, float, int, str, str, str]:
+def _effective_signals(
+    finding: NormalizedFinding, enrichment: dict[str, dict[str, Any]] | None
+) -> tuple[bool, float | None, bool]:
+    """Return ``(kev_effective, epss_effective, snapshot_contributed)`` for ranking.
+
+    An offline user-supplied enrichment snapshot may fill KEV/EPSS gaps for
+    RANKING ONLY (ADR-030 Amendment / D6): the finding's own ``kev``/``epss``
+    fields, its severity, and every control state stay untouched. Source-reported
+    values always win over the snapshot.
+    """
+
+    kev_eff = bool(finding.kev)
+    epss_eff = finding.epss
+    contributed = False
+    if enrichment:
+        for vid in finding.vulnerability_ids:
+            entry = enrichment.get(vid)
+            if not isinstance(entry, dict):
+                continue
+            if finding.kev is None and not kev_eff:
+                raw_kev = entry.get("kev")
+                kev_str = raw_kev.strip().lower() if isinstance(raw_kev, str) else ""
+                if raw_kev in (True, 1) or kev_str in {"true", "yes", "1"}:
+                    kev_eff = True
+                    contributed = True
+            if epss_eff is None:
+                try:
+                    epss_eff = float(entry["epss"]) if entry.get("epss") is not None else None
+                except (TypeError, ValueError):
+                    epss_eff = None
+                else:
+                    if epss_eff is not None:
+                        contributed = True
+    return kev_eff, epss_eff, contributed
+
+
+def _rank_sort_key(
+    finding: NormalizedFinding, enrichment: dict[str, dict[str, Any]] | None = None
+) -> tuple[int, float, int, str, str, str]:
     """Total order: KEV first, EPSS desc (nulls last), severity desc, then stable tie-breaks."""
 
-    kev_rank = 0 if finding.kev else 1  # True -> 0 (first)
-    epss_rank = -(finding.epss if finding.epss is not None else -1.0)  # higher epss first; null last
+    kev_eff, epss_eff, _ = _effective_signals(finding, enrichment)
+    kev_rank = 0 if kev_eff else 1  # True -> 0 (first)
+    epss_rank = -(epss_eff if epss_eff is not None else -1.0)  # higher epss first; null last
     sev_rank = -_SEVERITY_RANK.get(finding.severity.normalized, 0)  # higher severity first
     file_key = finding.location.file or "￿"  # None sorts last
     return (kev_rank, epss_rank, sev_rank, file_key, finding.rule, finding.id)
@@ -220,7 +259,9 @@ class CorrelationResult:
         }
 
 
-def correlate(findings: list[NormalizedFinding]) -> CorrelationResult:
+def correlate(
+    findings: list[NormalizedFinding], enrichment: dict[str, dict[str, Any]] | None = None
+) -> CorrelationResult:
     """Correlate + rank *findings* deterministically (idempotent, order-independent)."""
 
     # Group by canonical key. Sort keys so output is independent of input order.
@@ -242,19 +283,22 @@ def correlate(findings: list[NormalizedFinding]) -> CorrelationResult:
             if len({s.tool for f in group for s in f.sources}) > 1:
                 cross_tool_merges += 1
 
-    merged.sort(key=_rank_sort_key)
+    merged.sort(key=lambda f: _rank_sort_key(f, enrichment))
     ranked = tuple(
-        replace(f, priority=FindingPriority(rank=i + 1, rationale=_rationale(f))) for i, f in enumerate(merged)
+        replace(f, priority=FindingPriority(rank=i + 1, rationale=_rationale(f, enrichment)))
+        for i, f in enumerate(merged)
     )
     return CorrelationResult(findings=ranked, merged_groups=merged_groups, cross_tool_merges=cross_tool_merges)
 
 
-def _rationale(finding: NormalizedFinding) -> str:
+def _rationale(finding: NormalizedFinding, enrichment: dict[str, dict[str, Any]] | None = None) -> str:
     bits: list[str] = []
-    if finding.kev:
-        bits.append("KEV-listed")
-    if finding.epss is not None:
-        bits.append(f"EPSS={finding.epss:.2f}")
+    kev_eff, epss_eff, contributed = _effective_signals(finding, enrichment)
+    snapshot_tag = " (snapshot)" if contributed else ""
+    if kev_eff:
+        bits.append("KEV-listed" + ("" if finding.kev else snapshot_tag))
+    if epss_eff is not None:
+        bits.append(f"EPSS={epss_eff:.2f}" + ("" if finding.epss is not None else snapshot_tag))
     bits.append(f"severity={finding.severity.normalized}")
     if finding.correlation and finding.correlation.merged_from > 1:
         bits.append(f"merged×{finding.correlation.merged_from}")

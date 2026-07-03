@@ -81,7 +81,16 @@ def _parse_waiver_record(idx: int, item: object, today: date, warnings: list[str
         return None
     cid = str(item.get("control_id", "")).strip()
     if not cid:
-        warnings.append(f"Waiver entry {idx} ignored: missing control_id")
+        vuln_ids = item.get("vulnerability_ids")
+        if isinstance(vuln_ids, list) and vuln_ids:
+            # Informational, not an error: vulnerability_ids-keyed entries are
+            # consumed by emit-vex and correlate-findings, never the control gate.
+            warnings.append(
+                f"Waiver entry {idx} targets vulnerability_ids (handled by emit-vex / "
+                "correlate-findings); not a control-gate waiver."
+            )
+        else:
+            warnings.append(f"Waiver entry {idx} ignored: missing control_id")
         return None
     # Accept both the canonical ``justification`` key and the legacy ``reason``
     # spelling that the scaffolded stub/docs historically documented (v9.0.2).
