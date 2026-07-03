@@ -8,7 +8,7 @@ The concrete schema files live under [`reports/schema/`](./schema/).
 
 This kit ships two JSON Schema directories that are intentionally distinct:
 
-- **`reports/schema/`** — *public surface*. Stable JSON Schema files referenced from the documented contracts (`docs/reports-contract-v0.3.md`, `docs/reports-contract-v1.0.md`) and from `evaluation-result.schema.json` here. External tooling that parses `evaluation-report.json` or evidence JSON should pin to files under this directory.
+- **`reports/schema/`** — *public surface*. Stable JSON Schema files for the documented CURRENT contracts: `evaluation-report-2.0.schema.json` (`docs/reports-contract-v2.0.md`), `findings-1.0.schema.json` (`docs/findings-correlation.md`), and the per-scanner `evidence-*.schema.json` files. External tooling that parses `evaluation-report.json`, `findings.json`, or evidence JSON should pin to files under this directory.
 - **`src/oss_policy_kit/data/schema/`** — *internal/packaged surface*. The schemas the CLI imports at runtime (versioned `evaluation-report-v1`, `-v2`, `-v3` schemas, plus profile-list, profile-recommendation, and profile-spec schemas). They are loaded as Python package data via `importlib.resources` and are part of the wheel.
 
 The two directories are kept in sync where they cover the same artifact (for example `evaluation-result.schema.json` mirrors the public-facing portion of `src/.../data/schema/evaluation-report-v1.schema.json`). The internal copy is what the CLI validates against; the public copy is what external integrators should read.

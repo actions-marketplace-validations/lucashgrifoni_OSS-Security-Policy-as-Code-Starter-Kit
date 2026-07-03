@@ -20,7 +20,7 @@ Property tests catch edge cases that example-based tests are unlikely to enumera
 - Evaluation report schema roundtrip for the `reports/2.0` contract (the only contract since v9.0.0).
 - Evaluator invariants across the **entire** `EVALUATOR_REGISTRY` (`test_evaluator_invariants.py`): for synthetic repositories with random file present/absent combinations, every `eval_*` returns an `EvalOutcome` (never raises), with a valid `ControlStatus`, a list of string `evidence_sources`, deterministic results on an identical context, and no writes to the target repository.
 
-The `reports/2.0` serialization (`report_to_dict_v2_0`) is validated against the `reports/2.0` JSON schema in `tests/property/test_report_schema_roundtrip.py`, with roundtrip invariants (no control lost, every status in the five-state vocabulary, run metadata preserved). The legacy pre-2.0 contracts and their migration tests were removed in v9.0.0 (ADR-043); the offline `scripts/migrate-1.0-to-2.0.py` converter remains for previously stored `1.0` reports.
+The `reports/2.0` serialization (`report_to_dict_v2_0`) is validated against the `reports/2.0` JSON schema in `tests/property/test_report_schema_roundtrip.py`, with roundtrip invariants (no control lost, every status in the five-state vocabulary, run metadata preserved). The legacy pre-2.0 contracts and their migration tests were removed in v9.0.0 (ADR-043); the offline converter script was removed in v10.0.0 (available in the v9.x tags).
 
 Run locally:
 

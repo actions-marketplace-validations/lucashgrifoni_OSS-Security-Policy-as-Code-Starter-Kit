@@ -14,7 +14,7 @@ Pass/fail security policy gates for OSS repositories, with explicit assurance gr
 
 | Current release | Bundled profiles | Controls | CLI commands | Python |
 |---|---:|---:|---:|---|
-| v9.0.3 <!-- x-release-please-version --> | 56 | 222 | 22 | 3.12+ |
+| v9.0.3 <!-- x-release-please-version --> | 56 | 222 | 23 | 3.12+ |
 
 Use it when you need a local-first gate that combines repository governance, CI/CD hardening, release posture, scanner evidence, waivers, and framework-oriented reporting. It is not a vulnerability scanner, certification engine, or legal compliance guarantee.
 
@@ -39,6 +39,7 @@ First-time tutorial: [docs/tutorial-first-pr-gate.md](docs/tutorial-first-pr-gat
 - Evaluates bundled policy profiles against a repository clone.
 - Uses optional evidence under `.oss-policy-kit/evidence/` for platform-only facts.
 - Composes signals from local files, workflows, SARIF/JSON scanner outputs, waivers, and release evidence.
+- Correlates composed scanner findings into one deduplicated, ranked findings/1.0 artifact (`correlate-findings`).
 - Labels controls by assurance type: deterministic, signal, or evidence-backed.
 - Supports Markdown, JSON report contracts, and optional SARIF for code-scanning workflows.
 - Keeps waivers visible with owner, reason, and expiry metadata.
@@ -58,6 +59,7 @@ First-time tutorial: [docs/tutorial-first-pr-gate.md](docs/tutorial-first-pr-gat
 | CI/CD posture | GitHub Actions, Azure Pipelines, AWS CodeBuild/CodePipeline, GitLab CI signals |
 | Release hardening | OIDC publishing, provenance evidence, artifact verification, source-built container flow |
 | Scanner composition | SARIF/JSON ingestion for tools such as zizmor, OSV-Scanner, Gitleaks, Scorecard, and Semgrep |
+| Finding correlation | `correlate-findings`: one normalized, deduplicated, KEV/EPSS-ranked findings/1.0 view across all composed scanners (stateless, single run) |
 | Framework mapping | OSPS, NIST SSDF, SLSA, S2C2F, OWASP CI/CD, EU CRA, EU AI Act readiness signals |
 | AI and agent security | AI agent source-side checks, MCP server security, OWASP Agentic ASI mapping |
 | Exception handling | Waiver registry with reason, owner, scope, and expiry |
@@ -101,6 +103,8 @@ Action reference: [docs/github-action.md](docs/github-action.md). Starter workfl
 `evaluate` writes `reports/2.0` JSON — the **only** report contract since v9.0.0 (ADR-043). The legacy pre-2.0 contracts (`0.1`/`0.2`/`0.3`/`1.0`) were removed; `--report-json-contract` accepts only `2.0` (any other value is a clean exit-2 error, never a silent fallback). Contracts and migration:
 
 - [docs/reports-contract-v2.0.md](docs/reports-contract-v2.0.md) — the report contract
+- [docs/v10.0.0-migration-guide.md](docs/v10.0.0-migration-guide.md) — the v10 breaking cleanups + the new findings surface
+- [docs/findings-correlation.md](docs/findings-correlation.md) — the findings/1.0 contract and `correlate-findings`
 - [docs/v9.0.0-migration-guide.md](docs/v9.0.0-migration-guide.md) — removing pinned legacy contracts + the CRA rename
 - [docs/v7.0.0-migration-guide.md](docs/v7.0.0-migration-guide.md) — the earlier reports/2.0 default flip
 - [docs/sample-reports/](docs/sample-reports/README.md)

@@ -39,4 +39,4 @@ fetch EPSS/KEV over the network during evaluation (local-first).
 ## Thresholds
 
 `SCA-EPSS-001` defaults to EPSS ≥ 0.5 and CVSS ≥ 7.0. These are conservative
-starting points; tighten them as your remediation capacity allows.
+the evaluators' FIXED thresholds (they are not configurable — the two controls always use EPSS >= 0.5 gated by CVSS >= 7.0). For tunable, ranked prioritization across all composed scanners use `correlate-findings` (v10.0.0): deterministic KEV -> EPSS -> severity ranking, opt-in `--fail-on-severity`/`--fail-on-kev` gates, and an offline `--enrichment-file` snapshot that refines ranking only. See [findings-correlation.md](findings-correlation.md).

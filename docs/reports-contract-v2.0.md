@@ -1,6 +1,6 @@
 # Reports contract `reports/2.0`
 
-> **The only report contract since v9.0.0 (BREAKING).** `reports/2.0` shipped opt-in in v6.0.0, became the **default** in v7.0.0 (ADR-027), and became the **only** contract in v9.0.0 (ADR-043). The legacy `0.1`/`0.2`/`0.3`/`1.0` contracts were removed; `--report-json-contract` now accepts only `2.0`, and any other value exits 2. The standalone `scripts/migrate-1.0-to-2.0.py` still converts existing stored `1.0` reports offline. See ADR-013 (contract design), ADR-027 (default-flip rationale), and ADR-043 (legacy-contract removal).
+> **The only report contract since v9.0.0 (BREAKING).** `reports/2.0` shipped opt-in in v6.0.0, became the **default** in v7.0.0 (ADR-027), and became the **only** contract in v9.0.0 (ADR-043). The legacy `0.1`/`0.2`/`0.3`/`1.0` contracts were removed; `--report-json-contract` now accepts only `2.0`, and any other value exits 2. The offline converter script was removed in v10.0.0; for stored `1.0` reports run it from the v9.x tags (`git show v9.0.3:scripts/migrate-1.0-to-2.0.py`). See ADR-013 (contract design), ADR-027 (default-flip rationale), and ADR-043 (legacy-contract removal).
 
 ## TL;DR
 
@@ -8,7 +8,7 @@
 - Six states: **`PASS` / `FAIL` / `UNKNOWN` / `NOT_APPLICABLE` / `ATTESTED` / `SELF_ATTESTED`** (`SELF_ATTESTED` was emitted since the ADR-033 wiring but only formally added to the published schema in v9.0.3).
 - `UNKNOWN` gains a sub-field `reason` so the granularity of the old seven states is preserved where it matters (`manual-review-required`, `not-observable-in-clone`, etc.).
 - **The only contract since v9.0.0 (ADR-043)**: `reports/2.0`. The legacy `0.1`/`0.2`/`0.3`/`1.0` were removed; `--report-json-contract` accepts only `2.0` and any other value exits 2.
-- A **migration script** (`scripts/migrate-1.0-to-2.0.py`) converts existing `reports/1.0` JSON to `reports/2.0` for adopters with long-lived dashboards.
+- A migration script for stored `reports/1.0` JSON shipped through the v9.x line; since v10.0.0 retrieve it from the tags (`git show v9.0.3:scripts/migrate-1.0-to-2.0.py`).
 
 ## Why a new contract
 
@@ -65,28 +65,36 @@ oss-policy-kit evaluate --target . --profile github-level-1 --report-json-contra
 
 `reports/0.3` and `0.2` were also removed in v9.0.0 (ADR-043); like `1.0`, selecting them now exits 2. They survive only as historical contract docs.
 
-## Migration script
+## Migration script (removed in v10.0.0)
+
+The offline `migrate-1.0-to-2.0.py` converter shipped through the v9.x line and was
+removed in v10.0.0 (the kit has been unable to emit `reports/1.0` since v9.0.0). For
+previously stored `1.0` reports, retrieve it from the tags:
 
 ```text
-$ python scripts/migrate-1.0-to-2.0.py \
-    --input out/old/evaluation-report.json \
-    --output out/new/evaluation-report.json
+$ git show v9.0.3:scripts/migrate-1.0-to-2.0.py > migrate-1.0-to-2.0.py
+$ python migrate-1.0-to-2.0.py --input out/old/evaluation-report.json --output out/new/evaluation-report.json
 ```
 
-The script:
+It applies the mapping table above losslessly (every `reports/1.0` distinction
+survives via the appropriate `reason` sub-field or per-control metadata flag).
 
-- Reads `reports/1.0` JSON.
-- Applies the mapping table above.
-- Writes `reports/2.0` JSON.
-- Exits 0 on success, 1 on input parse error, 2 on usage error.
+## `extensions.findings_summary` (opt-in, v10.0.0)
 
-It is intentionally **lossless** — every distinction in `reports/1.0` survives into `reports/2.0` via the appropriate `reason` sub-field or per-control metadata flag. Round-trip tests in the kit ensure byte-stability for the hardened example.
+`evaluate --with-findings-summary` adds an additive block under the reserved
+`extensions` key with correlated scanner-finding counts (totals, by-severity,
+KEV / high-EPSS counts, and a `findings_digest`). It is computed in-process from
+the same clone and changes no control state, `summary_by_status`,
+`results_digest`, or exit code. The digest pairs the report with a separately
+produced `findings/1.0` artifact; it implies **no linkage** to the per-control
+`finding_id` (an unrelated `{control_id}@{profile}` synthetic). See
+[findings-correlation.md](findings-correlation.md).
 
 ## Dashboard adopter checklist
 
 For each consumer of `evaluation-report.json`:
 
-1. **Migrate any remaining `reports/1.0` consumers.** Since v9.0.0 `reports/2.0` is the only contract — pinning `--report-json-contract=1.0` is no longer possible (it exits 2). Convert any previously stored `1.0` reports with the offline migration script below.
+1. **Migrate any remaining `reports/1.0` consumers.** Since v9.0.0 `reports/2.0` is the only contract — pinning `--report-json-contract=1.0` is no longer possible (it exits 2). Convert any previously stored `1.0` reports with the offline migration script (retrieved from the v9.x tags since v10.0.0; see above).
 2. **Update the contract identifier check**. `reports/2.0` advertises `"contract_version": "reports/2.0"` at the top.
 3. **Re-map status switches**. Use the mapping table above. The most common gotcha: `degraded` is now `FAIL` with `degraded: true`; consumers that treated `degraded` as PASS-ish must switch to the explicit flag.
 4. **Handle `UNKNOWN.reason`** for any logic that previously branched on `manual-review-required`, `skipped`, or `error`. All three converge under `UNKNOWN` with distinct `reason` values.
@@ -100,6 +108,6 @@ For each consumer of `evaluation-report.json`:
 
 - ADR-013 — design rationale, breaking-change justification, deprecation timeline
 - [Scorecard v6 result vocabulary](https://github.com/ossf/scorecard) (the alignment source for the five states)
-- Legacy (removed) `reports/1.0` schema, kept for historical reference: `src/oss_policy_kit/data/schema/evaluation-report-v1.schema.json`
+- Legacy (removed) pre-2.0 schema files no longer ship in the wheel since v10.0.0; they remain in the v9.x git tags.
 - [`v7.0.0-migration-guide.md`](v7.0.0-migration-guide.md) — the migration guide for the v7.0.0 default flip (ADR-027)
 - [`v6.0.0-migration-guide.md`](v6.0.0-migration-guide.md) — earlier guide that documented this contract's introduction (ADR-013) plus M-003 (ADR-008)
