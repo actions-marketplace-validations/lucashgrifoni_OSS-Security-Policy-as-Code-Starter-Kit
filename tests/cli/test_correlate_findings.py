@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -237,11 +238,18 @@ def test_command_is_registered_in_order_and_dispatch() -> None:
     assert common.prepare_cli_args(["correlate-findings", "--help"])[0] == "correlate-findings"
 
 
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+
 def test_help_via_subprocess_exit_0() -> None:
+    # Flaky-help rule: subprocess only, deterministic env (TERM=dumb strips the Rich
+    # panel styling; ANSI stripped + text flattened so panel wraps cannot split tokens).
     env = os.environ.copy()
     env["PYTHONPATH"] = os.pathsep.join([str(ROOT / "src"), str(ROOT)])
     env["NO_COLOR"] = "1"
-    env["COLUMNS"] = "120"
+    env["TERM"] = "dumb"
+    env["COLUMNS"] = "200"
+    env["PYTHONIOENCODING"] = "utf-8"
     proc = subprocess.run(
         [sys.executable, "-m", "oss_policy_kit", "correlate-findings", "--help"],
         cwd=ROOT,
@@ -254,5 +262,6 @@ def test_help_via_subprocess_exit_0() -> None:
         timeout=60,
     )
     assert proc.returncode == 0, proc.stderr
-    assert "correlate-findings" in proc.stdout
-    assert "--fail-on-severity" in proc.stdout
+    flat = " ".join(_ANSI_RE.sub("", proc.stdout).split())
+    assert "correlate-findings" in flat
+    assert "--fail-on-severity" in flat
