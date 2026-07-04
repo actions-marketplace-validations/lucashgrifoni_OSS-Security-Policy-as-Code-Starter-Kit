@@ -12,16 +12,19 @@ from oss_policy_kit.cli.main import app
 
 runner = CliRunner()
 
+# reports/2.0 shape (the only report contract since v9.0.0; v10.0.0 removed the
+# pre-2.0 fallback reads and now rejects a stored pre-2.0 report — see
+# test_v10_0_1_export_evidence.py for that guard's coverage).
 _REPORT = {
-    "schema_version": "https://example/reports/1.0",
-    "target": "C:/tmp/repo",
+    "schema_version": "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/2.0",
+    "contract_version": "reports/2.0",
+    "target_path": "examples/hardened-repo",
     "profile": {"id": "github-level-1"},
-    "summary_by_status": {"pass": 2, "fail": 1},
+    "summary_by_status": {"PASS": 1, "FAIL": 1},
     "controls": [
-        {"id": "GOV-SEC-001", "status": "pass", "reason": "ok"},
-        {"id": "CI-PIN-008", "status": "fail", "reason": "mutable refs"},
+        {"id": "GOV-SEC-001", "state": "PASS", "message": "ok"},
+        {"id": "CI-PIN-008", "state": "FAIL", "message": "mutable refs"},
     ],
-    "waivers": [],
 }
 
 

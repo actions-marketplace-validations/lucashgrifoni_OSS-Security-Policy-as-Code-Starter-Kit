@@ -126,4 +126,17 @@ def test_write_markdown_report_rich(tmp_path: Path) -> None:
     assert "Scorecard supplemental" in text
     assert "OSS-SCORECARD-001" in text
     assert "Expires" in text  # waiver expires_at detail line
-    assert "/abs/evidence.json" in text  # evidence sources detail
+    # v10.0.1 (X4-01/X6-01): the evidence bullet is redacted by default to match the JSON
+    # report — the raw absolute path must NOT leak into a shareable Markdown report.
+    assert "/abs/evidence.json" not in text
+    assert "<redacted-absolute>evidence.json" in text  # evidence sources detail (redacted)
+
+
+def test_write_markdown_report_rich_include_absolute_preserves_evidence(tmp_path: Path) -> None:
+    """``include_absolute_path=True`` keeps the raw evidence path in the Markdown (JSON parity)."""
+
+    out = tmp_path / "evaluation-report.md"
+    rp.write_markdown_report(_rich_report(), out, include_absolute_path=True)
+    text = out.read_text(encoding="utf-8")
+    assert "/abs/evidence.json" in text
+    assert "<redacted-absolute>" not in text

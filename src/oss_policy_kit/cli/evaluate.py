@@ -29,6 +29,32 @@ from oss_policy_kit.cli.profiles import _print_profiles_table
 from oss_policy_kit.domain.errors import LoadError
 
 
+def _flag_was_provided(ctx: Context, name: str) -> bool:
+    """Return True when the user passed CLI option *name* (not the typer default).
+
+    Uses Click's parameter-source provenance so an explicit flag can be told apart
+    from its default even when the value coincides (``--fail-on none`` vs. omission).
+    Any non-``DEFAULT`` source (command line, env var, prompt) counts as provided so
+    the project config only fills genuinely-unset options (X5-03). Falls back to
+    ``False`` (= "let the config decide") if provenance is unavailable, which is the
+    behavior the user expects when they did not type the flag.
+
+    The source is compared by enum ``name`` rather than by importing a
+    ``ParameterSource`` class: Typer vendors its own Click (``typer._click``), so a
+    ``ParameterSource`` imported from top-level ``click`` can be a *different* class
+    than the one the runtime returns, making ``!=`` always true. The ``.name`` string
+    is stable across both.
+    """
+
+    try:
+        source = ctx.get_parameter_source(name)
+    except Exception:  # noqa: BLE001 - provenance is best-effort; never crash the CLI
+        return False
+    if source is None:
+        return False
+    return getattr(source, "name", "") != "DEFAULT"
+
+
 @app.callback(invoke_without_command=True)
 def cli_root(
     ctx: Context,
@@ -139,7 +165,10 @@ def cli_root(
         "--report-json-contract",
         help=(
             "evaluation-report.json contract: only '2.0' is valid since v9.0.0 (ADR-043). "
-            "Any other value (incl. the removed 0.1/0.2/0.3/1.0) exits 2."
+            "The value is normalized before checking (case-insensitive, surrounding whitespace "
+            "trimmed, an optional leading 'v' dropped), so '2.0', 'V2.0', and ' v2.0 ' are all "
+            "accepted as 2.0. Any value that does not normalize to '2.0' (incl. the removed "
+            "0.1/0.2/0.3/1.0) exits 2."
         ),
         case_sensitive=False,
         rich_help_panel=OPT_PANEL_OUTPUT,
@@ -256,12 +285,16 @@ def cli_root(
             applicability_engine=applicability_engine,
             enable_attested=enable_attested,
             with_findings_summary=with_findings_summary,
+            fail_on_provided=_flag_was_provided(ctx, "fail_on"),
+            output_dir_provided=_flag_was_provided(ctx, "output_dir"),
+            report_json_contract_provided=_flag_was_provided(ctx, "report_json_contract"),
         )
     )
 
 
 @app.command("evaluate", epilog=EVALUATE_EPILOG, rich_help_panel=CMD_PANEL_EVALUATE)
 def evaluate_cmd(
+    ctx: Context,
     target_pos: str | None = typer.Argument(
         default=None,
         help="Repository root. Prefer --target/-t if the path contains spaces.",
@@ -356,7 +389,10 @@ def evaluate_cmd(
         "--report-json-contract",
         help=(
             "evaluation-report.json contract: only '2.0' is valid since v9.0.0 (ADR-043). "
-            "Any other value (incl. the removed 0.1/0.2/0.3/1.0) exits 2."
+            "The value is normalized before checking (case-insensitive, surrounding whitespace "
+            "trimmed, an optional leading 'v' dropped), so '2.0', 'V2.0', and ' v2.0 ' are all "
+            "accepted as 2.0. Any value that does not normalize to '2.0' (incl. the removed "
+            "0.1/0.2/0.3/1.0) exits 2."
         ),
         case_sensitive=False,
         rich_help_panel=OPT_PANEL_OUTPUT,
@@ -468,5 +504,8 @@ def evaluate_cmd(
             applicability_engine=applicability_engine,
             enable_attested=enable_attested,
             with_findings_summary=with_findings_summary,
+            fail_on_provided=_flag_was_provided(ctx, "fail_on"),
+            output_dir_provided=_flag_was_provided(ctx, "output_dir"),
+            report_json_contract_provided=_flag_was_provided(ctx, "report_json_contract"),
         )
     )

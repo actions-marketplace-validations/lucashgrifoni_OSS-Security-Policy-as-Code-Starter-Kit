@@ -370,6 +370,14 @@ class EvaluateRequest:
     #: evaluate never reads a pre-existing findings artifact (fence FT-1) and no control
     #: state, summary, digest, or exit code depends on it (fence FT-2). Default off.
     with_findings_summary: bool = False
+    #: X5-03: whether the user explicitly passed the corresponding CLI flag on this
+    #: invocation. The CLI populates these from Click's parameter source so an explicit
+    #: flag always wins over ``oss-policy-kit.yaml`` — even when the flag value coincides
+    #: with the typer default (e.g. ``--fail-on none`` while the config says ``fail``).
+    #: Default ``True`` (= "provided") keeps CLI-wins semantics for direct constructors.
+    fail_on_provided: bool = True
+    output_dir_provided: bool = True
+    report_json_contract_provided: bool = True
 
 
 def _resolve_eval_target(req: EvaluateRequest) -> Path:
@@ -379,21 +387,69 @@ def _resolve_eval_target(req: EvaluateRequest) -> Path:
     return resolve_existing_dir(chosen)
 
 
-def _resolve_eval_profile(req: EvaluateRequest, repo_root: Path) -> str:
-    """Return the explicit profile, or fall back to the project config's profile."""
+@dataclass(frozen=True, slots=True)
+class _EffectiveEvalSettings:
+    """Resolved ``profile`` / ``fail_on`` / ``output_dir`` / ``report_json_contract``.
 
-    if req.profile is not None:
-        return req.profile
+    Each field is the CLI flag when the user set it, otherwise the value recorded in
+    ``oss-policy-kit.yaml`` (when a config exists), otherwise the built-in default.
+    """
+
+    profile: str
+    fail_on: str
+    output_dir: Path
+    report_json_contract: str
+
+
+def _resolve_eval_settings(req: EvaluateRequest, repo_root: Path) -> _EffectiveEvalSettings:
+    """Resolve the effective eval settings, honoring ``oss-policy-kit.yaml``.
+
+    The project config is loaded exactly once. An explicit CLI flag always wins;
+    the config only fills a setting the user did NOT pass on the command line
+    (tracked via the request's ``*_provided`` flags, populated from Click's parameter
+    source — so ``--fail-on none`` still wins over a config that says ``fail``). This
+    lets ``init`` persist ``fail_on`` / ``output_dir`` / ``report_json_contract`` and
+    have ``evaluate`` honor them without the user re-typing the flags (X5-03), while
+    the profile fallback keeps its existing behavior and error message.
+    """
+
     project_config = load_project_config_for_target(repo_root)
-    if project_config is None:
+
+    # --- profile ---
+    if req.profile is not None:
+        profile = req.profile
+    elif project_config is not None:
+        profile = project_config.profile
+        stderr_console().print(
+            f"[dim]Using profile from {project_config.path.name}: {project_config.profile}[/dim]",
+        )
+    else:
         raise InvalidInputError(
             "--profile is required, and no oss-policy-kit.yaml was found under the target. "
             "Either pass --profile <id> or run `oss-policy-kit init` first.",
         )
-    stderr_console().print(
-        f"[dim]Using profile from {project_config.path.name}: {project_config.profile}[/dim]",
+
+    # --- fail_on / output_dir / report_json_contract fallbacks ---
+    # Only applied when a config exists AND the user did not pass the corresponding flag
+    # (``*_provided`` is False). The CLI flag always wins, even if its value equals the
+    # typer default (that ambiguity is why we track provenance instead of comparing).
+    fail_on = req.fail_on
+    output_dir = req.output_dir
+    report_json_contract = req.report_json_contract
+    if project_config is not None:
+        if not req.fail_on_provided:
+            fail_on = project_config.fail_on
+        if not req.output_dir_provided:
+            output_dir = Path(project_config.output_dir)
+        if not req.report_json_contract_provided:
+            report_json_contract = project_config.report_json_contract
+
+    return _EffectiveEvalSettings(
+        profile=profile,
+        fail_on=fail_on,
+        output_dir=output_dir,
+        report_json_contract=report_json_contract,
     )
-    return project_config.profile
 
 
 def _load_eval_waivers(waivers: Path | None):  # type: ignore[no-untyped-def]
@@ -495,7 +551,7 @@ def _render_eval_report(  # type: ignore[no-untyped-def]
         # ``--summary-only --format json``: stdout is the only user-facing channel (pure JSON).
         if not req.summary_only:
             stderr_console().print(f"[dim]Reports written to: {out}[/dim]")
-        print_stdout_summary(report, output_format="json")
+        print_stdout_summary(report, output_format="json", include_absolute_path=req.include_absolute_path)
         if not req.summary_only and not req.quiet:
             print_operational_warning_summary(warnings)
         return
@@ -527,17 +583,17 @@ def _emit_plugin_load_warnings() -> None:
 
 def _run_evaluate(req: EvaluateRequest) -> None:
     fmt = normalize_evaluate_format(req.output_format)
-    policy = req.fail_on.lower()
-    if policy not in {"none", "fail", "degraded"}:
-        raise InvalidInputError("--fail-on must be one of: none, fail, degraded.")
     if req.verbose:
         _emit_plugin_load_warnings()
     repo_root = _resolve_eval_target(req)
-    resolved_profile = _resolve_eval_profile(req, repo_root)
-    _warn_deprecated_profile_alias(resolved_profile)
+    settings = _resolve_eval_settings(req, repo_root)
+    policy = settings.fail_on.lower()
+    if policy not in {"none", "fail", "degraded"}:
+        raise InvalidInputError("--fail-on must be one of: none, fail, degraded.")
+    _warn_deprecated_profile_alias(settings.profile)
     root = merge_kit_root(req.kit_root)
     catalog = load_catalog(root / "controls" / "catalog.yaml")
-    prof = load_profile_by_id(root, resolved_profile)
+    prof = load_profile_by_id(root, settings.profile)
     waiver_outcome = _load_eval_waivers(req.waivers)
     scorecard = _load_eval_scorecard(req.scorecard_json)
     ext_waiver = str(Path(req.waivers).resolve()) if req.waivers is not None else None
@@ -555,12 +611,12 @@ def _run_evaluate(req: EvaluateRequest) -> None:
         scorecard=scorecard,
         external_waiver_path=ext_waiver,
         verbose_emit=_make_verbose_emit(req.verbose),
-        report_json_contract=req.report_json_contract,
+        report_json_contract=settings.report_json_contract,
         insights_evidence=insights_evidence,
         applicability_engine=req.applicability_engine,
         enable_attested=req.enable_attested,
     )
-    out = req.output_dir.resolve()
+    out = settings.output_dir.resolve()
     extensions: dict[str, Any] | None = None
     if req.with_findings_summary:
         from oss_policy_kit import __version__ as _kit_version

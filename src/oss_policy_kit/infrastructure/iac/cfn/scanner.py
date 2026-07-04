@@ -23,7 +23,6 @@ from __future__ import annotations
 import json as _json
 from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
 from pathlib import Path
@@ -31,6 +30,8 @@ from typing import Any
 
 import yaml
 
+from oss_policy_kit.application.clock import report_generated_at
+from oss_policy_kit.application.reporting import _sanitize_target_path_for_payload
 from oss_policy_kit.infrastructure.fs_walk import walk_matching_files
 
 _S3_BUCKET_TYPE = "AWS::S3::Bucket"
@@ -94,7 +95,10 @@ def _kit_version() -> str:
 
 
 def _utc_iso() -> str:
-    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    # Route through the report clock so SOURCE_DATE_EPOCH pins the timestamp for
+    # reproducible-build environments and the test suite (X7-03). Keep the ``Z``
+    # suffix so the on-disk shape stays byte-identical to prior releases.
+    return report_generated_at().replace("+00:00", "Z")
 
 
 def _normalize_target(repo_root: Path, p: Path) -> str:
@@ -655,7 +659,9 @@ def render_evidence_payload(outcome: CfnScanOutcome, *, target: Path) -> dict[st
         "tool": "oss-policy-kit-cfn-parser",
         "tool_version": outcome.tool_version,
         "status": outcome.status,
-        "target": str(target.resolve()),
+        # Privacy-by-default: emit only the basename so a commonly-committed
+        # evidence artifact never leaks an absolute path / username (X6-02, M-002).
+        "target": _sanitize_target_path_for_payload(str(target), include_absolute=False),
         "scanned_at": outcome.scanned_at,
         "attested_at": outcome.scanned_at,
         "attested_by": "oss-policy-kit scan-cfn",

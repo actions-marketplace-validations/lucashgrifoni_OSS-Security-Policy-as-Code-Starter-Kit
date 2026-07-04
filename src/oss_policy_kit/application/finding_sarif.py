@@ -192,6 +192,44 @@ def _normalize_result(
     )
 
 
+def _driver_version(run: dict[str, Any]) -> str | None:
+    """Return the run's driver semanticVersion/version if present, else None."""
+
+    driver = ((run.get("tool") or {}).get("driver") or {}) if isinstance(run.get("tool"), dict) else {}
+    version = driver.get("semanticVersion") or driver.get("version")
+    return version.strip() if isinstance(version, str) and version.strip() else None
+
+
+def _project_runs(runs: list[Any], tool: str, rel: str) -> tuple[list[NormalizedFinding], str | None, bool]:
+    """Project every run's results into findings.
+
+    Returns ``(findings, tool_version, container_invalid)``. ``container_invalid``
+    is True when any run carries a ``results`` key that is present but not a list
+    (the results CONTAINER itself is malformed) — the caller demotes the record
+    to ``error`` so a corrupt drop is distinguishable from a genuinely-empty one.
+    A run with no ``results`` key, or with ``results: []``, stays honestly ``ok``.
+    """
+
+    findings: list[NormalizedFinding] = []
+    tool_version: str | None = None
+    container_invalid = False
+    for run in runs:
+        if not isinstance(run, dict):
+            continue
+        if tool_version is None:
+            tool_version = _driver_version(run)
+        rule_levels = _sarif_rule_levels(run)
+        results = run.get("results")
+        if not isinstance(results, list):
+            if "results" in run:
+                container_invalid = True
+            continue
+        for result in results:
+            if isinstance(result, dict):
+                findings.append(_normalize_result(tool, rel, result, rule_levels))
+    return findings, tool_version, container_invalid
+
+
 def normalize_sarif_sources(repo_root: Path) -> tuple[list[NormalizedFinding], list[SourceRecord]]:
     """Project the four external SARIF drops under *repo_root* into findings.
 
@@ -215,23 +253,12 @@ def normalize_sarif_sources(repo_root: Path) -> tuple[list[NormalizedFinding], l
         if err is not None or runs is None:
             records.append(SourceRecord(path=rel, kind="external-sarif", tool=tool, status="unreadable"))
             continue
-        tool_version: str | None = None
-        for run in runs:
-            if not isinstance(run, dict):
-                continue
-            driver = ((run.get("tool") or {}).get("driver") or {}) if isinstance(run.get("tool"), dict) else {}
-            if tool_version is None:
-                version = driver.get("semanticVersion") or driver.get("version")
-                if isinstance(version, str) and version.strip():
-                    tool_version = version.strip()
-            rule_levels = _sarif_rule_levels(run)
-            results = run.get("results")
-            if not isinstance(results, list):
-                continue
-            for result in results:
-                if isinstance(result, dict):
-                    findings.append(_normalize_result(tool, rel, result, rule_levels))
-        records.append(SourceRecord(path=rel, kind="external-sarif", tool=tool, status="ok", tool_version=tool_version))
+        run_findings, tool_version, container_invalid = _project_runs(runs, tool, rel)
+        findings.extend(run_findings)
+        status = "error" if container_invalid else "ok"
+        records.append(
+            SourceRecord(path=rel, kind="external-sarif", tool=tool, status=status, tool_version=tool_version)
+        )
     return findings, records
 
 

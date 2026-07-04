@@ -121,10 +121,13 @@ def test_load_vuln_waivers_unreadable_yaml(tmp_path: Path) -> None:
 
 
 def test_load_vuln_waivers_entries_not_a_list(tmp_path: Path) -> None:
+    # A present-but-non-list "waivers:" key now warns honestly (v10.0.1 X3-02):
+    # previously it returned silently, hiding a malformed policy file.
     p = tmp_path / "w.yaml"
     p.write_text("waivers: 5\n", encoding="utf-8")
     out, warns = ev._load_vuln_waivers(p)
-    assert out == {} and warns == []
+    assert out == {}
+    assert any("'waivers' is not a list" in m for m in warns)
 
 
 def test_load_vuln_waivers_skips_expired_and_control_only_and_blank_ids(tmp_path: Path) -> None:

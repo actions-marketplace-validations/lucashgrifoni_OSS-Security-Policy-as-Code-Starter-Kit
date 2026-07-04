@@ -128,13 +128,17 @@ def load_vuln_waivers(path: Path) -> tuple[dict[str, VulnWaiver], list[str]]:
     try:
         raw = load_yaml_file(path)
     except Exception as exc:  # noqa: BLE001
-        warnings.append(f"Could not read waivers file {path}: {exc}")
+        # basename only: the warning lands verbatim in the shareable findings/1.0
+        # extensions.waiver_warnings; never leak the absolute path / username (M-002).
+        warnings.append(f"Could not read waivers file {path.name}: {exc}")
         return {}, warnings
     if not isinstance(raw, dict):
-        warnings.append(f"Waivers file {path} is not a YAML mapping; ignoring.")
+        warnings.append(f"Waivers file {path.name} is not a YAML mapping; ignoring.")
         return {}, warnings
     entries = raw.get("waivers")
     if not isinstance(entries, list):
+        if "waivers" in raw:
+            warnings.append(f"Waivers file {path.name} 'waivers' is not a list; ignored.")
         return {}, warnings
     today = utc_today()
     out: dict[str, VulnWaiver] = {}

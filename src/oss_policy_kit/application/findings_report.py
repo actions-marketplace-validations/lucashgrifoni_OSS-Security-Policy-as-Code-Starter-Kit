@@ -233,12 +233,19 @@ def build_findings_summary(repo_root: Path, *, kit_version: str) -> dict[str, An
 
     report = build_findings_report(repo_root, kit_version=kit_version)
     canonical = json.dumps(report["findings"], sort_keys=True).encode("utf-8")
+    sources = report["sources_read"]
+    sources_ok = sum(1 for s in sources if s["status"] == "ok")
     return {
         "findings_total": report["findings_total"],
         "correlated_groups": report["correlation"]["merged_groups"],
         "by_severity": report["findings_by_severity"],
         "kev_count": sum(1 for f in report["findings"] if f["kev"]),
         "high_epss_count": sum(1 for f in report["findings"] if (f["epss"] or 0) >= 0.5),
+        # Source-read accounting so a consumer can tell a genuinely-clean zero
+        # from an all-unreadable one: findings_total==0 with sources_ok < sources_total
+        # means evidence was present but could not be read, not "no problems".
+        "sources_total": len(sources),
+        "sources_ok": sources_ok,
         "artifact": "findings.json",
         "findings_digest": hashlib.sha256(canonical).hexdigest()[:16],
     }

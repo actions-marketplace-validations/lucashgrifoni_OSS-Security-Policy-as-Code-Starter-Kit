@@ -61,6 +61,8 @@ def _render_human(report: dict[str, Any], output: Path) -> None:
         if loc["file"] and loc["line_start"]:
             where = f"{loc['file']}:{loc['line_start']}"
         tags = []
+        if f["waiver"]["waived"]:
+            tags.append("WAIVED")
         if f["kev"]:
             tags.append("KEV")
         if f["epss"] is not None:
@@ -107,8 +109,44 @@ def _gate_tripped(report: dict[str, Any], fail_on_severity: str | None, fail_on_
     return None
 
 
+def _resolve_paths(
+    target: str, output: Path, waivers: Path | None, enrichment_file: Path | None
+) -> tuple[Path, Path, Path | None, Path | None]:
+    """Validate --target and anchor RELATIVE --output/--waivers/--enrichment-file under it.
+
+    Evidence is read from --target, so a relative output/waivers/enrichment path
+    resolves under --target too (the whole chain reads and writes in one place;
+    mirrors scan-*). An absolute path is always honored verbatim. Returns
+    ``(target_path, output_path, waivers_path, enrichment_path)``.
+    """
+
+    # Reject an empty/whitespace --target instead of silently coercing "" to cwd.
+    # (Kept as a str up to here so the raw empty string is not lost to Path("")==".").
+    if not target.strip():
+        raise InvalidInputError("--target must not be empty.")
+    target_path = Path(target).resolve()
+    if not target_path.is_dir():
+        # Echo the user-supplied string, never target.resolve(): the absolute
+        # path leaks the auditor's home directory / username (M-002).
+        raise InvalidInputError(f"--target {target} is not a directory.")
+
+    output_path = output if output.is_absolute() else target_path / output
+
+    waivers_path: Path | None = None
+    if waivers is not None:
+        waivers_path = waivers if waivers.is_absolute() else target_path / waivers
+        if not waivers_path.is_file():
+            raise InvalidInputError(f"--waivers {waivers} is not a file.")
+    enrichment_path: Path | None = None
+    if enrichment_file is not None:
+        enrichment_path = enrichment_file if enrichment_file.is_absolute() else target_path / enrichment_file
+        if not enrichment_path.is_file():
+            raise InvalidInputError(f"--enrichment-file {enrichment_file.name} is not a file.")
+    return target_path, output_path, waivers_path, enrichment_path
+
+
 def _run_correlate_findings(
-    target: Path,
+    target: str,
     output: Path,
     output_format: str,
     fail_on_severity: str | None,
@@ -124,34 +162,24 @@ def _run_correlate_findings(
     if sev is not None and sev not in _GATE_SEVERITIES:
         raise InvalidInputError("--fail-on-severity must be one of: critical, high, medium, low.")
 
-    target_path = target.resolve()
-    if not target_path.is_dir():
-        raise InvalidInputError(f"--target {target_path} is not a directory.")
-
-    waivers_path: Path | None = None
-    if waivers is not None:
-        waivers_path = waivers if waivers.is_absolute() else target_path / waivers
-        if not waivers_path.is_file():
-            raise InvalidInputError(f"--waivers {waivers} is not a file.")
-    if enrichment_file is not None and not enrichment_file.is_file():
-        raise InvalidInputError(f"--enrichment-file {enrichment_file.name} is not a file.")
+    target_path, output_path, waivers_path, enrichment_path = _resolve_paths(target, output, waivers, enrichment_file)
     report = build_findings_report(
         target_path,
         kit_version=_KIT_VERSION,
         include_absolute_path=include_absolute_path,
         waivers_path=waivers_path,
-        enrichment_path=enrichment_file,
+        enrichment_path=enrichment_path,
     )
     for w in report.get("extensions", {}).get("waiver_warnings", []):
         stderr_console().print(f"[yellow]Waivers:[/yellow] {w}")
-    _write_artifact(report, output)
+    _write_artifact(report, output_path)
 
     if fmt == "json":
         write_stdout_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     elif fmt == "sarif":
         write_stdout_text(json.dumps(render_findings_sarif(report), indent=2, sort_keys=True) + "\n")
     else:
-        _render_human(report, output)
+        _render_human(report, output_path)
 
     message = _gate_tripped(report, sev, fail_on_kev)
     if message is not None:
@@ -161,8 +189,8 @@ def _run_correlate_findings(
 
 @app.command("correlate-findings", rich_help_panel=CMD_PANEL_EXPORT)
 def correlate_findings_cmd(
-    target: Path = typer.Option(
-        Path("."),
+    target: str = typer.Option(
+        ".",
         "--target",
         help="Repository clone to correlate scanner evidence for. Defaults to current directory.",
     ),
@@ -170,7 +198,11 @@ def correlate_findings_cmd(
         _DEFAULT_OUTPUT,
         "--output",
         "-o",
-        help="Path to write the findings/1.0 JSON artifact. Default: .oss-policy-kit/findings.json.",
+        help=(
+            "Path to write the findings/1.0 JSON artifact. A relative path resolves under "
+            "--target (so evidence and artifact stay together); an absolute path is honored "
+            "as-is. Default: <target>/.oss-policy-kit/findings.json."
+        ),
     ),
     output_format: str = typer.Option(
         "human",
@@ -196,17 +228,19 @@ def correlate_findings_cmd(
         None,
         "--waivers",
         help=(
-            "Optional waivers.yaml; entries with vulnerability_ids mark matching findings as "
-            "waived (visible, but exempt from --fail-on-* gates). Never affects evaluate."
+            "Optional waivers.yaml (a relative path resolves under --target); entries with "
+            "vulnerability_ids mark matching findings as waived (visible, but exempt from "
+            "--fail-on-* gates). Never affects evaluate."
         ),
     ),
     enrichment_file: Path | None = typer.Option(
         None,
         "--enrichment-file",
         help=(
-            "Optional offline EPSS/KEV snapshot (JSON with as_of + vulnerabilities map). "
-            "Inferred-trust input: refines ranking rationale only; never changes finding "
-            "fields, severities, gates, or any evaluate control state."
+            "Optional offline EPSS/KEV snapshot (JSON with as_of + vulnerabilities map; a "
+            "relative path resolves under --target). Inferred-trust input: refines ranking "
+            "order/rationale only; never changes finding fields, severities, gates, or "
+            "control state."
         ),
     ),
 ) -> None:

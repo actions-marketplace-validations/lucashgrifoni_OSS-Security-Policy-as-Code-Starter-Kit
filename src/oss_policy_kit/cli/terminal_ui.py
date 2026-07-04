@@ -144,14 +144,36 @@ def _get_terminal_size(*, fallback: tuple[int, int]) -> os.terminal_size:
     return shutil.get_terminal_size(fallback=fallback)
 
 
+def _columns_env_override() -> int | None:
+    """Return a valid positive ``COLUMNS`` env override, or ``None`` when unset/invalid.
+
+    Honoring ``COLUMNS`` for non-TTY streams (pipes, redirected error output) lets an
+    explicit terminal width flow through so wrapped error messages and echoed paths use
+    the caller's real width instead of the hardwired 120 fallback (X2-F2).
+    """
+
+    raw = os.environ.get("COLUMNS")
+    if not raw:
+        return None
+    try:
+        cols = int(raw.strip())
+    except ValueError:
+        return None
+    if cols < 1:
+        return None
+    return max(TTY_MIN_COLUMNS, min(cols, MAX_COLUMNS))
+
+
 def terminal_width(stream: Any, *, fallback: int = DEFAULT_FALLBACK_COLUMNS) -> int:
     """Effective column width for layout when rendering to ``stream``.
 
-    Uses the OS terminal size when ``stream`` is a TTY; otherwise returns ``fallback``.
+    Uses the OS terminal size when ``stream`` is a TTY; otherwise consults the ``COLUMNS``
+    environment variable (when set and valid) before returning ``fallback``.
     """
 
     if not is_interactive_stream(stream):
-        return fallback
+        env_cols = _columns_env_override()
+        return env_cols if env_cols is not None else fallback
     try:
         cols = _get_terminal_size(fallback=(fallback, 24)).columns
     except OSError:

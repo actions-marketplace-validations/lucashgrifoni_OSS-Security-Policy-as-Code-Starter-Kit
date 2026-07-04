@@ -9,8 +9,11 @@ with callers that import them from ``oss_policy_kit.cli.main``.
 
 from __future__ import annotations
 
+import errno
+import os
 import sys
 from contextlib import suppress
+from typing import Any
 
 # Importing each module triggers Typer command registration via decorators.
 from oss_policy_kit.cli import (  # noqa: F401  (import side-effects: command registration)
@@ -81,6 +84,80 @@ def _order_registered_commands() -> None:
 _order_registered_commands()
 
 
+#: errno values that signal the reader closed a pipe we were writing to
+#: (``head``/``less`` quitting early). POSIX raises ``EPIPE``; Windows raises
+#: ``EINVAL`` for the same "write to a broken pipe" condition.
+_BROKEN_PIPE_ERRNOS: frozenset[int] = frozenset({errno.EPIPE, errno.EINVAL})
+
+
+def _is_broken_pipe(exc: OSError) -> bool:
+    """True when ``exc`` is a broken-pipe write error (``head``/``less`` closed the reader)."""
+
+    if isinstance(exc, BrokenPipeError):
+        return True
+    return exc.errno in _BROKEN_PIPE_ERRNOS
+
+
+class _BrokenPipeExit(BaseException):  # noqa: N818 - control-flow signal, not a user-facing error
+    """Raised the first time a stdout write hits a broken pipe, to unwind to ``main()``.
+
+    A plain ``BrokenPipeError``/``OSError`` would be swallowed by the per-command
+    ``except Exception`` last-resort handlers (which then print "Unexpected error"
+    and exit 3). This subclasses ``BaseException`` (like ``SystemExit`` /
+    ``KeyboardInterrupt``) so those ``except Exception`` handlers let it propagate —
+    letting ``main()`` convert it into a single clean, quiet exit (X6-04).
+    """
+
+
+class _BrokenPipeGuardedStdout:
+    """A stdout proxy that turns a broken-pipe write into a single ``_BrokenPipeExit``.
+
+    Wraps the real ``sys.stdout``. Every attribute except ``write``/``flush`` is
+    delegated. On the first broken-pipe write it disables the underlying stream (so
+    later writes and the shutdown flush are silently dropped) and raises
+    ``_BrokenPipeExit`` once so the pipeline unwinds cleanly to ``main()``.
+    """
+
+    def __init__(self, wrapped: Any) -> None:
+        self._wrapped = wrapped
+        self._broken = False
+
+    def write(self, data: Any) -> int:
+        if self._broken:
+            return 0
+        try:
+            return int(self._wrapped.write(data))
+        except OSError as exc:
+            if not _is_broken_pipe(exc):
+                raise
+            self._broken = True
+            raise _BrokenPipeExit from exc
+
+    def flush(self) -> None:
+        if self._broken:
+            return
+        try:
+            self._wrapped.flush()
+        except OSError as exc:
+            if not _is_broken_pipe(exc):
+                raise
+            self._broken = True
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._wrapped, name)
+
+
+def _silence_stdout_after_broken_pipe() -> None:
+    """Redirect ``sys.stdout`` to ``os.devnull`` so interpreter shutdown cannot re-raise."""
+
+    original = sys.__stdout__
+    if original is None:
+        return
+    with suppress(Exception):
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, original.fileno())
+
+
 def main() -> None:
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
@@ -88,7 +165,25 @@ def main() -> None:
                 stream.reconfigure(encoding="utf-8", errors="replace")
     if len(sys.argv) > 1:
         sys.argv[1:] = prepare_cli_args(list(sys.argv[1:]))
-    app()
+    # Guard stdout so a downstream reader closing the pipe (``| head``, ``| less``)
+    # unwinds via ``_BrokenPipeExit`` instead of being caught by a per-command
+    # ``except Exception`` handler that would print "Unexpected error" + exit 3.
+    sys.stdout = _BrokenPipeGuardedStdout(sys.stdout)
+    try:
+        app()
+    except _BrokenPipeExit:
+        _exit_quietly_on_broken_pipe()
+    except OSError as exc:
+        if not _is_broken_pipe(exc):
+            raise
+        _exit_quietly_on_broken_pipe()
+
+
+def _exit_quietly_on_broken_pipe() -> None:
+    """Silence stdout and exit 0 without the generic error banner or shutdown noise (X6-04)."""
+
+    _silence_stdout_after_broken_pipe()
+    sys.exit(0)
 
 
 if __name__ == "__main__":

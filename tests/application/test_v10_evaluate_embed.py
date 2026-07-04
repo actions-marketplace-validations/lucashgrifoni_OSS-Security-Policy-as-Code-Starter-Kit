@@ -90,15 +90,20 @@ def test_ft2_embed_is_additive_only(tmp_path: Path) -> None:
     # the ONLY difference is the additive extensions block
     assert off["extensions"] == {}
     summary = on["extensions"]["findings_summary"]
-    assert set(summary) == {
+    # Superset check: the block is additive (v10.0.1 X4-02 added sources_total /
+    # sources_ok source-read accounting), so assert the required keys are present
+    # rather than pinning an exact set that any future additive key would break.
+    assert {
         "findings_total",
         "correlated_groups",
         "by_severity",
         "kev_count",
         "high_epss_count",
+        "sources_total",
+        "sources_ok",
         "artifact",
         "findings_digest",
-    }
+    } <= set(summary)
     off.pop("extensions")
     on.pop("extensions")
     assert off == on

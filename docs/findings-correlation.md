@@ -27,7 +27,11 @@ the six kit evidence JSONs (`sast-semgrep`, `iac-terraform`, `iac-cfn`, `iac-pul
    records both sources.
 3. **Ranks** deterministically: CISA-KEV-listed first, then EPSS descending, then
    normalized severity, with stable tie-breaks. Re-runs on an unchanged clone are
-   bit-identical.
+   **deterministic in content** — the finding ids, ranks, and ordering are identical
+   every time. The artifact is **byte-identical** across re-runs only when the
+   evaluation clock is pinned (`SOURCE_DATE_EPOCH`, the reproducible-builds convention
+   the kit honours); otherwise the sole difference is the `generated_at` field, which
+   is a wall-clock stamp of when the artifact was produced.
 
 ## What it deliberately does NOT do (the fence)
 

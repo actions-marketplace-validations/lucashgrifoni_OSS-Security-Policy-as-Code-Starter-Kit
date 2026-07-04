@@ -7,7 +7,7 @@ import sys
 import textwrap
 from typing import Literal
 
-from oss_policy_kit.application.reporting import compute_priority_insights
+from oss_policy_kit.application.reporting import _sanitize_target_path_for_payload, compute_priority_insights
 from oss_policy_kit.cli.terminal_ui import (
     human_tty_stdout,
     max_gap_line_chars,
@@ -159,8 +159,19 @@ def _print_stdout_summary_plain(report: ExecutionReport) -> None:
     sys.stdout.write("\n".join(lines) + "\n")
 
 
-def print_stdout_summary(report: ExecutionReport, *, output_format: OutputFormat) -> None:
-    """Emit a compact machine- or human-readable summary line to stdout (for piping)."""
+def print_stdout_summary(
+    report: ExecutionReport,
+    *,
+    output_format: OutputFormat,
+    include_absolute_path: bool = False,
+) -> None:
+    """Emit a compact machine- or human-readable summary line to stdout (for piping).
+
+    ``include_absolute_path`` mirrors the report writers (M-002): the ``json``
+    stdout payload sanitizes ``target_path`` to the target's basename by default
+    so a piped/redirected summary never leaks the auditor's home directory or
+    username. Pass ``True`` to keep the engine-resolved absolute path.
+    """
 
     if output_format == "json":
         ordered_summary = _ordered_summary(report.summary_by_status)
@@ -168,7 +179,9 @@ def print_stdout_summary(report: ExecutionReport, *, output_format: OutputFormat
             "schema_version": report.schema_version,
             "kit_version": report.kit_version,
             "profile_id": report.profile_id,
-            "target_path": report.target_path,
+            "target_path": _sanitize_target_path_for_payload(
+                report.target_path, include_absolute=include_absolute_path
+            ),
             "summary_by_status": ordered_summary,
             "controls_total": sum(ordered_summary.values()),
             "operational_warnings_count": len(report.operational_warnings),

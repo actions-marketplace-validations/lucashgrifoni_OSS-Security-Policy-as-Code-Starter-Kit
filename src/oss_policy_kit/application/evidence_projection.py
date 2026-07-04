@@ -97,6 +97,17 @@ def _classify_reference(value: str) -> dict[str, Any]:
     return {"kind": "path", "value": redacted_value, "redacted": was_redacted}
 
 
+def classify_reference(value: str) -> dict[str, Any]:
+    """Public wrapper over :func:`_classify_reference`.
+
+    The Markdown report (M-002) reuses the same evidence-reference redaction the
+    JSON report already applies, so a shareable ``.md`` never leaks an absolute
+    path that the JSON path would have redacted.
+    """
+
+    return _classify_reference(value)
+
+
 @dataclass(frozen=True, slots=True)
 class FreshnessContext:
     """Optional freshness window override (mostly for tests and CLI flags)."""

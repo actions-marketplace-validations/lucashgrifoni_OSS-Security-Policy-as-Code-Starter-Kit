@@ -1,16 +1,17 @@
-"""``oss-policy-kit export-evidence`` subcommand (PR-17, V6-04).
+"""``oss-policy-kit export-evidence`` subcommand.
 
-v0.1 surface (v6.0.0; ``chainloop`` format is **experimental**):
+Projects a reports/2.0 evaluation report into an external evidence format
+(``chainloop`` stays **experimental**; all other formats are GA):
 
-- Reads the kit's most recent evaluation report (if present) or runs
-  ``evaluate`` internally with the default profile and re-projects the
-  result into the requested external format.
-- Format registry pattern: ``chainloop`` (Chainloop attestation envelope)
-  and ``sarif`` (re-export of the SARIF the ``evaluate`` subcommand
-  produces) shipped day one. ``spdx`` (SPDX 2.3 evidence projection),
-  ``oscal`` (OSCAL 1.1 assessment-results), and ``in-toto-bundle``
-  (unsigned in-toto v1 statement) were promoted from "future" to GA in
-  v7.0.0 (ADR-034, ADR-036). ``guac`` stays deferred until adopter demand.
+- Reads the kit's most recent reports/2.0 evaluation report (a stored
+  pre-2.0 report is rejected — see ADR-043 and item 4 of the v10.0.0
+  migration guide) and re-projects the result into the requested format.
+- Format registry: ``chainloop`` (Chainloop attestation envelope,
+  experimental) and ``sarif`` (re-export of the SARIF the ``evaluate``
+  subcommand produces), plus ``spdx`` (SPDX 2.3 evidence projection),
+  ``oscal`` (OSCAL 1.1 assessment-results), ``in-toto-bundle`` (unsigned
+  in-toto v1 statement), and ``gemara`` (Gemara Layer 5 evaluation log) —
+  all GA. ``guac`` stays deferred until adopter demand.
 - ``--validate`` runs lightweight structural validation on the rendered
   output before writing. Exit 1 on validation failure.
 
@@ -30,6 +31,7 @@ design rationale (including the experimental-label justification).
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -45,10 +47,10 @@ from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
 _DEFAULT_OUTPUT = Path("evidence-export.json")
 _DEFAULT_REPORT = Path("out/evaluation-report.json")
 
-# Stable subcommand surface. The chainloop format itself is experimental
-# in v6.0.0 (see ADR-012); the surface is not. ``spdx``/``oscal``/``in-toto-bundle``
-# were promoted from "future" to GA in v7.0.0 (ADR-034, ADR-036); ``guac`` stays
-# deferred until an adopter needs it (its backlog stub gates promotion on demand).
+# Stable subcommand surface. The chainloop format itself stays experimental
+# (see ADR-012); the surface is not. ``spdx``/``oscal``/``in-toto-bundle`` are GA
+# (ADR-034, ADR-036); ``gemara`` is GA (ADR-042); ``guac`` stays deferred until an
+# adopter needs it (its backlog stub gates promotion on demand).
 _SUPPORTED_FORMATS: tuple[str, ...] = ("chainloop", "sarif", "spdx", "oscal", "in-toto-bundle", "gemara")
 
 # Custom predicate type for the in-toto policy-evaluation statement (ADR-036).
@@ -56,6 +58,40 @@ _INTOTO_PREDICATE_TYPE = "https://oss-policy-kit/attestations/policy-evaluation/
 
 # OSCAL prop namespace for kit-specific observation properties (assurance grade, kit state).
 _OSCAL_KIT_NS = "https://oss-policy-kit"
+
+# reports/2.0 is the only report contract (ADR-043). A stored pre-2.0 report
+# (0.1/0.2/0.3/1.0 — data under ``results``, no ``controls`` key) must be rejected,
+# not silently accepted and projected into all-unknown/content-dropped evidence.
+_REMOVED_CONTRACT_RE = re.compile(r"/reports/(0\.1|0\.2|0\.3|1\.0)\b")
+_MIGRATION_GUIDE = "docs/v10.0.0-migration-guide.md"
+
+
+def _reject_removed_contract(report: dict[str, Any], source: Path) -> None:
+    """Reject a stored pre-2.0 evaluation report (ADR-043 / migration guide item 4).
+
+    ``export-evidence`` requires a reports/2.0 report. The pre-2.0 renderers' silent
+    fallback reads were removed in v10.0.0, so a legacy report must fail fast with a
+    clean usage error (exit 2) that names the removed contract and points at the
+    migration guide, rather than emitting silently-wrong all-unknown evidence.
+
+    Detection (either signal is sufficient):
+
+    1. ``schema_version`` matches a removed contract URL suffix (``/reports/0.1|0.2|0.3|1.0``).
+    2. The payload lacks a ``controls`` list while carrying a legacy ``results`` list.
+    """
+    schema_version = report.get("schema_version")
+    removed = isinstance(schema_version, str) and _REMOVED_CONTRACT_RE.search(schema_version) is not None
+    legacy_shape = not isinstance(report.get("controls"), list) and isinstance(report.get("results"), list)
+    if not (removed or legacy_shape):
+        return
+    contract = ""
+    if isinstance(schema_version, str) and (m := _REMOVED_CONTRACT_RE.search(schema_version)):
+        contract = f" (reports/{m.group(1)})"
+    raise InvalidInputError(
+        f"Evaluation report {source.name} is a removed pre-2.0 report contract{contract}. "
+        f"export-evidence requires a reports/2.0 report (ADR-043). Re-run "
+        f"`oss-policy-kit evaluate` to produce a reports/2.0 report, or see {_MIGRATION_GUIDE}."
+    )
 
 
 def _now_iso8601_z() -> str:
@@ -89,6 +125,10 @@ def _load_evaluation_report(target: Path, explicit_report: Path | None) -> dict[
                     f"Evaluation report {c} must be a JSON object, got {type(parsed).__name__}. "
                     "Pass a report produced by `oss-policy-kit evaluate`, or a correct --report path."
                 )
+            # Reject a removed pre-2.0 contract BEFORE any renderer runs (not gated
+            # behind --validate), so legacy input fails fast with the migration pointer
+            # instead of silently emitting all-unknown/content-dropped evidence.
+            _reject_removed_contract(parsed, c)
             return parsed
     tried = ", ".join(str(c) for c in candidates)
     raise InvalidInputError(
@@ -103,10 +143,10 @@ def _load_evaluation_report(target: Path, explicit_report: Path | None) -> dict[
 def _render_chainloop(report: dict[str, Any]) -> dict[str, Any]:
     """Render the evaluation report as a Chainloop attestation envelope.
 
-    EXPERIMENTAL in v6.0.0. The Chainloop ingest spec is pre-1.0; this
-    shape may change inside the v6.x line. ADR-012 documents the rationale
-    for keeping the renderer experimental until adopter feedback and upstream
-    spec stability justify promotion.
+    EXPERIMENTAL. The Chainloop ingest spec is pre-1.0; this envelope shape
+    may still change. ADR-012 documents the rationale for keeping the renderer
+    experimental until adopter feedback and upstream spec stability justify
+    promotion.
     """
     now = _now_iso8601_z()
     profile_id = report.get("profile", {}).get("id") if isinstance(report.get("profile"), dict) else None
@@ -130,8 +170,8 @@ def _render_chainloop(report: dict[str, Any]) -> dict[str, Any]:
         "experimental": True,
         "experimental_note": (
             "Chainloop ingest spec is pre-1.0; this attestation envelope shape "
-            "may change inside the v6.x line. See ADR-012 for the experimental "
-            "format rationale and promotion criteria."
+            "may still change. See ADR-012 for the experimental format rationale "
+            "and promotion criteria."
         ),
     }
 
@@ -652,6 +692,7 @@ def export_evidence_cmd(
     target: Path = typer.Option(
         Path("."),
         "--target",
+        "-t",
         help="Path to the repository to export evidence for.",
     ),
     fmt: str = typer.Option(
@@ -662,6 +703,7 @@ def export_evidence_cmd(
     output: Path = typer.Option(
         _DEFAULT_OUTPUT,
         "--output",
+        "-o",
         help="Path to write the rendered evidence document.",
     ),
     report: Path = typer.Option(
@@ -675,10 +717,11 @@ def export_evidence_cmd(
         help="Structurally validate the rendered output before writing. Exit 1 on failure.",
     ),
 ) -> None:
-    """Export the latest evaluation report into an external format.
+    """Export the latest reports/2.0 evaluation report into an external format.
 
-    PR-17 (Onda 4, V6-04). The ``chainloop`` format is experimental in
-    v6.0.0; the subcommand surface itself is stable.
+    Requires a reports/2.0 report (ADR-043); a stored pre-2.0 report is
+    rejected with a usage error. The ``chainloop`` format is experimental;
+    the subcommand surface itself is stable.
     """
     try:
         _run_export_evidence(target, fmt, output, report, validate)
@@ -733,7 +776,7 @@ def _run_export_evidence(target: Path, fmt: str, output: Path, report: Path | No
     if fmt == "chainloop":
         c = stderr_console()
         c.print(
-            "[yellow]export-evidence:[/yellow] chainloop format is experimental in v6.0.0; "
-            "output shape may change inside the v6.x line (see ADR-012)."
+            "[yellow]export-evidence:[/yellow] chainloop format is experimental; "
+            "output shape may still change (see ADR-012)."
         )
     write_stdout_text(f"export-evidence: wrote {output} (format={fmt})\n")

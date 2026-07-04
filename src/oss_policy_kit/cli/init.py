@@ -191,7 +191,7 @@ def init_cmd(
         None,
         "--platform",
         help=(
-            "Force the platform for the recommended profile: github | azure | aws. "
+            "Force the platform for the recommended profile: github | gitlab | azure | aws. "
             "Skip this flag to auto-detect from CI files."
         ),
         case_sensitive=False,
@@ -268,11 +268,14 @@ def init_cmd(
     existing files and reports them under ``skipped``. Use ``--dry-run`` to
     preview every action without touching the filesystem.
 
-    Honesty contract: ``oss-policy-kit.yaml`` is reserved for future
-    versions of ``evaluate`` to consume when ``--profile`` is omitted. In
-    this release the file documents intent and powers reproducibility, but
-    ``evaluate`` still requires explicit flags. The contract uses a stable
-    ``schema_version`` so the upcoming consumer can migrate safely.
+    Config consumption: ``evaluate`` reads ``oss-policy-kit.yaml`` from its
+    ``--target`` and uses it as a fallback for ``--profile``, ``--fail-on``,
+    ``--output-dir``, and ``--report-json-contract`` whenever the matching
+    flag is omitted. An explicit flag always wins; the file only fills gaps,
+    and a config-sourced ``--profile`` prints a one-line stderr note. Lookup
+    is non-recursive (no parent walk), so the file is honored only when it
+    sits directly under the target. The contract uses a stable
+    ``schema_version`` so consumers can migrate safely.
     """
 
     try:

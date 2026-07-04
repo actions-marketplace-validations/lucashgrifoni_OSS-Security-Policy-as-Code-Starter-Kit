@@ -79,6 +79,17 @@ def evaluate_many_cmd(
         "-q",
         help="Suppress incremental stderr progress lines; keep final batch summary writes.",
     ),
+    include_absolute_path: bool = typer.Option(
+        False,
+        "--include-absolute-path",
+        help=(
+            "Keep full absolute paths in the batch reports (target_root, per-run target_path, "
+            "report artifact paths, skipped-directory paths). Default is privacy-by-default: "
+            "every path is sanitized to a basename so shared batch artifacts do not leak the "
+            "auditor's home directory or username. Use only when downstream tooling expects "
+            "absolute paths."
+        ),
+    ),
 ) -> None:
     """Evaluate many repository clones under one parent directory (monorepo / multi-app root)."""
 
@@ -108,6 +119,7 @@ def evaluate_many_cmd(
             fail_on=policy,
             skip_non_repos=skip_non_repos,
             progress_callback=progress_cb,
+            include_absolute_path=include_absolute_path,
         )
         stderr_console().print(f"[green]Wrote[/green] {batch.batch_json.resolve()}")
         stderr_console().print(f"[green]Wrote[/green] {batch.batch_md.resolve()}")

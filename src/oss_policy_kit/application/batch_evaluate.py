@@ -16,7 +16,12 @@ from oss_policy_kit.application.cli_output import FailOnPolicy, fail_on_violated
 from oss_policy_kit.application.clock import report_generated_at
 from oss_policy_kit.application.engine import evaluate_repository
 from oss_policy_kit.application.loader import load_catalog, load_profile_by_id, merge_kit_root
-from oss_policy_kit.application.reporting import compute_priority_insights, report_to_dict, write_markdown_report
+from oss_policy_kit.application.reporting import (
+    _sanitize_target_path_for_payload,
+    compute_priority_insights,
+    report_to_dict,
+    write_markdown_report,
+)
 from oss_policy_kit.domain.errors import InvalidInputError
 
 _REPO_PRIMARY_SIGNALS: tuple[str, ...] = (
@@ -224,20 +229,26 @@ def discover_batch_targets(
 
 
 def _build_eval_queue(
-    targets: list[Path], *, skip_non_repos: bool
+    targets: list[Path], *, skip_non_repos: bool, include_absolute_path: bool = False
 ) -> tuple[list[tuple[Path, bool]], list[dict[str, str]]]:
-    """Filter discovered child dirs into ``(eval_queue, skipped_dirs)`` honoring ``--skip-non-repos``."""
+    """Filter discovered child dirs into ``(eval_queue, skipped_dirs)`` honoring ``--skip-non-repos``.
+
+    ``skipped_directories[].path`` is sanitized to the child basename by default
+    (M-002) so the shareable batch JSON never leaks the auditor's home directory
+    or username; ``include_absolute_path=True`` restores the full resolved path.
+    """
 
     skipped_dirs: list[dict[str, str]] = []
     eval_queue: list[tuple[Path, bool]] = []
     for child in targets:
+        skipped_path = _sanitize_target_path_for_payload(str(child.resolve()), include_absolute=include_absolute_path)
         # Even without --skip-non-repos, output / build directories should not be treated as
         # evaluable projects. Adopters can still target them explicitly via `evaluate --target`.
         if skip_non_repos and _is_meta_directory(child.name):
             skipped_dirs.append(
                 {
                     "name": child.name,
-                    "path": str(child.resolve()),
+                    "path": skipped_path,
                     "reason": "Looks like an output / build / cache directory (matches meta-directory name pattern).",
                 }
             )
@@ -247,7 +258,7 @@ def _build_eval_queue(
             skipped_dirs.append(
                 {
                     "name": child.name,
-                    "path": str(child.resolve()),
+                    "path": skipped_path,
                     "reason": "No repository root signals (.git, manifest, CI file, Dockerfile, etc.).",
                 }
             )
@@ -267,8 +278,16 @@ def _execute_one_run(
     catalog: Any,
     output_dir: Path,
     skip_non_repos: bool,
+    include_absolute_path: bool = False,
 ) -> tuple[BatchRunRow, dict[str, Any], dict[str, int]]:
-    """Evaluate one target against one profile; write reports and return (row, payload, summary)."""
+    """Evaluate one target against one profile; write reports and return (row, payload, summary).
+
+    Serialized paths (``runs[].target_path`` and ``runs[].reports.{json,markdown}``)
+    are sanitized to basenames by default (M-002) so the shareable batch JSON never
+    leaks the auditor's home directory or username. Per-run reports themselves inherit
+    the same ``include_absolute_path`` privacy default via ``report_to_dict`` /
+    ``write_markdown_report``.
+    """
 
     profile = load_profile_by_id(root, pid)
     report = evaluate_repository(repo_root=repo, profile=profile, catalog=catalog, waiver_outcome=None, scorecard=None)
@@ -276,23 +295,36 @@ def _execute_one_run(
     dest.mkdir(parents=True, exist_ok=True)
     json_path = dest / "evaluation-report.json"
     md_path = dest / "evaluation-report.md"
-    json_path.write_text(json.dumps(report_to_dict(report), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    write_markdown_report(report, md_path)
+    json_path.write_text(
+        json.dumps(report_to_dict(report, include_absolute_path=include_absolute_path), indent=2, ensure_ascii=False)
+        + "\n",
+        encoding="utf-8",
+    )
+    write_markdown_report(report, md_path, include_absolute_path=include_absolute_path)
+    target_path_display = _sanitize_target_path_for_payload(str(repo.resolve()), include_absolute=include_absolute_path)
+    json_report_display = _sanitize_target_path_for_payload(
+        str(json_path.resolve()), include_absolute=include_absolute_path
+    )
+    md_report_display = _sanitize_target_path_for_payload(
+        str(md_path.resolve()), include_absolute=include_absolute_path
+    )
     row = BatchRunRow(
         target_name=target.name,
-        target_path=str(repo.resolve()),
+        target_path=target_path_display,
         profile_id=pid,
         summary_by_status=dict(report.summary_by_status),
+        # Kept as the real resolved path: consumed internally by the batch Markdown
+        # artifact-lines renderer to compute a path relative to the output directory.
         report_path_json=str(json_path.resolve()),
         report_path_md=str(md_path.resolve()),
     )
     payload: dict[str, Any] = {
         "target_name": target.name,
-        "target_path": str(repo.resolve()),
+        "target_path": target_path_display,
         "profile_id": pid,
         "summary_by_status": report.summary_by_status,
         "action_insights": compute_priority_insights(report),
-        "reports": {"json": str(json_path.resolve()), "markdown": str(md_path.resolve())},
+        "reports": {"json": json_report_display, "markdown": md_report_display},
     }
     if not skip_non_repos and not likely_repo:
         payload["likely_not_a_repository"] = True
@@ -308,6 +340,7 @@ def _execute_batch_runs(
     output_dir: Path,
     skip_non_repos: bool,
     progress_callback: Callable[[str, int, int], None] | None,
+    include_absolute_path: bool = False,
 ) -> tuple[list[BatchRunRow], list[dict[str, Any]], list[dict[str, int]]]:
     """Run every (target × profile) evaluation and return (rows, consolidated_reports, summaries)."""
 
@@ -333,6 +366,7 @@ def _execute_batch_runs(
                 catalog=catalog,
                 output_dir=output_dir,
                 skip_non_repos=skip_non_repos,
+                include_absolute_path=include_absolute_path,
             )
             rows.append(row)
             consolidated_reports.append(payload)
@@ -351,12 +385,19 @@ def run_batch_evaluation(  # noqa: C901
     fail_on: str = "none",
     skip_non_repos: bool = False,
     progress_callback: Callable[[str, int, int], None] | None = None,
+    include_absolute_path: bool = False,
 ) -> BatchResult:
     """Evaluate each discovered child of *target_root* against every *profile_id*.
 
     Writes per-run ``evaluation-report.{json,md}`` under
     ``output_dir / <sanitized_target_name> / <profile_id> /`` plus consolidated
     ``evaluation-batch.json`` and ``evaluation-batch.md`` at *output_dir*.
+
+    ``include_absolute_path`` mirrors single ``evaluate`` (M-002): by default every
+    emitted path (``target_root``, ``runs[].target_path``, report artifact paths,
+    ``skipped_directories[].path``) is sanitized to a basename so the shareable batch
+    artifacts never leak the auditor's home directory or username. Pass ``True`` to
+    restore full absolute paths for downstream tooling.
     """
 
     policy = cast(FailOnPolicy, fail_on.lower())
@@ -366,7 +407,9 @@ def run_batch_evaluation(  # noqa: C901
     if not targets:
         raise InvalidInputError(f"No subdirectories to evaluate under {target_root}")
 
-    eval_queue, skipped_dirs = _build_eval_queue(targets, skip_non_repos=skip_non_repos)
+    eval_queue, skipped_dirs = _build_eval_queue(
+        targets, skip_non_repos=skip_non_repos, include_absolute_path=include_absolute_path
+    )
     if not eval_queue:
         raise InvalidInputError(
             "No repositories to evaluate after filtering. Remove --skip-non-repos or add include/exclude patterns."
@@ -381,6 +424,7 @@ def run_batch_evaluation(  # noqa: C901
         output_dir=output_dir,
         skip_non_repos=skip_non_repos,
         progress_callback=progress_callback,
+        include_absolute_path=include_absolute_path,
     )
 
     generated_at = report_generated_at()
@@ -391,7 +435,9 @@ def run_batch_evaluation(  # noqa: C901
         "schema_version": "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/batch/0.1",
         "generated_at": generated_at,
         "kit_version": oss_policy_kit.__version__,
-        "target_root": str(target_root.resolve()),
+        "target_root": _sanitize_target_path_for_payload(
+            str(target_root.resolve()), include_absolute=include_absolute_path
+        ),
         "profile_ids": profile_ids,
         "gate_violated": gate_violated,
         "fail_on": policy,
@@ -419,6 +465,7 @@ def run_batch_evaluation(  # noqa: C901
             stats=stats,
             skipped_dirs=skipped_dirs,
             output_dir=output_dir,
+            include_absolute_path=include_absolute_path,
         ),
         encoding="utf-8",
     )
@@ -507,8 +554,16 @@ def _batch_md_matrix_lines(rows: list[BatchRunRow]) -> list[str]:
     return out
 
 
-def _batch_md_artifact_lines(rows: list[BatchRunRow], output_dir: Path) -> list[str]:
-    """Markdown list of per-run report artifact paths (relative to the batch output dir)."""
+def _batch_md_artifact_lines(
+    rows: list[BatchRunRow], output_dir: Path, *, include_absolute_path: bool = False
+) -> list[str]:
+    """Markdown list of per-run report artifact paths (relative to the batch output dir).
+
+    Paths render relative to *output_dir* in the normal flow. The rare
+    ``ValueError`` fallback (a report outside the output directory) is sanitized to
+    a basename by default (M-002) so the shareable batch Markdown never leaks an
+    absolute path / username; ``include_absolute_path=True`` restores the full path.
+    """
 
     out = ["## Report artifacts (paths relative to batch output directory)", ""]
     out_abs = output_dir.resolve()
@@ -518,7 +573,8 @@ def _batch_md_artifact_lines(rows: list[BatchRunRow], output_dir: Path) -> list[
         try:
             j_show, m_show = jp.relative_to(out_abs).as_posix(), mp.relative_to(out_abs).as_posix()
         except ValueError:
-            j_show, m_show = str(jp), str(mp)
+            j_show = _sanitize_target_path_for_payload(str(jp), include_absolute=include_absolute_path)
+            m_show = _sanitize_target_path_for_payload(str(mp), include_absolute=include_absolute_path)
         out.append(f"- `{row.target_name}` x `{row.profile_id}` -> `{j_show}` , `{m_show}`")
     return out
 
@@ -535,15 +591,19 @@ def _render_batch_markdown(
     stats: _BatchStats,
     skipped_dirs: list[dict[str, str]],
     output_dir: Path,
+    include_absolute_path: bool = False,
 ) -> str:
     """Render the consolidated batch Markdown report."""
 
+    target_root_display = _sanitize_target_path_for_payload(
+        str(target_root.resolve()), include_absolute=include_absolute_path
+    )
     md_lines = [
         "# OSS Policy Kit - batch evaluation",
         "",
         f"- **Generated (UTC)**: `{generated_at}`",
         f"- **Kit version**: `{oss_policy_kit.__version__}`",
-        f"- **Target root**: `{target_root.resolve()}`",
+        f"- **Target root**: `{target_root_display}`",
         f"- **Profiles**: {', '.join(f'`{p}`' for p in profile_ids)}",
         (
             f"- **Targets evaluated**: {eval_queue_len} child folder(s) x {len(profile_ids)} "
@@ -589,5 +649,5 @@ def _render_batch_markdown(
         )
         md_lines.extend(f"| `{cid}` | {n} |" for cid, n in stats.gap_hits.most_common(15))
         md_lines.append("")
-    md_lines.extend(_batch_md_artifact_lines(rows, output_dir))
+    md_lines.extend(_batch_md_artifact_lines(rows, output_dir, include_absolute_path=include_absolute_path))
     return "\n".join(md_lines)

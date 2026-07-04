@@ -220,12 +220,14 @@ def _effective_signals(
                     contributed = True
             if epss_eff is None:
                 try:
-                    epss_eff = float(entry["epss"]) if entry.get("epss") is not None else None
+                    raw_epss = float(entry["epss"]) if entry.get("epss") is not None else None
                 except (TypeError, ValueError):
-                    epss_eff = None
-                else:
-                    if epss_eff is not None:
-                        contributed = True
+                    raw_epss = None
+                # EPSS is a probability in [0.0, 1.0]; ignore out-of-range snapshot
+                # values (e.g. 999 or -1) so a garbage number cannot warp ranking.
+                if raw_epss is not None and 0.0 <= raw_epss <= 1.0:
+                    epss_eff = raw_epss
+                    contributed = True
     return kev_eff, epss_eff, contributed
 
 

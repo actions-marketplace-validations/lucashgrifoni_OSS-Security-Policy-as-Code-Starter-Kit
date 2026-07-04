@@ -82,12 +82,28 @@ survives via the appropriate `reason` sub-field or per-control metadata flag).
 ## `extensions.findings_summary` (opt-in, v10.0.0)
 
 `evaluate --with-findings-summary` adds an additive block under the reserved
-`extensions` key with correlated scanner-finding counts (totals, by-severity,
-KEV / high-EPSS counts, and a `findings_digest`). It is computed in-process from
-the same clone and changes no control state, `summary_by_status`,
-`results_digest`, or exit code. The digest pairs the report with a separately
-produced `findings/1.0` artifact; it implies **no linkage** to the per-control
-`finding_id` (an unrelated `{control_id}@{profile}` synthetic). See
+`extensions` key with correlated scanner-finding counts. It is computed
+**in-process from the same clone** during the same `evaluate` invocation — it
+never reads a pre-existing `findings.json` — and changes no control state,
+`summary_by_status`, `results_digest`, or exit code. It is purely a reporting
+convenience.
+
+The block carries these keys:
+
+| Key | Meaning |
+|---|---|
+| `findings_total` | Count of correlated (deduplicated) findings. |
+| `correlated_groups` | Number of merged correlation groups (findings that collapsed across sources). |
+| `by_severity` | Object mapping each normalized severity (`critical`/`high`/`medium`/`low`/`info`/`unknown`) to its count. |
+| `kev_count` | Count of findings with a source-reported CISA-KEV signal — a **source-derived** signal, never a compliance or coverage claim. |
+| `high_epss_count` | Count of findings whose source-reported EPSS is at or above `0.5` — likewise source-derived, not a claim. |
+| `artifact` | The artifact basename this summary corresponds to (`findings.json`). |
+| `findings_digest` | The sha256 (16 hex) of the canonical findings array, so consumers can pair this summary with a separately produced `findings/1.0` artifact. |
+| `sources_ok` / `sources_total` | A source-read tally: how many of the correlated scanner sources were read successfully (`ok`) out of the total attempted. Missing or unreadable sources are counted honestly here and never fail the embed. |
+
+The `findings_digest` pairs the report with a separately produced `findings/1.0`
+artifact; it implies **no linkage** to the per-control `finding_id` (an unrelated
+`{control_id}@{profile}` synthetic). See
 [findings-correlation.md](findings-correlation.md).
 
 ## Dashboard adopter checklist

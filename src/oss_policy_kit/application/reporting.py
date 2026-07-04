@@ -14,6 +14,7 @@ from rich.table import Table
 from oss_policy_kit.application.drift import ControlDelta, DriftReport
 from oss_policy_kit.application.evidence_projection import (
     EVIDENCE_PROVENANCE_VERSION,
+    classify_reference,
     normalize_confidence,
     project_evidence,
 )
@@ -523,7 +524,7 @@ def write_markdown_report(  # noqa: C901
         lines.append("")
     lines.extend(_md_scorecard_supplemental_lines(report, include_absolute_path=include_absolute_path))
     lines.extend(_md_controls_table_lines(report))
-    lines.extend(_md_control_detail_lines(report))
+    lines.extend(_md_control_detail_lines(report, include_absolute_path=include_absolute_path))
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
@@ -594,7 +595,23 @@ def _md_controls_table_lines(report: ExecutionReport) -> list[str]:
     return out
 
 
-def _md_control_detail_lines(report: ExecutionReport) -> list[str]:
+def _md_evidence_display(source: str, *, include_absolute_path: bool) -> str:
+    """Redact a single evidence source for the Markdown report (M-002).
+
+    Routes each evidence reference through the SAME redaction the JSON report
+    applies (:func:`classify_reference` -> ``<redacted-absolute>/...``) so a
+    shareable ``.md`` never leaks an absolute path / username that the JSON path
+    already scrubs. URLs and already-relative repo paths pass through unchanged.
+    When ``include_absolute_path`` is True the raw source is preserved, matching
+    the JSON path's opt-in behavior.
+    """
+
+    if include_absolute_path:
+        return source
+    return str(classify_reference(source).get("value", source))
+
+
+def _md_control_detail_lines(report: ExecutionReport, *, include_absolute_path: bool = False) -> list[str]:
     """Markdown lines for the per-control detail section."""
 
     out: list[str] = ["## Detail", ""]
@@ -610,7 +627,10 @@ def _md_control_detail_lines(report: ExecutionReport) -> list[str]:
         out.append(f"- **Remediation**: {r.remediation}")
         if r.evidence_sources:
             out.append("- **Evidence**:")
-            out.extend(f"  - `{e}`" for e in r.evidence_sources)
+            out.extend(
+                f"  - `{_md_evidence_display(e, include_absolute_path=include_absolute_path)}`"
+                for e in r.evidence_sources
+            )
         if r.waiver:
             out.append("- **Waiver**:")
             out.append(f"  - **Owner**: {r.waiver.owner}")

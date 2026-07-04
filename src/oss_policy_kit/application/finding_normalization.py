@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -220,12 +221,19 @@ def normalize_kit_evidence(repo_root: Path) -> tuple[list[NormalizedFinding], li
     records: list[SourceRecord] = []
     for filename, default_tool, normalizer in KIT_EVIDENCE_SOURCES:
         payload, record = _read_source(repo_root, filename, default_tool)
-        records.append(record)
         if payload is None:
+            records.append(record)
             continue
         raw_findings = payload.get("findings")
         if not isinstance(raw_findings, list):
+            # The findings CONTAINER itself is malformed (present but wrong type):
+            # demote to "error" so a consumer can tell it from a genuine empty
+            # list. A payload with no "findings" key stays at its reported status.
+            if "findings" in payload:
+                record = replace(record, status="error")
+            records.append(record)
             continue
+        records.append(record)
         rel = (_EVIDENCE_DIR / filename).as_posix()
         for raw in raw_findings:
             if isinstance(raw, dict):
