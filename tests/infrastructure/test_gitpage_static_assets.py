@@ -22,11 +22,11 @@ def test_gitpage_tailwind_build_is_pinned_and_repeatable() -> None:
     package = json.loads((_GITPAGE / "package.json").read_text(encoding="utf-8"))
     lock = json.loads((_GITPAGE / "package-lock.json").read_text(encoding="utf-8"))
 
-    assert package["devDependencies"]["tailwindcss"] == "^4.3.1"
-    assert package["devDependencies"]["@tailwindcss/cli"] == "^4.3.1"
+    assert package["devDependencies"]["tailwindcss"] == "^4.3.2"
+    assert package["devDependencies"]["@tailwindcss/cli"] == "^4.3.2"
     assert package["devDependencies"]["esbuild"] == "^0.28.1"
-    assert lock["packages"]["node_modules/tailwindcss"]["version"] == "4.3.1"
-    assert lock["packages"]["node_modules/@tailwindcss/cli"]["version"] == "4.3.1"
+    assert lock["packages"]["node_modules/tailwindcss"]["version"] == "4.3.2"
+    assert lock["packages"]["node_modules/@tailwindcss/cli"]["version"] == "4.3.2"
     assert lock["packages"]["node_modules/esbuild"]["version"] == "0.28.1"
     assert "node ./node_modules/@tailwindcss/cli/dist/index.mjs" in package["scripts"]["build:css"]
     assert package["scripts"]["build:js"] == "node build-js.mjs"
