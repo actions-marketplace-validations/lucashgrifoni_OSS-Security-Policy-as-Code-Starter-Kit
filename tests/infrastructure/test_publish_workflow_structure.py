@@ -13,7 +13,7 @@ _WORKFLOW_PATH = Path(__file__).parents[2] / ".github" / "workflows" / "publish-
 _CONTAINER_WORKFLOW_PATH = Path(__file__).parents[2] / ".github" / "workflows" / "publish-container.yml"
 _DOCKERFILE_PATH = Path(__file__).parents[2] / "Dockerfile"
 _DOCKERIGNORE_PATH = Path(__file__).parents[2] / ".dockerignore"
-_HARDEN_RUNNER_ACTION = "step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411"
+_HARDEN_RUNNER_ACTION = "step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920"
 
 
 def _load_workflow() -> dict:
