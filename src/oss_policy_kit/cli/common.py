@@ -511,7 +511,14 @@ def _maybe_write_sarif(report, req: EvaluateRequest, out: Path) -> None:  # type
     from oss_policy_kit.application.sarif_writer import write_sarif_report
 
     sarif_path = req.sarif_output if req.sarif_output.is_absolute() else out / req.sarif_output
-    write_sarif_report(report, sarif_path)
+    try:
+        write_sarif_report(report, sarif_path)
+    except OSError as exc:
+        # A bad --sarif-output (existing directory, a path under a file, or a
+        # read-only location) is a usage error, not an internal crash. Map it to
+        # exit 2 and echo only exc.strerror so the absolute path / username is
+        # never leaked (M-002), matching the report write in _write_eval_reports.
+        raise InvalidInputError(f"Cannot write --sarif-output: {exc.strerror or 'filesystem error'}") from exc
     if not req.summary_only and req.output_format != "json":
         stderr_console().print(f"[green]Wrote[/green] {sarif_path}")
 

@@ -244,7 +244,7 @@ def eval_worm_postinstall_001(ctx: EvalContext) -> EvalOutcome:
             evidence_sources=[],
             confidence="high",
         )
-    with contextlib.suppress(OSError, json.JSONDecodeError):
+    with contextlib.suppress(OSError, UnicodeDecodeError, json.JSONDecodeError):
         data = json.loads(pkg.read_text(encoding="utf-8"))
         if isinstance(data, dict):
             raw_scripts = data.get("scripts")
@@ -486,7 +486,7 @@ def eval_slsa_src_003(ctx: EvalContext) -> EvalOutcome:
             evidence_sources=[],
             confidence="medium",
         )
-    with contextlib.suppress(OSError, json.JSONDecodeError):
+    with contextlib.suppress(OSError, UnicodeDecodeError, json.JSONDecodeError):
         data = json.loads(evidence.read_text(encoding="utf-8"))
         if isinstance(data, dict) and data.get("required_status_checks"):
             return EvalOutcome(
@@ -519,7 +519,7 @@ def eval_slsa_src_004(ctx: EvalContext) -> EvalOutcome:
             evidence_sources=[],
             confidence="medium",
         )
-    with contextlib.suppress(OSError, json.JSONDecodeError):
+    with contextlib.suppress(OSError, UnicodeDecodeError, json.JSONDecodeError):
         data = json.loads(evidence.read_text(encoding="utf-8"))
         if isinstance(data, dict):
             count = data.get("required_approving_review_count")

@@ -24,6 +24,7 @@ the generic table (warning → medium).
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any
 
@@ -84,13 +85,28 @@ def normalize_sarif_level(level: str) -> str:
     return _SARIF_LEVEL.get(level.strip().lower(), "unknown")
 
 
-def _safe_float(raw: Any) -> float | None:
+def _safe_float(raw: Any, *, lo: float | None = None, hi: float | None = None) -> float | None:
+    """Parse a numeric SARIF property to float, dropping anything that would poison the artifact.
+
+    Returns ``None`` for non-numeric input, for non-finite values (``NaN``/``inf``
+    would serialize as invalid JSON ``NaN``/``Infinity`` in findings/1.0 and the
+    ``--format json`` view), and for values outside ``[lo, hi]`` when bounds are
+    given. Mirrors the enrichment clamp in
+    ``finding_correlation._effective_signals`` so a garbage EPSS/CVSS cannot warp
+    ranking or break the artifact.
+    """
+
     if raw is None:
         return None
     try:
-        return float(raw)
+        value = float(raw)
     except (TypeError, ValueError):
         return None
+    if not math.isfinite(value):
+        return None
+    if (lo is not None and value < lo) or (hi is not None and value > hi):
+        return None
+    return value
 
 
 def _resolved_level(result: dict[str, Any], rule_levels: dict[str, str]) -> str:
@@ -186,9 +202,12 @@ def _normalize_result(
         severity=SeverityView(normalized=normalized, by_source=((tool, severity_original),)),
         location=_location(result),
         vulnerability_ids=_vulnerability_ids(rule, props),
-        epss=_safe_float(props.get("epss_score", props.get("epss"))),
+        # EPSS is a probability in [0.0, 1.0]; CVSS base scores fall in [0.0, 10.0].
+        # Bounds + the finite guard keep a garbage source value from warping ranking
+        # or writing invalid JSON (Infinity/NaN) into the artifact.
+        epss=_safe_float(props.get("epss_score", props.get("epss")), lo=0.0, hi=1.0),
         kev=kev,
-        cvss=_safe_float(props.get("cvss_score", props.get("security-severity"))),
+        cvss=_safe_float(props.get("cvss_score", props.get("security-severity")), lo=0.0, hi=10.0),
     )
 
 

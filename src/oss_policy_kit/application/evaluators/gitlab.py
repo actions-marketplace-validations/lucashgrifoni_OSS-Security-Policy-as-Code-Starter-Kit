@@ -388,7 +388,7 @@ def eval_gl_pipe_011(ctx: EvalContext) -> EvalOutcome:
     # MR review rules are a project setting; look for project-level evidence file.
     evidence = ctx.repo_root / ".oss-policy-kit" / "evidence" / "gitlab-mr-rules.json"
     if evidence.is_file():
-        with contextlib.suppress(OSError, json.JSONDecodeError):
+        with contextlib.suppress(OSError, UnicodeDecodeError, json.JSONDecodeError):
             data = json.loads(evidence.read_text(encoding="utf-8"))
             if isinstance(data, dict) and data.get("min_approvers", 0) >= 1:
                 return EvalOutcome(

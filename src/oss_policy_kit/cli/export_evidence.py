@@ -34,7 +34,6 @@ import json
 import re
 import uuid
 from collections.abc import Callable
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +42,7 @@ import typer
 from oss_policy_kit.cli.common import app, stderr_console, write_stdout_text
 from oss_policy_kit.cli.help_text import CMD_PANEL_EXPORT
 from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
+from oss_policy_kit.domain.models import utc_now
 
 _DEFAULT_OUTPUT = Path("evidence-export.json")
 _DEFAULT_REPORT = Path("out/evaluation-report.json")
@@ -58,6 +58,18 @@ _INTOTO_PREDICATE_TYPE = "https://oss-policy-kit/attestations/policy-evaluation/
 
 # OSCAL prop namespace for kit-specific observation properties (assurance grade, kit state).
 _OSCAL_KIT_NS = "https://oss-policy-kit"
+
+# Stable namespace for deterministic OSCAL identifiers (item #18). OSCAL requires
+# UUIDs; deriving them with uuid5 over stable content (kind + control/profile/target +
+# the pinned timestamp) instead of uuid4 keeps a re-generated bundle byte-identical
+# under a frozen clock (SOURCE_DATE_EPOCH), while staying unique within the document.
+_OSCAL_UUID_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_DNS, "oss-policy-kit.oscal")
+
+
+def _oscal_uuid(*parts: str) -> str:
+    """Derive a deterministic OSCAL uuid (uuid5) from stable content ``parts``."""
+    return str(uuid.uuid5(_OSCAL_UUID_NAMESPACE, "|".join(parts)))
+
 
 # reports/2.0 is the only report contract (ADR-043). A stored pre-2.0 report
 # (0.1/0.2/0.3/1.0 — data under ``results``, no ``controls`` key) must be rejected,
@@ -94,8 +106,51 @@ def _reject_removed_contract(report: dict[str, Any], source: Path) -> None:
     )
 
 
+def _is_reports_v2(report: dict[str, Any]) -> bool:
+    """True when ``report`` positively looks like a reports/2.0 evaluation report.
+
+    A reports/2.0 report always carries the contract marker (``schema_version``
+    ending ``/reports/2.0`` or ``contract_version`` == ``"reports/2.0"``) *and*
+    a top-level ``controls`` list. Both signals are required so a report shorn of
+    its controls does not slip through and render an empty attestation.
+    """
+    schema_version = report.get("schema_version")
+    has_marker = (isinstance(schema_version, str) and schema_version.rstrip("/").endswith("/reports/2.0")) or (
+        report.get("contract_version") == "reports/2.0"
+    )
+    return has_marker and isinstance(report.get("controls"), list)
+
+
+def _reject_non_report(report: dict[str, Any], source: Path) -> None:
+    """Reject a JSON *object* that is a dict but not a reports/2.0 report.
+
+    ``_reject_removed_contract`` catches a stored *pre-2.0* report; this guard
+    catches an unrelated object (a config file, ``{}``, or any dict without the
+    reports/2.0 shape). Without it such an object passed the ``isinstance(dict)``
+    gate and every renderer projected it into a misleading empty / all-unknown
+    attestation at exit 0 (item #11). Fail fast with a clean usage error (exit 2),
+    mirroring how a non-object payload (array/scalar) is already rejected, and
+    naming the report basename only (never the resolved path — M-002 privacy).
+    """
+    if _is_reports_v2(report):
+        return
+    raise InvalidInputError(
+        f"Evaluation report {source.name} is not a reports/2.0 report "
+        "(missing the reports/2.0 contract marker or a top-level 'controls' list). "
+        "export-evidence requires a reports/2.0 report — re-run "
+        "`oss-policy-kit evaluate` to produce one."
+    )
+
+
 def _now_iso8601_z() -> str:
-    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    """Second-truncated UTC ``...Z`` timestamp, honouring ``SOURCE_DATE_EPOCH``.
+
+    Routes through the SDE-honoring clock (:func:`domain.models.utc_now`) — the
+    same source ``reports/2.0`` ``generated_at`` uses — so every embedded
+    ``created``/``evaluatedAt``/``date`` timestamp is pinned in a reproducible
+    build and two re-generated artifacts are byte-identical (items #10/#12).
+    """
+    return utc_now().strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _load_evaluation_report(target: Path, explicit_report: Path | None) -> dict[str, Any]:
@@ -129,6 +184,10 @@ def _load_evaluation_report(target: Path, explicit_report: Path | None) -> dict[
             # behind --validate), so legacy input fails fast with the migration pointer
             # instead of silently emitting all-unknown/content-dropped evidence.
             _reject_removed_contract(parsed, c)
+            # Then positively require the reports/2.0 shape, so an unrelated JSON
+            # object (not a report) is rejected instead of rendering an empty
+            # attestation at exit 0 (item #11).
+            _reject_non_report(parsed, c)
             return parsed
     tried = ", ".join(str(c) for c in candidates)
     raise InvalidInputError(
@@ -342,7 +401,7 @@ def _oscal_observation(control: dict[str, Any], *, now: str, subject_uuid: str) 
     if isinstance(assurance, str) and assurance.strip():
         props.append({"name": "assurance", "value": assurance.strip(), "ns": _OSCAL_KIT_NS})
     return {
-        "uuid": str(uuid.uuid4()),
+        "uuid": _oscal_uuid("observation", subject_uuid, cid, now),
         "title": cid,
         "description": f"{cid}: {state} — {control.get('message', '')}",
         "methods": ["EXAMINE"],
@@ -366,7 +425,8 @@ def _render_oscal(report: dict[str, Any]) -> dict[str, Any]:
     version = _kit_version(report)
     profile_id = _profile_id(report)
     target = str(report.get("target_path", "unknown"))
-    subject_uuid = str(uuid.uuid4())
+    prof = profile_id or "evaluation"
+    subject_uuid = _oscal_uuid("subject", target, prof, now)
     observations = [
         _oscal_observation(c, now=now, subject_uuid=subject_uuid)
         for c in (report.get("controls", []) or [])
@@ -374,7 +434,7 @@ def _render_oscal(report: dict[str, Any]) -> dict[str, Any]:
     ]
     return {
         "assessment-results": {
-            "uuid": str(uuid.uuid4()),
+            "uuid": _oscal_uuid("assessment-results", prof, version, now),
             "metadata": {
                 "title": f"oss-policy-kit assessment results ({profile_id or 'evaluation'})",
                 "last-modified": now,
@@ -384,7 +444,7 @@ def _render_oscal(report: dict[str, Any]) -> dict[str, Any]:
             "import-ap": {"href": "#oss-policy-kit-evaluation"},
             "results": [
                 {
-                    "uuid": str(uuid.uuid4()),
+                    "uuid": _oscal_uuid("result", prof, now),
                     "title": "oss-policy-kit clone-only policy evaluation",
                     "description": "Clone-only policy evaluation results projected into OSCAL assessment-results.",
                     "start": now,
@@ -399,7 +459,7 @@ def _render_oscal(report: dict[str, Any]) -> dict[str, Any]:
                     "assessment-log": {
                         "entries": [
                             {
-                                "uuid": str(uuid.uuid4()),
+                                "uuid": _oscal_uuid("assessment-log-entry", prof, now),
                                 "title": "oss-policy-kit evaluation run",
                                 "start": now,
                                 "props": [{"name": "tool", "value": f"oss-policy-kit-{version}", "ns": _OSCAL_KIT_NS}],
@@ -738,7 +798,9 @@ def export_evidence_cmd(
 def _run_export_evidence(target: Path, fmt: str, output: Path, report: Path | None, validate: bool) -> None:
     target_path = target.resolve()
     if not target_path.is_dir():
-        raise InvalidInputError(f"--target {target_path} is not a directory.")
+        # Echo the user-supplied string, never target.resolve(): the absolute
+        # path would leak the auditor's cwd/home/username (M-002).
+        raise InvalidInputError(f"--target {target} is not a directory.")
     if fmt not in _RENDERERS:
         raise InvalidInputError(f"Unsupported --format {fmt!r}. Supported: {', '.join(_SUPPORTED_FORMATS)}.")
 

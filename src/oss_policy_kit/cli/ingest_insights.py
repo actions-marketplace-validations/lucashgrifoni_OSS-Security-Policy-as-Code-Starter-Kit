@@ -175,7 +175,9 @@ def _run_ingest_insights(target: Path, input_path: Path | None, output_format: s
         raise InvalidInputError("--format must be human or json.")
     target_path = target.resolve()
     if not target_path.is_dir():
-        raise InvalidInputError(f"--target {target_path} is not a directory.")
+        # Echo the user-supplied string, never target.resolve(): the absolute
+        # path leaks the auditor's home directory / username (M-002).
+        raise InvalidInputError(f"--target {target} is not a directory.")
 
     chosen = _resolve_input(target_path, input_path)
     if chosen is None:

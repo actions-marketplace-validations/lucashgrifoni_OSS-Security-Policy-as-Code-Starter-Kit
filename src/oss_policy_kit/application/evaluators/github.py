@@ -287,7 +287,7 @@ def _gh_provenance_verification_recorded(evidence_path: Path) -> bool:
 
     if not evidence_path.is_file():
         return False
-    with contextlib.suppress(OSError, json.JSONDecodeError):
+    with contextlib.suppress(OSError, UnicodeDecodeError, json.JSONDecodeError):
         data = json.loads(evidence_path.read_text(encoding="utf-8"))
         if isinstance(data, dict):
             verification = data.get("verification")

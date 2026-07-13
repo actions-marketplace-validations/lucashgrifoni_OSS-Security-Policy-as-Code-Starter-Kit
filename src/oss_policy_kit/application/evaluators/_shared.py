@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextlib
 import importlib.metadata
 import json
+import math
 import re
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
@@ -654,6 +655,7 @@ def _python_lock_or_pins(repo: Path) -> bool:
         return True
     req = repo / _REQUIREMENTS_TXT
     if req.is_file():
+        body = ""
         with contextlib.suppress(OSError):
             body = req.read_text(encoding="utf-8", errors="replace")
         return bool(_PIN_REQ_PIN.search(body))
@@ -1747,7 +1749,7 @@ def _load_ai_system_doc(ctx: EvalContext) -> tuple[dict[str, Any] | None, Path]:
     p = ctx.repo_root / _KIT_DIR / "evidence" / "ai-system-technical-doc.json"
     if not p.is_file():
         return None, p
-    with contextlib.suppress(OSError, json.JSONDecodeError):
+    with contextlib.suppress(OSError, UnicodeDecodeError, json.JSONDecodeError):
         data = json.loads(p.read_text(encoding="utf-8"))
         if isinstance(data, dict):
             return cast(dict[str, Any], data), p
@@ -1792,14 +1794,21 @@ _OSV_SARIF_RELPATH = ".oss-policy-kit/evidence/sast/osv-scanner.sarif.json"
 
 
 def _safe_float(raw: Any) -> float | None:
-    """Coerce a value to float, returning None for None / non-numeric input."""
+    """Coerce a value to float, returning None for None / non-numeric / non-finite input.
+
+    A non-finite value (``inf``/``nan``, e.g. from a SARIF ``epss_score: 1e400`` or
+    ``"NaN"``) must not survive: ``inf`` would always clear an EPSS/CVSS threshold and
+    ``nan`` compares false to every threshold, silently warping the KEV/high-EPSS
+    classification. Mirrors ``finding_sarif._safe_float``.
+    """
 
     if raw is None:
         return None
     try:
-        return float(raw)
+        value = float(raw)
     except (TypeError, ValueError):
         return None
+    return value if math.isfinite(value) else None
 
 
 def _classify_epss_kev_result(
@@ -1851,7 +1860,7 @@ def _branch_protection_evidence(ctx: EvalContext) -> tuple[dict[str, Any] | None
     p = ctx.repo_root / _KIT_DIR / "evidence" / "branch-protection.json"
     if not p.is_file():
         return None, p
-    with contextlib.suppress(OSError, json.JSONDecodeError):
+    with contextlib.suppress(OSError, UnicodeDecodeError, json.JSONDecodeError):
         data = json.loads(p.read_text(encoding="utf-8"))
         if isinstance(data, dict):
             return cast(dict[str, Any], data), p

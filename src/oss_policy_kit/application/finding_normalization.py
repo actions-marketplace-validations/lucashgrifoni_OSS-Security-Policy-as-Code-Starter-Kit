@@ -187,8 +187,11 @@ def _read_source(repo_root: Path, filename: str, default_tool: str) -> tuple[dic
     if oversize_reason(path, MAX_EVIDENCE_BYTES, label=filename) is not None:
         return None, SourceRecord(path=rel, kind="kit-evidence", tool=default_tool, status="oversize")
     try:
+        # RecursionError guards deeply-nested input: json.loads raises it (not
+        # JSONDecodeError) past the recursion limit, and it must degrade to an
+        # honest "unreadable" record, never crash correlate-findings with exit 3.
         payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, RecursionError):
         return None, SourceRecord(path=rel, kind="kit-evidence", tool=default_tool, status="unreadable")
     if not isinstance(payload, dict):
         return None, SourceRecord(path=rel, kind="kit-evidence", tool=default_tool, status="unreadable")

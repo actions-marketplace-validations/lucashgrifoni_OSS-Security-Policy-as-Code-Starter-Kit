@@ -116,8 +116,15 @@ def load_catalog(controls_yaml: Path) -> dict[str, ControlSpec]:
 
     try:
         raw = load_yaml_file(controls_yaml)
+    except OSError as exc:
+        # M-002: never echo the resolved absolute path. ``merge_kit_root`` resolves a
+        # relative ``--kit-root`` to an absolute path, so the full filename (and the raw
+        # OSError repr, which embeds it) would leak cwd/home/OS username. Report the
+        # basename and the OS error string only.
+        raise LoadError(f"Failed to load catalog '{controls_yaml.name}': {exc.strerror or 'unreadable'}") from exc
     except Exception as exc:  # noqa: BLE001
-        raise LoadError(f"Failed to load catalog {controls_yaml}: {exc}") from exc
+        # Parse errors (YAML) reference the in-memory buffer, not the path on disk.
+        raise LoadError(f"Failed to load catalog '{controls_yaml.name}': {exc}") from exc
     if not isinstance(raw, dict):
         raise LoadError("Catalog root must be a mapping")
     items = raw.get("controls")
@@ -165,10 +172,17 @@ def load_profile(path: Path, *, validate_external_schema: bool = False) -> Profi
     ``profile-spec.schema.json`` (used for ``--profile`` filesystem paths).
     """
 
+    # M-002: ``path`` may be a resolved absolute path (an external ``--profile`` file is
+    # resolved by ``load_profile_by_id``), so every user-facing message below echoes only
+    # the basename — never the full path, which would leak cwd/home/OS username.
+    display = path.name
     try:
         raw = load_yaml_file(path)
+    except OSError as exc:
+        raise LoadError(f"Failed to load profile '{display}': {exc.strerror or 'unreadable'}") from exc
     except Exception as exc:  # noqa: BLE001
-        raise LoadError(f"Failed to load profile {path}: {exc}") from exc
+        # Parse errors (YAML) reference the in-memory buffer, not the path on disk.
+        raise LoadError(f"Failed to load profile '{display}': {exc}") from exc
     if not isinstance(raw, dict):
         raise LoadError("Profile root must be a mapping")
     if validate_external_schema:
@@ -188,15 +202,21 @@ def load_profile(path: Path, *, validate_external_schema: bool = False) -> Profi
                 )
             else:
                 hint = ""
-            raise ProfileLoadError(f"External profile failed schema validation ({path}): {raw_msg}.{hint}") from exc
+            raise ProfileLoadError(
+                f"External profile failed schema validation ('{display}'): {raw_msg}.{hint}"
+            ) from exc
     pid = str(raw.get("id", "")).strip()
     if not pid:
-        raise LoadError(f"Profile missing id: {path}")
+        raise LoadError(f"Profile missing id: '{display}'")
     ctrls = raw.get("controls")
     if not isinstance(ctrls, list) or not ctrls:
-        raise LoadError(f"Profile has no controls: {path}")
-    ids = tuple(str(x).strip() for x in ctrls if str(x).strip())
-    _raise_if_removed_controls_referenced(ids, f"Invalid profile {path}:")
+        raise LoadError(f"Profile has no controls: '{display}'")
+    # De-duplicate control ids preserving first-seen order (#17): an external profile that
+    # lists the same control id more than once must not inflate controls_total, the
+    # summary-by-status counts, or the weighted score. ``dict.fromkeys`` keeps insertion
+    # order; bundled profiles carry no duplicates, so they are unaffected.
+    ids = tuple(dict.fromkeys(str(x).strip() for x in ctrls if str(x).strip()))
+    _raise_if_removed_controls_referenced(ids, f"Invalid profile '{display}':")
     return ProfileSpec(
         id=pid,
         title=str(raw.get("title", pid)),
@@ -281,6 +301,9 @@ def merge_kit_root(cli_kit_root: Path | None) -> Path:
     if cli_kit_root is not None:
         root = cli_kit_root.resolve()
         if not root.is_dir():
-            raise LoadError(f"--kit-root is not a directory: {root}")
+            # Echo the user-supplied string, never root.resolve() — the resolved path
+            # leaks the cwd / home directory / OS username (M-002). Mirrors the
+            # missing-catalog / bad-profile messages hardened in the same release.
+            raise LoadError(f"--kit-root is not a directory: {cli_kit_root}")
         return root
     return bundled_kit_root()

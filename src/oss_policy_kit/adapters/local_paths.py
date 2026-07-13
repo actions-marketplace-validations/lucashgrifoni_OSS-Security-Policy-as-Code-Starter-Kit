@@ -14,5 +14,7 @@ def resolve_existing_dir(path_str: str) -> Path:
     except OSError as exc:
         raise InvalidInputError(f"Invalid path: {path_str} ({exc})") from exc
     if not resolved.is_dir():
-        raise InvalidInputError(f"Not a directory or does not exist: {resolved}")
+        # M-002: echo the string the user typed, never ``resolved`` — ``Path.resolve()``
+        # makes a relative target absolute and would leak cwd/home/OS username.
+        raise InvalidInputError(f"Not a directory or does not exist: {path_str}")
     return resolved

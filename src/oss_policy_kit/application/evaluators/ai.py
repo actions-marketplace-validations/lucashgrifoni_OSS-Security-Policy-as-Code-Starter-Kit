@@ -108,7 +108,7 @@ def eval_llm_218a_ps_001(ctx: EvalContext) -> EvalOutcome:
             evidence_sources=[],
             confidence="medium",
         )
-    with contextlib.suppress(OSError, json.JSONDecodeError):
+    with contextlib.suppress(OSError, UnicodeDecodeError, json.JSONDecodeError):
         data = json.loads(evidence.read_text(encoding="utf-8"))
         if isinstance(data, dict) and data.get("model_sha") and data.get("model_version"):
             return EvalOutcome(
@@ -729,7 +729,7 @@ def eval_mcp_tool_hash_001(ctx: EvalContext) -> EvalOutcome:
         return _mcp_na("tool-description hash")
     evidence = ctx.repo_root / ".oss-policy-kit" / "evidence" / "mcp-tool-descriptions.json"
     if evidence.is_file():
-        with contextlib.suppress(OSError, json.JSONDecodeError):
+        with contextlib.suppress(OSError, UnicodeDecodeError, json.JSONDecodeError):
             data = json.loads(evidence.read_text(encoding="utf-8"))
             text = json.dumps(data).lower() if data is not None else ""
             if "sha256" in text or "hash" in text:

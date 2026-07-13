@@ -47,7 +47,9 @@ def test_profile_loader_trims_non_empty_control_ids(controls: list[str], tmp_pat
     # Control ids removed in a prior major are rejected by load_profile by design (ProfileLoadError);
     # that guard is not what this trimming property test exercises, so skip such examples.
     assume(not any(c.strip() in REMOVED_CONTROL_IDS for c in controls))
-    expected = tuple(str(c).strip() for c in controls if str(c).strip())
+    # load_profile trims blank ids AND de-duplicates preserving first-seen order (v10.0.2 #17:
+    # a duplicated control id must not inflate controls_total / summary_by_status / weighted_score).
+    expected = tuple(dict.fromkeys(str(c).strip() for c in controls if str(c).strip()))
     path = tmp_path / "profile.yaml"
     path.write_text(
         yaml.safe_dump(

@@ -159,8 +159,11 @@ def _load_enrichment(path: Path) -> tuple[dict[str, dict[str, Any]], SourceRecor
     if oversize_reason(path, MAX_EVIDENCE_BYTES, label="enrichment snapshot") is not None:
         return {}, SourceRecord(path=rel, kind="enrichment-snapshot", tool=tool, status="oversize")
     try:
+        # RecursionError guards deeply-nested input: json.loads raises it (not
+        # JSONDecodeError) past the recursion limit, and it must degrade to an
+        # honest "unreadable" record, never crash correlate-findings with exit 3.
         raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, RecursionError):
         return {}, SourceRecord(path=rel, kind="enrichment-snapshot", tool=tool, status="unreadable")
     if not isinstance(raw, dict):
         return {}, SourceRecord(path=rel, kind="enrichment-snapshot", tool=tool, status="unreadable")

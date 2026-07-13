@@ -27,7 +27,6 @@ This subcommand intentionally does **not**:
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +49,7 @@ from oss_policy_kit.application.vuln_waivers import (
 from oss_policy_kit.cli.common import app, stderr_console, write_stdout_text
 from oss_policy_kit.cli.help_text import CMD_PANEL_EXPORT
 from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
+from oss_policy_kit.domain.models import utc_now
 
 # Test-visible back-compat hooks for the historical private helper names (A-S7 hoist).
 # Plain assignments (not imports) so lint autofix never strips them.
@@ -162,6 +162,19 @@ def _extract_sarif_data(
         raw = sarif_path.read_text(encoding="utf-8")
     except OSError as exc:
         return [], {}, f"Could not read SARIF: {exc}"
+    except UnicodeDecodeError:
+        # UTF-16/UTF-32/binary input (e.g. Windows PowerShell `>` writes UTF-16).
+        # UnicodeDecodeError is a ValueError, not an OSError, so it would escape to
+        # the exit-3 handler; return a clean validation message instead (exit 2),
+        # mirroring the UTF-8-BOM case which json.loads already reports cleanly.
+        return (
+            [],
+            {},
+            "Could not read SARIF: file is not valid UTF-8 (looks like UTF-16 or "
+            "binary). Re-encode the SARIF as UTF-8; on Windows PowerShell use "
+            "`osv-scanner ... | Out-File -Encoding utf8 osv-scanner.sarif.json` "
+            "instead of `>` (which writes UTF-16).",
+        )
     try:
         doc = json.loads(raw)
     except json.JSONDecodeError as exc:
@@ -208,7 +221,7 @@ def _build_vex_document(
 
     waivers = waivers or {}
     references = references or {}
-    now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = utc_now().strftime("%Y-%m-%dT%H:%M:%SZ")
     vulns: list[dict[str, Any]] = []
     for vid in vuln_ids:
         entry: dict[str, Any] = {"id": vid}
@@ -309,13 +322,13 @@ def _build_openvex_document(
 
     When ``product`` is omitted the placeholder ``pkg:generic/UNKNOWN`` is used
     (the caller is responsible for warning the operator). The ``@id`` and
-    ``timestamp`` are time-derived and non-deterministic by design; golden tests
-    normalize them.
+    ``timestamp`` are time-derived via the SDE-honoring clock, so a pinned
+    ``SOURCE_DATE_EPOCH`` yields byte-identical output (reproducible-build fence).
     """
 
     waivers = waivers or {}
     references = references or {}
-    now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = utc_now().strftime("%Y-%m-%dT%H:%M:%SZ")
     product_id = product if (product and product.strip()) else _OPENVEX_PRODUCT_PLACEHOLDER
     statements = [
         _build_openvex_statement(

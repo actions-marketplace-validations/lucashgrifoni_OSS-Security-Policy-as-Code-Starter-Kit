@@ -99,6 +99,23 @@ _META_DIR_PREFIXES: tuple[str, ...] = (
 )
 
 
+def _ensure_batch_dir(directory: Path) -> None:
+    """Create *directory* (parents ok, idempotent), mapping a bad path to a usage error.
+
+    ``evaluate-many`` writes under a user-supplied ``--output-dir``. When that path (or a
+    per-target subfolder created mid-batch) already exists as a FILE, is under a file, or
+    is otherwise not creatable, ``mkdir`` raises ``OSError``. Left unguarded it reaches the
+    CLI's last-resort handler as exit 3 and leaks the absolute path / username. Raising
+    ``InvalidInputError`` routes it to exit 2 with an ``exc.strerror``-only message (M-002),
+    matching single ``evaluate``'s ``--output-dir`` handling.
+    """
+
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise InvalidInputError(f"Cannot write to --output-dir: {exc.strerror or 'filesystem error'}") from exc
+
+
 def _is_meta_directory(name: str) -> bool:
     """Return True when *name* looks like an output / build / cache directory
     that should never be evaluated as a project, even via --skip-non-repos."""
@@ -292,7 +309,7 @@ def _execute_one_run(
     profile = load_profile_by_id(root, pid)
     report = evaluate_repository(repo_root=repo, profile=profile, catalog=catalog, waiver_outcome=None, scorecard=None)
     dest = output_dir / safe_name / pid
-    dest.mkdir(parents=True, exist_ok=True)
+    _ensure_batch_dir(dest)
     json_path = dest / "evaluation-report.json"
     md_path = dest / "evaluation-report.md"
     json_path.write_text(
@@ -415,7 +432,7 @@ def run_batch_evaluation(  # noqa: C901
             "No repositories to evaluate after filtering. Remove --skip-non-repos or add include/exclude patterns."
         )
 
-    output_dir.mkdir(parents=True, exist_ok=True)
+    _ensure_batch_dir(output_dir)
     rows, consolidated_reports, summaries_for_gate = _execute_batch_runs(
         eval_queue,
         profile_ids,

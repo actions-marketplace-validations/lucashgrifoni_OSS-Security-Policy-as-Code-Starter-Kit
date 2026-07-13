@@ -103,7 +103,7 @@ def eval_cra_art14_coord_002(ctx: EvalContext) -> EvalOutcome:
     """CRA-ART14-COORD-002: coordinated vulnerability disclosure policy documented."""
     disclosure = ctx.repo_root / ".oss-policy-kit" / "evidence" / "disclosure-policy.json"
     if disclosure.is_file():
-        with contextlib.suppress(OSError, json.JSONDecodeError):
+        with contextlib.suppress(OSError, UnicodeDecodeError, json.JSONDecodeError):
             data = json.loads(disclosure.read_text(encoding="utf-8"))
             if isinstance(data, dict) and data.get("coordinated_disclosure") is True:
                 return EvalOutcome(
@@ -357,7 +357,7 @@ def eval_cisa_sbd_secrets_005(ctx: EvalContext) -> EvalOutcome:
             evidence_sources=[],
             confidence="high",
         )
-    with contextlib.suppress(OSError, json.JSONDecodeError):
+    with contextlib.suppress(OSError, UnicodeDecodeError, json.JSONDecodeError):
         data = json.loads(evidence.read_text(encoding="utf-8"))
         if isinstance(data, dict):
             findings = 0

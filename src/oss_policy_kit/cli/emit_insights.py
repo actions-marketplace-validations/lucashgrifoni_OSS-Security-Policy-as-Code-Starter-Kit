@@ -33,7 +33,6 @@ from __future__ import annotations
 
 import re
 import subprocess
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +43,7 @@ from oss_policy_kit.application.insights_evidence import INSIGHTS_SCHEMA_VERSION
 from oss_policy_kit.cli.common import app, stderr_console, write_stdout_text
 from oss_policy_kit.cli.help_text import CMD_PANEL_EXPORT
 from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
+from oss_policy_kit.domain.models import utc_now
 
 _GITHUB_DIR = ".github"
 
@@ -51,7 +51,10 @@ _DEFAULT_OUTPUT = Path("security-insights.yml")
 
 
 def _now_iso8601_z() -> str:
-    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # Route through the SDE-honouring clock so ``last-updated`` / ``last-reviewed``
+    # are pinned under ``SOURCE_DATE_EPOCH`` and the emitted security-insights.yml
+    # is byte-identical across re-runs (reproducible builds).
+    return utc_now().strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _find_first(root: Path, candidates: tuple[str, ...]) -> Path | None:
@@ -254,7 +257,9 @@ def _build_insights_fragment(target: Path) -> dict[str, Any]:
 def _run_emit_insights(target: Path, output: Path, validate: bool, merge: bool) -> None:
     target_path = target.resolve()
     if not target_path.is_dir():
-        raise InvalidInputError(f"--target {target_path} is not a directory.")
+        # Echo the user-supplied string, never target.resolve(): the absolute
+        # path leaks the auditor's home directory / username (M-002).
+        raise InvalidInputError(f"--target {target} is not a directory.")
 
     if merge:
         fragment = _build_insights_fragment(target_path)

@@ -245,7 +245,14 @@ def _run_export_policy(profile: str, fmt: str, output: Path | None, kit_root: Pa
             raise typer.Exit(code=1)
 
     out_path = output if output is not None else _DEFAULT_OUTPUT_BY_FORMAT[fmt_norm]
-    out_path.write_text(rendered, encoding="utf-8")
+    try:
+        out_path.write_text(rendered, encoding="utf-8")
+    except OSError as exc:
+        # A bad --output (existing directory, a path under a file, or a read-only
+        # location) is a usage error, not an internal crash. Map it to exit 2 and
+        # echo only exc.strerror so the absolute path / username is never leaked
+        # (M-002), mirroring emit-insights / correlate-findings / export-evidence.
+        raise InvalidInputError(f"Cannot write --output: {exc.strerror or 'filesystem error'}") from exc
     control_count = len(_sorted_profile_control_ids(prof))
     write_stdout_text(
         f"export-policy: wrote {out_path} (format={fmt_norm}, profile={prof.id}, controls={control_count})\n"

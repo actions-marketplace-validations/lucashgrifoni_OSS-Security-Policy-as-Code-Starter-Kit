@@ -700,7 +700,7 @@ def _evidence_sbom_format(evid: Path) -> str | None:
 
     if not evid.is_file():
         return None
-    with contextlib.suppress(OSError, json.JSONDecodeError):
+    with contextlib.suppress(OSError, UnicodeDecodeError, json.JSONDecodeError):
         data = json.loads(evid.read_text(encoding="utf-8"))
         sbom_block = data.get("sbom") if isinstance(data, dict) else None
         fmt = str(sbom_block.get("format", "")).strip() if isinstance(sbom_block, dict) else ""
@@ -1506,7 +1506,7 @@ def eval_osps_scorecard_v6_001(ctx: EvalContext) -> EvalOutcome:
             evidence_sources=[],
             confidence="medium",
         )
-    with contextlib.suppress(OSError, json.JSONDecodeError):
+    with contextlib.suppress(OSError, UnicodeDecodeError, json.JSONDecodeError):
         data = json.loads(evidence.read_text(encoding="utf-8"))
         if isinstance(data, dict):
             verdict = str(data.get("conformance") or data.get("result") or data.get("overall") or "").strip().lower()
