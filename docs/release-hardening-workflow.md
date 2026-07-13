@@ -91,8 +91,8 @@ per control) and a `summary_by_status` dict. Status values you should know:
 - `waived`: a waiver entry explicitly excepts this control.
 
 For the full wire schema of the report JSON, see
-[`docs/reports-contract-v0.3.md`](reports-contract-v0.3.md) and the schema
-under `src/oss_policy_kit/data/schema/evaluation-report-v3.schema.json`.
+[`docs/reports-contract-v2.0.md`](reports-contract-v2.0.md) and the schema
+under `src/oss_policy_kit/data/schema/reports/2.0.json`.
 
 ## Weighted scoring for hard gates
 
@@ -115,8 +115,9 @@ posture percent when different controls are in `pass` vs `fail`. Treat
   `pass` from Scorecard JSON or equivalent supplemental input rather than
   from in-repo workflow evidence. For hard gates, prefer API-backed
   collection or structured in-repo evidence.
-- **Legacy alias `github-release-hardening`**: still supported but prints a
-  stderr `DeprecationWarning`. Migrate to `github-release-hardening-1`.
+- **Legacy alias `github-release-hardening`**: removed in v5.0.0. Passing
+  `--profile github-release-hardening` now exits with code 2 and prints a
+  migration message. Use `github-release-hardening-1` (same control set).
 
 ## Minimal end-to-end example (GitHub L3)
 

@@ -22,7 +22,7 @@ $ oss-policy-kit export-evidence --target . --format chainloop --output evidence
 The subcommand:
 
 1. **Reads the target repository** — same `--target` semantics as `evaluate`.
-2. **Re-projects the most recent evaluation output** (or runs evaluation internally if no prior output exists) into the requested format.
+2. **Re-projects the most recent stored `reports/2.0` evaluation report** into the requested format. If no `reports/2.0` report is found (checked at `--report`, then `<target>/out/evaluation-report.json`, then `<cwd>/out/evaluation-report.json`), it exits 2 with a usage error telling you to run `evaluate` first — it never runs evaluation internally, and a stored pre-2.0 report is rejected (exit 2).
 3. **Writes the output** to the path specified by `--output` (default depends on format).
 4. **Exits 0** on successful export, **1** on contract validation failure, **2** on usage errors.
 
@@ -57,7 +57,7 @@ Adopters running `export-evidence --format chainloop` in production should pin t
 
 - Push to a Chainloop server. The subcommand writes a local file; piping into Chainloop is a separate step (`chainloop attestation add ...`).
 - Validate that Chainloop accepted the evidence. Adopters should run their own ingest verification.
-- Re-implement the kit's evaluation logic. If the working tree has no prior `evaluation-report.json`, the subcommand runs `evaluate` internally with the default profile and exports the result.
+- Re-implement the kit's evaluation logic. If no prior `reports/2.0` `evaluation-report.json` is found (checked at `--report`, then `<target>/out/`, then `<cwd>/out/`), the subcommand exits 2 with a usage error pointing you to run `evaluate` first — it never runs evaluation internally.
 - Add new controls to the catalog. The format registry is renderer-only.
 
 ## What you should still do

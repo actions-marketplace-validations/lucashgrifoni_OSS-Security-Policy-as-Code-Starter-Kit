@@ -23,7 +23,7 @@ pip install oss-policy-kit
 oss-policy-kit --version
 ```
 
-Expected output: a version line like `6.4.0`. If `oss-policy-kit` is
+Expected output: a version line like `10.0.1`. If `oss-policy-kit` is
 not on `PATH`, use `python -m oss_policy_kit` instead (works identically
 on every command below).
 

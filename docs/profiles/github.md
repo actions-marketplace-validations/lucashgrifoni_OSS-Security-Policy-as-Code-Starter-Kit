@@ -23,8 +23,8 @@ Pure GitHub family in this kit: **six** ids (`github-level-1..3`, `github-releas
 
 Both are extreme hard-gate profiles for the GitHub family. They overlap heavily, but the operational fit differs:
 
-- Use **`github-level-3`** for **repository-service hardening** — a steady-state gate that watches workflow posture, supply-chain hygiene, and platform evidence (`rulesets`, environment protection, secret scanning, org MFA). 4 of the 33 controls are evidence-backed; the rest are deterministic or signal.
-- Use **`github-release-hardening-3`** when the bar of the run is the **release event itself** — branch protection evidence, merge queue, freshness of the evidence pack, and release-time discipline are first-class. 5 of the 32 controls are evidence-backed; the release-track controls (`*-REL-*`, `BUILD-SBOM-QUAL-*`, `GH-MERGEQ-*`) are present here and not in `github-level-3`.
+- Use **`github-level-3`** for **repository-service hardening** — a steady-state gate that watches workflow posture, supply-chain hygiene, and platform evidence (`rulesets`, environment protection, secret scanning, org MFA). 6 of the 37 controls are evidence-backed; the rest are deterministic or signal.
+- Use **`github-release-hardening-3`** when the bar of the run is the **release event itself** — branch protection evidence, merge queue, freshness of the evidence pack, and release-time discipline are first-class. 9 of the 39 controls are evidence-backed; the release-track controls (`*-REL-*`, `BUILD-SBOM-QUAL-*`, `GH-MERGEQ-*`) are present here and not in `github-level-3`.
 
 Operational rule of thumb:
 

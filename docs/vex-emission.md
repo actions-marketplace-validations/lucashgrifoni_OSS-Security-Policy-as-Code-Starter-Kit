@@ -47,7 +47,7 @@ Exit codes: `0` success, `2` user-input error (missing / malformed SARIF, unwrit
 
 - **It does not generate an SBOM.** Use Syft, Trivy SBOM, or your language toolchain's native SBOM emitter.
 - **It does not verify the manufacturer's analysis.** The auditor / notified body does that.
-- **It does not auto-fill `state: not_affected` or `analysis.justification`.** Those are manufacturer judgements; v0.1 emits `in_triage` so the manufacturer fills the analysis explicitly (the kit's waiver schema does not yet support per-CVE entries — see ADR-002 and `docs/profiles/deferred-followups.md`).
+- **It does not auto-fill `state: not_affected` for un-waived findings.** Those are manufacturer judgements; an un-waived finding defaults to `in_triage` so the manufacturer fills the analysis explicitly. A finding matched by a `vulnerability_ids: [...]` waiver **is** auto-populated as `not_affected` with the waiver's justification (v0.2); see ADR-002 and `docs/profiles/deferred-followups.md`.
 - **It does not cover non-OSV findings.** zizmor / poutine / Gitleaks findings are *policy* patterns, not CVEs; emitting them as VEX would dilute the document's regulatory meaning. They remain inside the kit's evaluation report, not the VEX.
 
 ---
@@ -203,5 +203,5 @@ Per [ADR-002](decisions/adr-002-emit-vex-scope.md), the v0.2 surface that ships 
 
 - `docs/cra-readiness.md` covers the EU CRA deadlines that motivate VEX emission.
 - `docs/decisions/adr-001-sca-scanner-choice.md` records why OSV-Scanner v2 was chosen as the SCA primary.
-- `docs/decisions/adr-002-emit-vex-scope.md` records the original scoping decision; this page reflects the v0.1 implementation that ships in v5.9.0.
+- `docs/decisions/adr-002-emit-vex-scope.md` records the original scoping decision; this page reflects the v0.2 implementation that ships in v5.9.0.
 - `docs/positioning.md` explains where the kit sits in the broader OSS security tooling landscape.

@@ -1,11 +1,11 @@
 # AppSec native profile (`appsec-sast-sca-1`)
 
-> **Expanded in v5.9.0**: grows from 11 to 15 controls. Adds four SARIF adapters (`SAST-ZIZMOR-066`, `SAST-POUTINE-067`, `SAST-OSV-068`, `SAST-GITLEAKS-069`) that consume scanner output produced by zizmor, poutine, OSV-Scanner v2, and Gitleaks.
+> **Expanded in v5.9.0**: grows from 11 to 17 controls. Adds four SARIF adapters (`SAST-ZIZMOR-066`, `SAST-POUTINE-067`, `SAST-OSV-068`, `SAST-GITLEAKS-069`) that consume scanner output produced by zizmor, poutine, OSV-Scanner v2, and Gitleaks.
 
 - **Posture:** AppSec native bundle, **hard-gate-capable** when paired with `scan-sast` and the four SARIF adapters have real evidence.
 - **Audience:** AppSec teams who want a multi-platform native profile rather than a CI-platform-specific ladder.
-- **Total controls:** 15. Six core governance/CI hygiene + `SAST-SEMGREP-064` (Semgrep evidence via the bundled `scan-sast` subcommand) + the four v5.9.0 SARIF adapters + `GOV-EVIDFRESH-054`, `GOV-DISC-065`, and platform-agnostic CRA basics.
-- **Evidence-backed:** 40% (six controls require `.oss-policy-kit/evidence/*.json`).
+- **Total controls:** 17. Six core governance/CI hygiene + `SAST-SEMGREP-064` (Semgrep evidence via the bundled `scan-sast` subcommand) + the four v5.9.0 SARIF adapters + `GOV-EVIDFRESH-054`, `GOV-DISC-065`, and platform-agnostic CRA basics.
+- **Evidence-backed:** 47% (eight controls require `.oss-policy-kit/evidence/*.json`).
 - **Experimental controls:** 27% (the four SARIF adapters plus `SAST-OSV-068`).
 
 ## SARIF adapters in v5.9.0

@@ -61,9 +61,11 @@ def test_cli_reference_correlate_findings_row_lists_waivers_and_enrichment() -> 
     row = next(line for line in text.splitlines() if line.startswith("| `correlate-findings` |"))
     assert "--waivers" in row
     assert "--enrichment-file" in row
-    # Resolution base note: waivers resolve against --target, enrichment against cwd.
-    assert "resolves against `--target`" in row
-    assert "current directory" in row
+    # v10.0.1 (X3-04): --waivers, --enrichment-file, and --output all resolve under
+    # --target (they agree). The doc must NOT claim --enrichment-file resolves against
+    # the current directory — that was the pre-v10.0.1 asymmetry the hotfix removed.
+    assert "resolve against `--target`" in row
+    assert "current directory" not in row
 
 
 # --- X8-3 (doc side): export-evidence row mentions --target and --output ---------

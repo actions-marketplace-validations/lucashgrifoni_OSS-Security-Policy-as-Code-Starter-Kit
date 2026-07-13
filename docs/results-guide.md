@@ -38,7 +38,7 @@ Reports include:
 ## `all-pass` On `github-level-1` vs `github-release-hardening-1`
 
 - `github-level-1` currently evaluates 14 active controls. `all-pass` means fourteen `pass` outcomes for that profile on the current revision.
-- `github-release-hardening-1` adds `PLAT-BRPROT-015`. Branch protection is enforced on GitHub, not in the clone, so a strong local repository can still end with `pass` plus `manual-review-required` or `self-attested` for that control.
+- `github-release-hardening-1` adds `PLAT-BRPROT-015` and `GOV-EVIDFRESH-054` (16 controls total). Branch protection is enforced on GitHub, not in the clone, so a strong local repository can still end with `pass` plus `manual-review-required` or `self-attested` for that control.
 
 That behavior is intentional. It is the tool being honest, not a defect.
 
@@ -47,7 +47,7 @@ That behavior is intentional. It is the tool being honest, not a defect.
 - `github-level-1`: pragmatic baseline with clone-visible governance and CI hygiene.
 - `github-level-2`: adds stricter workflow hardening (`GH-WF-018` to `GH-REL-021`).
 - `github-level-3`: adds strict deployment identity and provenance expectations (`GH-DEPLOY-022`, `GH-PROV-023`).
-- `github-release-hardening-1`: level-1 + branch-protection evidence/manual-review.
+- `github-release-hardening-1`: level-1 + branch-protection evidence/manual-review (`PLAT-BRPROT-015`) + evidence-freshness (`GOV-EVIDFRESH-054`).
 - `github-release-hardening-2`: level-2 + platform evidence controls (`GH-PLAT-024..026`).
 - `github-release-hardening-3`: level-3 + platform evidence controls (`PLAT-BRPROT-015`, `GH-PLAT-024..026`).
 
@@ -134,7 +134,7 @@ Top-level keys in the report contract (`reports/2.0`):
 - `kit_version`: OSS Policy Kit version used in evaluation.
 - `target_path`: evaluated repository path (basename by default; full path with `--include-absolute-path`).
 - `profile`: object describing the selected profile (`id`, `title`, `family`, `level`, `posture`, `is_release_track`, `recommended_gate`).
-- `summary_by_status`: aggregate counts keyed by the five states (`PASS`, `FAIL`, `UNKNOWN`, `NOT_APPLICABLE`, `ATTESTED`).
+- `summary_by_status`: aggregate counts keyed by the six states (`PASS`, `FAIL`, `UNKNOWN`, `NOT_APPLICABLE`, `ATTESTED`, `SELF_ATTESTED`).
 - `controls_total`: total number of evaluated controls.
 - `controls`: per-control result array — each entry carries `id`, `title`, `state`, `assurance`, `message`, `remediation`, the projected `evidence` object, and a stable `finding_id`.
 - `results_digest`: `sha256:` fingerprint over canonical control fields, stable across runs.

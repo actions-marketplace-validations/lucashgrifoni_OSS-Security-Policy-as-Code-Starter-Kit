@@ -146,7 +146,8 @@ Runtime policy assets are packaged from:
 
 The public report schema remains under:
 
-- `reports/schema/evaluation-result.schema.json`
+- `reports/schema/evaluation-report-2.0.schema.json`
+- `reports/schema/findings-1.0.schema.json`
 - `reports/schema/evidence-branch-protection.schema.json`
 - `reports/schema/evidence-github-rulesets.schema.json`
 - `reports/schema/evidence-github-environment-protection.schema.json`

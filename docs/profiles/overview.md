@@ -146,25 +146,25 @@ Starting in v5.4.0 the kit also ships **bundled framework alignment profiles** (
 | Profile | Controls | Status (CLI `maturity_label`) | Extreme gate profile? | det / sig / evi |
 | --- | ---: | --- | --- | --- |
 | github-level-1 | 14 | starter ladder | no | 11 / 3 / 0 |
-| github-level-2 | 29 | advisory ladder | no | 19 / 10 / 0 |
-| github-level-3 | 33 | hard-gate ladder (extreme) | **yes** | 21 / 8 / 4 |
+| github-level-2 | 30 | advisory ladder | no | 19 / 10 / 1 |
+| github-level-3 | 37 | hard-gate ladder (extreme) | **yes** | 21 / 10 / 6 |
 | github-release-hardening-1 | 16 | release ladder | no | 12 / 3 / 1 |
-| github-release-hardening-2 | 30 | release ladder | no | 18 / 8 / 4 |
-| github-release-hardening-3 | 32 | release hard-gate (extreme) | **yes** | 19 / 8 / 5 |
-| github-aws-level-2 | 35 | advisory hybrid (multi-platform) | no | 22 / 13 / 0 |
-| github-azure-level-2 | 36 | advisory hybrid (multi-platform) | no | 23 / 12 / 1 |
+| github-release-hardening-2 | 33 | release ladder | no | 18 / 8 / 7 |
+| github-release-hardening-3 | 39 | release hard-gate (extreme) | **yes** | 19 / 11 / 9 |
+| github-aws-level-2 | 35 | advisory hybrid (multi-platform) | no | 22 / 12 / 1 |
+| github-azure-level-2 | 36 | advisory hybrid (multi-platform) | no | 23 / 11 / 2 |
 | azure-level-1 | 13 | starter ladder | no | 9 / 4 / 0 |
 | azure-level-2 | 21 | advisory ladder | no | 15 / 5 / 1 |
-| azure-level-3 | 27 | hard-gate ladder (extreme) | **yes** | 16 / 3 / 8 |
+| azure-level-3 | 30 | hard-gate ladder (extreme) | **yes** | 16 / 4 / 10 |
 | azure-release-hardening-1 | 17 | release ladder | no | 11 / 4 / 2 |
 | azure-release-hardening-2 | 24 | release ladder | no | 16 / 5 / 3 |
-| azure-release-hardening-3 | 30 | release hard-gate (extreme) | **yes** | 16 / 6 / 8 |
+| azure-release-hardening-3 | 34 | release hard-gate (extreme) | **yes** | 16 / 8 / 10 |
 | aws-level-1 | 12 | starter ladder | no | 8 / 4 / 0 |
 | aws-level-2 | 20 | advisory ladder | no | 14 / 6 / 0 |
-| aws-level-3 | 25 | hard-gate ladder (extreme) | **yes** | 15 / 3 / 7 |
+| aws-level-3 | 28 | hard-gate ladder (extreme) | **yes** | 15 / 4 / 9 |
 | aws-release-hardening-1 | 16 | release ladder | no | 10 / 4 / 2 |
 | aws-release-hardening-2 | 22 | release ladder | no | 14 / 6 / 2 |
-| aws-release-hardening-3 | 29 | release hard-gate (extreme) | **yes** | 15 / 7 / 7 |
+| aws-release-hardening-3 | 33 | release hard-gate (extreme) | **yes** | 15 / 9 / 9 |
 | cra-eu-reporting-1 | 11 | regulatory mapping (advisory, 2026-09-11 reporting) | no | see JSON |
 | cra-eu-ready-1 | 12 | regulatory mapping (advisory) | no | 5 / 4 / 3 |
 | cra-eu-strict-1 | 19 | regulatory mapping (advisory, strict track) | no | see JSON |
@@ -174,14 +174,14 @@ Starting in v5.4.0 the kit also ships **bundled framework alignment profiles** (
 | cis-supply-chain-1 | 24 | framework alignment (advisory) | no | see JSON |
 | owasp-cicd-top10-1 | 23 | framework alignment (advisory) | no | see JSON |
 | s2c2f-l1-1 | 9 | framework alignment (advisory, OSS consumption) | no | see JSON |
-| appsec-sast-sca-1 | 15 | AppSec native bundle (hard-gate-capable with scan-sast + SARIF adapters) | **yes (with scan-sast)** | see JSON |
+| appsec-sast-sca-1 | 17 | AppSec native bundle (hard-gate-capable with scan-sast + SARIF adapters) | **yes (with scan-sast)** | see JSON |
 | ai-agent-baseline-1 | 10 | AI agent source-side baseline (advisory) | no | 0 / 7 / 3 |
-| iac-terraform-baseline-1 | 15 | IaC Terraform / OpenTofu baseline (advisory) | no | see JSON |
+| iac-terraform-baseline-1 | 13 | IaC Terraform / OpenTofu baseline (advisory) | no | see JSON |
 | iac-cfn-baseline-1 | 7 | CloudFormation posture (advisory, paired with scan-cfn) | no | 1 / 0 / 6 |
 | iac-pulumi-baseline-1 | 7 | Pulumi Python posture (advisory, paired with scan-pulumi) | no | 1 / 0 / 6 |
 | iac-bicep-baseline-1 | 7 | Bicep posture (advisory, paired with scan-bicep) | no | 1 / 0 / 6 |
 | kubernetes-baseline-1 | 17 | Kubernetes manifest posture (advisory, paired with scan-k8s) | no | 1 / 0 / 16 |
-| container-baseline-1 | 11 | Container hardening posture (advisory) | no | 3 / 8 / 0 |
+| container-baseline-1 | 12 | Container hardening posture (advisory) | no | 3 / 9 / 0 |
 | webhook-security-1 | 3 | Webhook receiver security (advisory, paired with the receiver) | no | 1 / 2 / 0 |
 | gitlab-level-1 | 16 | GitLab CI starter ladder | no | 10 / 6 / 0 |
 | gitlab-level-2 | 22 | advisory ladder | no | 10 / 12 / 0 |
@@ -194,7 +194,7 @@ Starting in v5.4.0 the kit also ships **bundled framework alignment profiles** (
 
 ### Framework alignment profiles (v5.4.0)
 
-The seven profiles introduced in v5.4.0 (`osps-baseline-1`, `slsa-build-l2-1`, `ssdf-baseline-1`, `cis-supply-chain-1`, `owasp-cicd-top10-1`, `s2c2f-l1-1`, `cra-eu-strict-1`) are **multi-platform mappings**: they have no platform prefix and combine controls from the current 212-control catalog (as of v6.4.0) into framework-aligned bundles. They complement (not replace) the platform ladders. Detailed per-framework mapping is documented in [framework-alignment.md](../framework-alignment.md).
+The seven profiles introduced in v5.4.0 (`osps-baseline-1`, `slsa-build-l2-1`, `ssdf-baseline-1`, `cis-supply-chain-1`, `owasp-cicd-top10-1`, `s2c2f-l1-1`, `cra-eu-strict-1`) are **multi-platform mappings**: they have no platform prefix and combine controls from the current 222-control catalog into framework-aligned bundles. They complement (not replace) the platform ladders. Detailed per-framework mapping is documented in [framework-alignment.md](../framework-alignment.md).
 
 One of the seven is hard-gate-capable when evidence is present (`slsa-build-l2-1`); the other six are advisory mappings (`--fail-on degraded` recommended). Both CRA profiles (`cra-eu-ready-1` for the 2026-09-11 reporting deadline and `cra-eu-strict-1` for the 2027-12-11 full obligations) are advisory regulatory mappings: the kit aligns evidence with CRA expectations but does not certify compliance, which requires a competent authority (notified body, CE-marking) outside the kit's scope. All seven trigger the `[advisory profile]` banner only when explicitly listed there; consult `src/oss_policy_kit/cli/terminal_ui.py:_ADVISORY_ONLY_PROFILE_IDS` for the live list.
 
@@ -247,14 +247,14 @@ The proportion of evidence-backed controls per extreme profile (source: `python 
 
 | Profile | Total controls | Evidence-backed | % evidence-backed |
 | --- | ---: | ---: | ---: |
-| `azure-level-3` | 27 | 8 | 29.6% |
-| `aws-level-3` | 25 | 7 | 28.0% |
-| `azure-release-hardening-3` | 30 | 8 | 26.7% |
-| `aws-release-hardening-3` | 29 | 7 | 24.1% |
-| `gitlab-release-hardening-3` | 36 | 6 | 16.7% |
-| `github-release-hardening-3` | 32 | 5 | 15.6% |
+| `azure-level-3` | 30 | 10 | 33.3% |
+| `aws-level-3` | 28 | 9 | 32.1% |
+| `azure-release-hardening-3` | 34 | 10 | 29.4% |
+| `aws-release-hardening-3` | 33 | 9 | 27.3% |
+| `github-release-hardening-3` | 39 | 9 | 23.1% |
 | `gitlab-level-3` | 29 | 5 | 17.2% |
-| `github-level-3` | 33 | 4 | 12.1% |
+| `gitlab-release-hardening-3` | 36 | 6 | 16.7% |
+| `github-level-3` | 37 | 6 | 16.2% |
 
 Operational reading:
 

@@ -37,8 +37,10 @@ git diff -- oss-policy-kit.yaml .github/workflows/oss-policy-check.yml
 ## Step 3 - First evaluation (1 min)
 
 ```bash
-python -m oss_policy_kit evaluate --target .
+python -m oss_policy_kit evaluate --target . --output-dir ./out
 ```
+
+`evaluate` reads the profile (and, when you omit them, the `fail_on` / `output_dir` / `report_json_contract`) from the `oss-policy-kit.yaml` that Step 2 wrote — you will see `Using profile from oss-policy-kit.yaml: github-level-1` on stderr. Passing `--output-dir ./out` explicitly keeps the report paths below stable regardless of the directory recorded in the config.
 
 Expected shape:
 

@@ -28,8 +28,8 @@ top of the AWS hard-gate core.
 
 Both are AWS extreme hard-gates and both expect live `collect-evidence --platform aws`. They differ in operational fit:
 
-- Use **`aws-level-3`** for **steady-state CodeBuild/CodePipeline hardening** — IAM identity posture, scanner/SCA evidence, ORG-MFA, evidence freshness on the AWS-native side. 7 of the 25 controls are evidence-backed.
-- Use **`aws-release-hardening-3`** when the gate runs at the **release event** — adds release-track signals on top of the same hard-gate core (extra buildspec signals, artifact-bound SBOM/provenance evidence files). 7 of the 29 controls are evidence-backed; the additional rows over `aws-level-3` are mostly release-discipline signals.
+- Use **`aws-level-3`** for **steady-state CodeBuild/CodePipeline hardening** — IAM identity posture, scanner/SCA evidence, ORG-MFA, evidence freshness on the AWS-native side. 9 of the 28 controls are evidence-backed.
+- Use **`aws-release-hardening-3`** when the gate runs at the **release event** — adds release-track signals on top of the same hard-gate core (extra buildspec signals, artifact-bound SBOM/provenance evidence files). 9 of the 33 controls are evidence-backed; the additional rows over `aws-level-3` are mostly release-discipline signals.
 
 Operational rule of thumb:
 

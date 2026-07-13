@@ -4,8 +4,8 @@ This page maps the controls and profiles bundled with the kit to the AppSec /
 DevSecOps frameworks operators most often have to defend against. It is a **mapping**, not a
 **certification claim**.
 
-> **Snapshot — v6.x refresh complete (2026-05-25).** As of **v7.3.0** the kit bundles
-> **220 controls / 56 profiles**, and the per-framework tables below now map the v6.x families:
+> **Snapshot — v6.x refresh complete (2026-05-25).** As of **v10.0.1** the kit bundles
+> **222 controls / 56 profiles**, and the per-framework tables below now map the v6.x families:
 > **AI/LLM (NIST 800-218A), AI agent + MCP, OWASP Agentic ASI, EU AI Act, OpenSSF Security
 > Insights** (the *AI / regulatory frameworks* sections), **GitLab CI** (`GL-PIPE-*` → OWASP CICD
 > Top 10), **Kubernetes** (`K8S-*` → CIS Kubernetes / Pod Security Standards / NSA-CISA), **IaC**
