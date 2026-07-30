@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, timedelta
 
 from oss_policy_kit.application import evidence_projection as ep
 from oss_policy_kit.application.evidence_projection import FreshnessContext
-from oss_policy_kit.domain.models import ControlResult, ControlStatus
+from oss_policy_kit.domain.models import ControlResult, ControlStatus, utc_now
 
 
 def _result(status: ControlStatus = ControlStatus.PASS, **over: object) -> ControlResult:
@@ -69,9 +69,13 @@ def test_freshness_status() -> None:
     assert ep._freshness_status(method="live", collected_at=None, has_evidence=False, ctx=ctx) == "not_applicable"
     assert ep._freshness_status(method="static", collected_at=None, has_evidence=True, ctx=ctx) == "not_applicable"
     assert ep._freshness_status(method="live", collected_at=None, has_evidence=True, ctx=ctx) == "unknown"
-    old = datetime.now(UTC) - timedelta(days=200)
+    # Anchor to the same clock _freshness_status reads (utc_now honours SOURCE_DATE_EPOCH,
+    # pinned by tests/conftest.py). Against the real wall clock `recent` resolved to a date
+    # *after* the pinned now, so it only counted as "fresh" because the helper has no
+    # future-date guard — passing for the wrong reason.
+    old = utc_now() - timedelta(days=200)
     assert ep._freshness_status(method="live", collected_at=old, has_evidence=True, ctx=ctx) == "stale"
-    recent = datetime.now(UTC) - timedelta(days=1)
+    recent = utc_now() - timedelta(days=1)
     assert ep._freshness_status(method="live", collected_at=recent, has_evidence=True, ctx=ctx) == "fresh"
 
 

@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 from oss_policy_kit.application.evaluators import EvalContext, eval_prov_verify_061
-from oss_policy_kit.domain.models import ControlStatus, EvidenceCollectionMethod
+from oss_policy_kit.domain.models import ControlStatus, EvidenceCollectionMethod, utc_now
 from oss_policy_kit.infrastructure.aws_ci_parser import AwsCiAnalysis
 from oss_policy_kit.infrastructure.azure_pipeline_parser import AzurePipelineAnalysis
 from oss_policy_kit.infrastructure.workflow_parser import WorkflowAnalysis
@@ -94,7 +94,10 @@ def test_prov_verify_061_fail_when_transparency_log_false(tmp_path: Path) -> Non
 
 
 def test_prov_verify_061_fail_when_verification_stale(tmp_path: Path) -> None:
-    stale = (datetime.now(UTC) - timedelta(days=120)).isoformat()
+    # Anchor to the same clock the evaluator reads (utc_now honours SOURCE_DATE_EPOCH,
+    # pinned by tests/conftest.py). Using the real wall clock here made this test drift
+    # out of the 90-day window and fail permanently once real time passed epoch + 30d.
+    stale = (utc_now() - timedelta(days=120)).isoformat()
     _write_evidence(tmp_path, "github-provenance-artifact.json", _gh_payload(verified_at=stale))
     out = eval_prov_verify_061(_ctx(tmp_path, "github-level-3"))
     assert out.status == ControlStatus.FAIL

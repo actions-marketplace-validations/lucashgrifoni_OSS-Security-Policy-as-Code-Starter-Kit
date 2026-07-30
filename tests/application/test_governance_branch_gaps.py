@@ -7,7 +7,6 @@ defensive branches that a schema-valid evidence file can never reach.
 from __future__ import annotations
 
 import json
-from datetime import date
 from pathlib import Path
 
 from oss_policy_kit.application.evaluators import governance as gov
@@ -96,7 +95,7 @@ def test_evidfresh_054_zero_max_age_falls_back(tmp_path: Path) -> None:
 def test_classify_evidence_files_error_path(tmp_path: Path) -> None:
     bad = tmp_path / "bad.json"
     bad.write_text("{", encoding="utf-8")
-    stale, undated, warns, err = gov._classify_evidence_files([bad], date.today(), 90)
+    stale, undated, warns, err = gov._classify_evidence_files([bad], utc_now().date(), 90)
     assert err is not None
     assert err.status == ControlStatus.MANUAL_REVIEW_REQUIRED
 
