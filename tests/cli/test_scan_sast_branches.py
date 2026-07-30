@@ -14,15 +14,17 @@ from oss_policy_kit.infrastructure.scanners.semgrep_adapter import SemgrepRunOut
 runner = CliRunner()
 
 
-def test_scan_sast_json_not_available(tmp_path: Path) -> None:
-    # Semgrep is not installed in CI -> status not_available, exit 0, JSON emitted.
+def test_scan_sast_json_not_available(tmp_path: Path, semgrep_absent: None) -> None:
+    # Semgrep missing from PATH -> status not_available, exit 0, JSON still emitted.
     res = runner.invoke(app, ["scan-sast", "--target", str(tmp_path), "--format", "json"])
     assert res.exit_code == 0, res.output
     payload = json.loads(res.stdout)
-    assert payload["status"] in {"not_available", "ok", "error", "timeout"}
+    # Pinned to the exact branch: the old assertion accepted every possible status, so it
+    # could not fail regardless of what the command did.
+    assert payload["status"] == "not_available"
 
 
-def test_scan_sast_human_not_available(tmp_path: Path) -> None:
+def test_scan_sast_human_not_available(tmp_path: Path, semgrep_absent: None) -> None:
     res = runner.invoke(app, ["scan-sast", "--target", str(tmp_path), "--format", "human"])
     assert res.exit_code == 0, res.output
     assert "scan-sast:" in res.output
