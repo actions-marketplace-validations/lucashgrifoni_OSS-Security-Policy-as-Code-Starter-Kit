@@ -5,22 +5,24 @@ The kit ships as a composite GitHub Action so adopters can evaluate the bundled 
 ## Quick start
 
 ```yaml
-- uses: lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit@v10.0.1
+- uses: lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit@v10.0.2 # x-release-please-version
   with:
     profile: github-level-1
     fail-on: fail
 ```
 
-Pin to a specific release for reproducibility:
+A release tag is readable, but it is still mutable. For maximum supply-chain assurance — and to satisfy
+`CI-PIN-008`, which this action's own `github-level-1` profile enforces — pin to the commit SHA of the
+release tag and let Dependabot bump it:
 
 ```yaml
-- uses: lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit@v10.0.1
+- uses: lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit@4dc762d87933601cd30faa3c006d9fd53acef60c # v10.0.2
   with:
     profile: github-level-1
     fail-on: fail
 ```
 
-For maximum supply-chain assurance, pin to the commit SHA of the release tag and let Dependabot bump it.
+That is the form used in [`templates/workflows/oss-policy-kit-marketplace-action.yml`](../templates/workflows/oss-policy-kit-marketplace-action.yml).
 
 ## Inputs
 
@@ -68,7 +70,7 @@ permissions:
 ```yaml
 - name: Run oss-policy-kit
   id: oss-policy
-  uses: lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit@v6.4.0
+  uses: lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit@v10.0.2 # x-release-please-version
   with:
     profile: github-level-2
     sarif-output: results.sarif

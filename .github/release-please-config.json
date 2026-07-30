@@ -22,7 +22,9 @@
       "extra-files": [
         "src/oss_policy_kit/__init__.py",
         "README.md",
-        "docs/at-a-glance.md"
+        "docs/at-a-glance.md",
+        "docs/github-action.md",
+        "docs/quickstart-15-min.md"
       ]
     }
   }

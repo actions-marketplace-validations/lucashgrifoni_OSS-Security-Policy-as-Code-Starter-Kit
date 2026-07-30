@@ -76,8 +76,11 @@ where = ["src"]
 
 # Policy payloads only (YAML/JSON). Do not use `data/**/*`: it also picks up
 # `__pycache__/*.pyc` under `data/schema/` when present locally.
+# `py.typed` (PEP 561) must ship too: the package exposes a typed extension contract
+# (`domain/plugin_contract.py`, the `oss_policy_kit.evaluators` entry-point group), and
+# without this marker a plugin author's type checker treats the whole package as untyped.
 [tool.setuptools.package-data]
-oss_policy_kit = ["data/**/*.yaml", "data/**/*.json"]
+oss_policy_kit = ["py.typed", "data/**/*.yaml", "data/**/*.json"]
 
 [tool.setuptools.exclude-package-data]
 oss_policy_kit = [
