@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from pathlib import Path
 
 from oss_policy_kit import __version__
@@ -31,19 +32,24 @@ _TAG_REF = re.compile(rf"{re.escape(_ACTION)}@v(\d+\.\d+\.\d+)")
 _SHA_REF = re.compile(rf"{re.escape(_ACTION)}@[0-9a-f]{{40}}")
 _ANNOTATION = "x-release-please-version"
 
-_SKIP_DIRS = {".git", ".venv", "node_modules", "melhorias", "sonar", "out", "artifacts", "dist"}
-
 
 def _searchable_files() -> list[Path]:
-    files: list[Path] = []
-    for pattern in ("*.md", "*.yml", "*.yaml"):
-        for path in REPO_ROOT.rglob(pattern):
-            if _SKIP_DIRS & set(path.parts):
-                continue
-            if path.name.startswith(".venv") or ".tmp" in path.parts[0:2]:
-                continue
-            files.append(path)
-    return files
+    """Every git-tracked Markdown/YAML file.
+
+    Deliberately asks git rather than walking the tree with a skip-list. "Tracked" is exactly
+    what "shipped" means here, and a skip-list has to be extended for every new scratch
+    directory: an earlier version of this helper walked the whole tree and flagged a stale pin
+    inside gitignored `.tmp-validation/` scratch output, which no reader ever sees.
+    """
+
+    out = subprocess.run(
+        ["git", "ls-files", "-z", "*.md", "*.yml", "*.yaml"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    return [REPO_ROOT / rel for rel in out.split("\0") if rel]
 
 
 def _tag_reference_lines() -> list[tuple[Path, int, str]]:
@@ -104,3 +110,44 @@ def test_guard_actually_finds_the_known_references() -> None:
     """Mutation check: the guard must be scanning something, not passing on an empty set."""
 
     assert len(_tag_reference_lines()) >= 3
+
+
+# Any `uses:` line in tracked docs and templates. Third-party actions are covered here;
+# the kit's own Action is handled by the tests above.
+_ANY_USES = re.compile(r"^\s*(-\s*)?uses:\s*(?P<ref>\S+@\S+)")
+_SHA_PINNED = re.compile(r"@[0-9a-f]{40}\b")
+
+
+def test_no_third_party_action_is_referenced_by_mutable_tag() -> None:
+    """Guard: documented third-party actions are SHA-pinned.
+
+    `docs/github-action.md` showed `github/codeql-action/upload-sarif@v3` - mutable, and a major
+    behind what the repo itself runs. Readers copy these blocks verbatim, and `CI-PIN-008` flags
+    exactly this pattern, so a mutable reference in the kit's own documentation contradicts the
+    control it ships.
+
+    The kit's own Action is exempt: it is deliberately shown as a readable `@vX.Y.Z` tag that
+    release-please rewrites, with a SHA-pinned example alongside it.
+    """
+
+    offenders: list[str] = []
+    for path in _searchable_files():
+        if "examples" in path.parts and "vulnerable-repo" in path.parts:
+            continue  # deliberately insecure fixture
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            m = _ANY_USES.match(line)
+            if not m:
+                continue
+            ref = m.group("ref")
+            if _ACTION in ref or _SHA_PINNED.search(ref):
+                continue
+            offenders.append(f"{path.relative_to(REPO_ROOT).as_posix()}:{lineno}: {line.strip()}")
+
+    assert not offenders, (
+        "These third-party actions are referenced by a mutable tag in shipped docs or templates. "
+        "Pin them to a commit SHA with the tag in a trailing comment:\n  " + "\n  ".join(offenders)
+    )

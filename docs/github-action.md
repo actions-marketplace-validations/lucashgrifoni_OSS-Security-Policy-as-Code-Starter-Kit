@@ -77,7 +77,7 @@ permissions:
 
 - name: Upload SARIF
   if: ${{ always() && steps.oss-policy.outputs.sarif != '' }}
-  uses: github/codeql-action/upload-sarif@v3
+  uses: github/codeql-action/upload-sarif@7188fc363630916deb702c7fdcf4e481b751f97a # v4.37.1
   with:
     sarif_file: ${{ steps.oss-policy.outputs.sarif }}
     category: oss-policy-kit
