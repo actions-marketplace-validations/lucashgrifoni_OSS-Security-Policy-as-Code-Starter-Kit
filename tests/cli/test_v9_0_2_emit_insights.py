@@ -13,6 +13,8 @@ so we exercise the real process exit and the real stderr text a user sees.
 from __future__ import annotations
 
 import getpass
+import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -23,6 +25,14 @@ REPO = Path(__file__).parents[2]
 
 
 def _run_emit_insights(*args: str) -> subprocess.CompletedProcess[str]:
+    # Pin a wide, dumb terminal. Rich wraps to the ambient width, and these messages
+    # embed an absolute tmp_path: on a host whose tmp path is long enough the wrap lands
+    # mid-phrase ("is not a \ndirectory") and a substring assertion fails for a reason
+    # that has nothing to do with the behavior under test.
+    env = os.environ.copy()
+    env["NO_COLOR"] = "1"
+    env["TERM"] = "dumb"
+    env["COLUMNS"] = "200"
     return subprocess.run(
         [sys.executable, "-m", "oss_policy_kit", "emit-insights", *args],
         cwd=REPO,
@@ -30,9 +40,15 @@ def _run_emit_insights(*args: str) -> subprocess.CompletedProcess[str]:
         text=True,
         encoding="utf-8",
         errors="replace",
+        env=env,
         timeout=120,
         check=False,
     )
+
+
+def _flat(text: str) -> str:
+    """Collapse all whitespace so a substring assertion survives any wrap position."""
+    return re.sub(r"\s+", " ", text)
 
 
 def _assert_no_traceback(stderr: str) -> None:
@@ -57,7 +73,7 @@ def test_bad_target_exits_2_no_traceback(tmp_path: Path) -> None:
     res = _run_emit_insights("--target", str(not_a_dir), "--output", str(out))
 
     assert res.returncode == 2, (res.returncode, res.stderr)
-    assert "is not a directory" in res.stderr
+    assert "is not a directory" in _flat(res.stderr), res.stderr
     _assert_no_traceback(res.stderr)
     assert not out.exists()
 
@@ -74,7 +90,7 @@ def test_unwritable_output_exits_2_no_path_or_username_leak(tmp_path: Path) -> N
     res = _run_emit_insights("--target", str(REPO), "--output", str(out))
 
     assert res.returncode == 2, (res.returncode, res.stderr)
-    assert "cannot write output" in res.stderr
+    assert "cannot write output" in _flat(res.stderr), res.stderr
     _assert_no_traceback(res.stderr)
     _assert_no_username_leak(res.stderr)
     assert not out.exists()
