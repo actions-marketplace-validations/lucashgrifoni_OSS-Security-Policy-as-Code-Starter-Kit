@@ -1,6 +1,13 @@
 # Local assistant/workspace state
 .claude/
 .cursorrules
+# Agent instruction files are local operating context, never public surface.
+# CLAUDE.md was tracked by accident and is ignored here so it cannot return.
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+.aider*
+.github/copilot-instructions.md
 .vscode/
 /melhorias/
 
