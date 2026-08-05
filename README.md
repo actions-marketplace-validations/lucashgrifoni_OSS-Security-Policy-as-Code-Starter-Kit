@@ -18,6 +18,20 @@ Pass/fail security policy gates for OSS repositories, with explicit assurance gr
 
 Use it when you need a local-first gate that combines repository governance, CI/CD hardening, release posture, scanner evidence, waivers, and framework-oriented reporting. It is not a vulnerability scanner, certification engine, or legal compliance guarantee.
 
+> **Status: maintenance.** v10.0.0 completed the planned end-state. Releases since have been hardening and correctness work, not new surface. Issues and questions are still answered.
+
+## Every Verdict Carries Its Assurance
+
+Most tools give a verdict. This one also records **how that verdict was reached**, so a wrong result can be argued with evidence instead of taken on faith.
+
+| Assurance | How the verdict was established | What it is worth |
+|---|---|---|
+| `deterministic` | Read directly from the clone | Highest confidence — the file either is or is not there |
+| `signal` | Heuristic inference from what is visible | Corroborating only. A signal never elevates a grade on its own |
+| `evidence-backed` | Rests on API-backed evidence you supply | Exactly as strong as the evidence behind it |
+
+A control that fires wrongly is worse than one that does not exist. False-positive reports are welcome, and the assurance label is what makes that argument precise.
+
 ## Quickstart
 
 ```bash
@@ -40,7 +54,7 @@ First-time tutorial: [docs/tutorial-first-pr-gate.md](docs/tutorial-first-pr-gat
 - Uses optional evidence under `.oss-policy-kit/evidence/` for platform-only facts.
 - Composes signals from local files, workflows, SARIF/JSON scanner outputs, waivers, and release evidence.
 - Correlates composed scanner findings into one deduplicated, ranked findings/1.0 artifact (`correlate-findings`).
-- Labels controls by assurance type: deterministic, signal, or evidence-backed.
+- Labels controls by assurance type: deterministic, signal, or evidence-backed — see [above](#every-verdict-carries-its-assurance).
 - Supports Markdown, JSON report contracts, and optional SARIF for code-scanning workflows.
 - Keeps waivers visible with owner, reason, and expiry metadata.
 
@@ -128,6 +142,7 @@ Verification commands and limits are in [docs/supply-chain-verification.md](docs
 
 | Topic | Link |
 |---|---|
+| Project wiki | [Wiki](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/wiki) |
 | Documentation index | [docs/README.md](docs/README.md) |
 | Architecture | [docs/architecture.md](docs/architecture.md) |
 | CLI reference | [docs/cli-reference.md](docs/cli-reference.md) |
