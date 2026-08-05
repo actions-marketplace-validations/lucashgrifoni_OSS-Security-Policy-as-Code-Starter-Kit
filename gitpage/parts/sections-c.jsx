@@ -340,7 +340,7 @@ const MILESTONES = [
     bullets: [
       "Control applicability is first-class: controls for technology a repo does not use are NOT_APPLICABLE by default, not UNKNOWN or FAIL.",
       "Verified build-provenance passes surface as ATTESTED by default; opt out of either with --no-applicability-engine / --no-enable-attested.",
-      "220 controls across 56 profiles; reports/2.0 is the default report contract.",
+      "222 controls across 56 profiles; reports/2.0 is the only report contract.",
       "Published to PyPI, GHCR, and GitHub Releases with signed assets, SBOM, and build provenance.",
     ],
   },

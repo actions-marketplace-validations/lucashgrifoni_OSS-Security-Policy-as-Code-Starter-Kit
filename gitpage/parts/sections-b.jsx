@@ -2,7 +2,7 @@
 
 const COMPARISON_ROWS = [
   ["Multi-platform CI/CD", "Partial", "Scanner-specific", "Generic", "Kubernetes", "Yes"],
-  ["Built-in profiles", "Score model", "No", "No", "Policy-dependent", "53 profiles"],
+  ["Built-in profiles", "Score model", "No", "No", "Policy-dependent", "56 profiles"],
   ["Assurance grading", "No", "No", "No", "Policy-dependent", "Yes"],
   ["Composes SARIF / JSON", "No", "n/a", "No", "No", "Yes"],
   ["Waiver registry", "No", "No", "Adopter writes", "Policy-dependent", "Yes"],
@@ -140,7 +140,7 @@ function FrameworksSection() {
       id="profiles"
       eyebrow="Bundled profiles"
       title="Profile families let teams start small and harden posture without changing tools."
-      subtitle="The current release ships 53 profiles across platform, regulatory, supply-chain, AI, IaC, container, and release-hardening lanes."
+      subtitle="The current release ships 56 profiles across platform, regulatory, supply-chain, AI, IaC, container, and release-hardening lanes."
     >
       <div className="grid gap-5 md:grid-cols-2 perspective-1800">
         {FRAMEWORKS.map((f, i) => (

@@ -225,7 +225,7 @@ const QS_STEPS = [
     icon: "folder",
     title: "List bundled profiles",
     cmd: "python -m oss_policy_kit profiles",
-    note: "This build ships 18 profiles across GitHub, Azure, and AWS, including baseline and release-hardening tracks.",
+    note: "This build ships 20 profiles across GitHub, Azure, and AWS, including baseline and release-hardening tracks.",
   },
   {
     icon: "check",
