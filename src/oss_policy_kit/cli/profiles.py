@@ -237,9 +237,14 @@ def _filter_profile_display_rows(
     only_extreme: bool,
     advisory_only: bool,
 ) -> list[_ProfileDisplayRow]:
-    fam = family.strip().lower() if family else None
-    if fam and fam not in {"github", "gitlab", "azure", "aws", "multi"}:
-        raise InvalidInputError("--family must be one of: github, gitlab, azure, aws, multi.")
+    # Same fail-closed rule as --fail-on-severity: an omitted flag means "no filter", but
+    # a supplied empty or whitespace value is a mistake and must not silently widen the
+    # listing to all profiles. `if fam and ...` swallowed both.
+    fam: str | None = None
+    if family is not None:
+        fam = family.strip().lower()
+        if fam not in {"github", "gitlab", "azure", "aws", "multi"}:
+            raise InvalidInputError("--family must be one of: github, gitlab, azure, aws, multi.")
     want_platform = (
         {"github": "GitHub", "gitlab": "GitLab", "azure": "Azure", "aws": "AWS", "multi": "Multi"}.get(fam)
         if fam

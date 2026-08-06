@@ -158,9 +158,16 @@ def _run_correlate_findings(
     fmt = output_format.lower().strip()
     if fmt not in {"human", "json", "sarif"}:
         raise InvalidInputError("--format must be human, json, or sarif.")
-    sev = fail_on_severity.lower().strip() if fail_on_severity else None
-    if sev is not None and sev not in _GATE_SEVERITIES:
-        raise InvalidInputError("--fail-on-severity must be one of: critical, high, medium, low.")
+    # Distinguish "flag omitted" (None) from "flag supplied empty" (""). The old idiom
+    # `x.strip().lower() if x else None` collapsed both to None, so --fail-on-severity ""
+    # silently disarmed the gate and exited 0, while "  " correctly exited 2. An empty
+    # value is what a shell produces from --fail-on-severity "$SEVERITY" with SEVERITY
+    # unset — precisely when the gate must stay armed.
+    sev: str | None = None
+    if fail_on_severity is not None:
+        sev = fail_on_severity.lower().strip()
+        if sev not in _GATE_SEVERITIES:
+            raise InvalidInputError("--fail-on-severity must be one of: critical, high, medium, low.")
 
     target_path, output_path, waivers_path, enrichment_path = _resolve_paths(target, output, waivers, enrichment_file)
     report = build_findings_report(
