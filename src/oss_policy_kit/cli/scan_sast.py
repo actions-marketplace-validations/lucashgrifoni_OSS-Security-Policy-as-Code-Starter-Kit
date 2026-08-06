@@ -98,8 +98,12 @@ def scan_sast_cmd(
         evidence_path = write_evidence(payload, repo_root=repo, filename=EVIDENCE_FILENAME)
 
         if outcome.status == "error":
+            # Name the containing directory, not just the file: `write_evidence` always
+            # writes under `.oss-policy-kit/evidence/`, a dot-directory the operator has
+            # no reason to guess. Kept repo-relative so no host path reaches stderr.
             stderr_console().print(
-                f"[red]Semgrep failed:[/red] see diagnostics in {evidence_path.name}.",
+                f"[red]Semgrep failed:[/red] see diagnostics in "
+                f".oss-policy-kit/evidence/{evidence_path.name} (relative to --target).",
             )
             raise typer.Exit(code=2)
 

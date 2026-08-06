@@ -54,6 +54,10 @@ GENERIC_EVIDENCE_FILENAMES: frozenset[str] = frozenset(
         "iac-bicep.json",
         "iac-cfn.json",
         "iac-pulumi.json",
+        # Written by `scan-sast`, read back by SAST-SEMGREP-064 and the finding
+        # normalization layer. Omitting it told adopters to delete evidence the
+        # kit had just produced, flipping that control from PASS to UNKNOWN.
+        "sast-semgrep.json",
     }
 )
 
@@ -195,24 +199,56 @@ def _detect_container_stack(repo_root: Path, found: list[dict[str, str]]) -> boo
     return False
 
 
-def _detect_node_stack(repo_root: Path, found: list[dict[str, str]], notes: list[str]) -> str | None:
-    """Append Node.js signals/notes; return the primary stack label or None."""
+# How strongly a marker file says "this repository *is* this stack". A manifest that
+# declares the project outranks one that is as often a sidecar: a bare package.json
+# belongs to a docs site or a tooling folder at least as often as to the project
+# itself, which is how a Python repository used to be reported as "your Node.js
+# project". A committed lockfile is what proves the tree is really installed as Node.
+_STACK_WEIGHT_DECLARES_PROJECT = 3
+_STACK_WEIGHT_MAY_BE_SIDECAR = 2
+
+# Stable display order for stacks tied on weight, so the rationale is deterministic.
+_STACK_LABEL_ORDER: tuple[str, ...] = (
+    "Python",
+    "Node.js",
+    "Go",
+    "Java/Maven",
+    "Java/Kotlin (Gradle)",
+    "Rust",
+    "C#/.NET",
+)
+
+_NODE_LOCKFILE_NOTE = "Add package-lock.json or yarn.lock to enable reproducible builds."
+
+
+def _detect_node_stack(
+    repo_root: Path, found: list[dict[str, str]], weights: dict[str, int] | None = None
+) -> str | None:
+    """Append Node.js signals; return the stack label or None. Records its weight in *weights*."""
 
     if not (repo_root / "package.json").is_file():
         return None
     _append_signal(found, "node_js", "Node.js project detected via package.json")
-    if any((repo_root / name).is_file() for name in ("package-lock.json", "yarn.lock", "pnpm-lock.yaml")):
+    has_lockfile = any((repo_root / name).is_file() for name in ("package-lock.json", "yarn.lock", "pnpm-lock.yaml"))
+    if has_lockfile:
         _append_signal(found, "node_lockfile", "Node lockfile present (reproducible installs).")
-    else:
-        notes.append("Add package-lock.json or yarn.lock to enable reproducible builds.")
+    if weights is not None:
+        weights["Node.js"] = _STACK_WEIGHT_DECLARES_PROJECT if has_lockfile else _STACK_WEIGHT_MAY_BE_SIDECAR
     return "Node.js"
 
 
-def _detect_python_stack(repo_root: Path, found: list[dict[str, str]], notes: list[str]) -> str | None:
-    """Append Python signals/notes; return the primary stack label or None."""
+def _detect_python_stack(
+    repo_root: Path,
+    found: list[dict[str, str]],
+    notes: list[str],
+    weights: dict[str, int] | None = None,
+) -> str | None:
+    """Append Python signals/notes; return the stack label or None. Records its weight in *weights*."""
 
     if (repo_root / "pyproject.toml").is_file():
         _append_signal(found, "python_pyproject", "Python project detected via pyproject.toml")
+        if weights is not None:
+            weights["Python"] = _STACK_WEIGHT_DECLARES_PROJECT
         try:
             body = (repo_root / "pyproject.toml").read_text(encoding="utf-8", errors="replace")
         except OSError:
@@ -225,9 +261,14 @@ def _detect_python_stack(repo_root: Path, found: list[dict[str, str]], notes: li
         return "Python"
     if (repo_root / "requirements.txt").is_file():
         _append_signal(found, "python_requirements", "Python project detected via requirements.txt")
+        if weights is not None:
+            # Pinned dependencies alone; the file is often vendored beside another stack.
+            weights["Python"] = _STACK_WEIGHT_MAY_BE_SIDECAR
         return "Python"
     if (repo_root / "setup.py").is_file() or (repo_root / "setup.cfg").is_file():
         _append_signal(found, "python_setup", "Python project detected via setup.py/setup.cfg")
+        if weights is not None:
+            weights["Python"] = _STACK_WEIGHT_DECLARES_PROJECT
         return "Python"
     return None
 
@@ -246,17 +287,38 @@ _SIMPLE_STACK_MARKERS: tuple[tuple[tuple[str, ...], str, str, str], ...] = (
 )
 
 
-def _detect_simple_stacks(repo_root: Path, found: list[dict[str, str]], primary: str | None) -> str | None:
+def _detect_simple_stacks(
+    repo_root: Path,
+    found: list[dict[str, str]],
+    primary: str | None,
+    weights: dict[str, int] | None = None,
+) -> str | None:
     """Append signals for single-file language markers; return the first primary label seen."""
 
     for markers, label, sig_id, detail in _SIMPLE_STACK_MARKERS:
         if any((repo_root / m).is_file() for m in markers):
             primary = primary or label
             _append_signal(found, sig_id, detail)
+            if weights is not None:
+                weights[label] = _STACK_WEIGHT_DECLARES_PROJECT
     if list(repo_root.glob("*.csproj")) or list(repo_root.glob("*.sln")):
         primary = primary or "C#/.NET"
         _append_signal(found, "dotnet_csproj", "C#/.NET project detected via .csproj or .sln")
+        if weights is not None:
+            weights["C#/.NET"] = _STACK_WEIGHT_DECLARES_PROJECT
     return primary
+
+
+def _primary_stacks(weights: dict[str, int]) -> list[str]:
+    """Return every stack tied for the strongest signal, in a stable display order."""
+
+    if not weights:
+        return []
+    strongest = max(weights.values())
+    tied = {label for label, weight in weights.items() if weight == strongest}
+    ordered = [label for label in _STACK_LABEL_ORDER if label in tied]
+    # A label missing from the display order must still surface, never be dropped silently.
+    return ordered + sorted(tied.difference(ordered))
 
 
 def _collect_tech_stack_signals(
@@ -266,11 +328,21 @@ def _collect_tech_stack_signals(
 
     found: list[dict[str, str]] = []
     notes: list[str] = []
+    weights: dict[str, int] = {}
     prefer_l2 = _detect_container_stack(repo_root, found)
-    primary = _detect_node_stack(repo_root, found, notes)
-    primary = primary or _detect_python_stack(repo_root, found, notes)
-    primary = _detect_simple_stacks(repo_root, found, primary)
-    return found, notes, prefer_l2, primary
+    _detect_node_stack(repo_root, found, weights)
+    # Every detector runs: first-match-wins used to short-circuit the rest, so a repo
+    # with both markers lost the weaker-listed stack from signals_detected entirely.
+    _detect_python_stack(repo_root, found, notes, weights)
+    _detect_simple_stacks(repo_root, found, None, weights)
+
+    primary_stacks = _primary_stacks(weights)
+    signal_ids = {s["id"] for s in found}
+    if "Node.js" in primary_stacks and "node_lockfile" not in signal_ids:
+        # Only advise a lockfile when Node is what the repository actually is; on a
+        # sidecar package.json this reads as advice for somebody else's project.
+        notes.append(_NODE_LOCKFILE_NOTE)
+    return found, notes, prefer_l2, " / ".join(primary_stacks) or None
 
 
 def _platform_order(

@@ -33,6 +33,11 @@ from oss_policy_kit.infrastructure.iac.scanner import (
     write_evidence,
 )
 
+# Rich parses ``[iac]`` as a markup tag and silently drops it, which turned the
+# remediation into the no-op ``pip install 'oss-policy-kit'``. ``\[`` is Rich's
+# literal-bracket escape, so the printed command matches the JSON diagnostics.
+_IAC_EXTRA_INSTALL_CMD = r"pip install 'oss-policy-kit\[iac]'"
+
 
 @app.command("scan-iac", rich_help_panel=CMD_PANEL_SCAN)
 def scan_iac_cmd(
@@ -96,8 +101,12 @@ def scan_iac_cmd(
         evidence_path = write_evidence(payload, repo_root=repo, filename=EVIDENCE_FILENAME)
 
         if outcome.status == "error":
+            # Name the containing directory, not just the file: `write_evidence` always
+            # writes under `.oss-policy-kit/evidence/`, a dot-directory the operator has
+            # no reason to guess. Kept repo-relative so no host path reaches stderr.
             stderr_console().print(
-                f"[red]Terraform scan failed:[/red] see diagnostics in {evidence_path.name}.",
+                f"[red]Terraform scan failed:[/red] see diagnostics in "
+                f".oss-policy-kit/evidence/{evidence_path.name} (relative to --target).",
             )
             raise typer.Exit(code=2)
 
@@ -113,7 +122,7 @@ def scan_iac_cmd(
             if outcome.status == "not_available":
                 stderr_console().print(
                     "[yellow]python-hcl2 is not installed.[/yellow] "
-                    "Install the iac extra with `pip install 'oss-policy-kit[iac]'` to enable real findings.",
+                    f"Install the iac extra with `{_IAC_EXTRA_INSTALL_CMD}` to enable real findings.",
                 )
             elif outcome.parse_errors:
                 stderr_console().print(
