@@ -23,8 +23,10 @@ already-computed ``ControlResult`` for the ``reports/1.0`` projection. Existing
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from oss_policy_kit.domain.models import ControlResult, ControlStatus, utc_now
@@ -66,28 +68,106 @@ def _is_placeholder_path(value: str) -> bool:
     return v in {"<placeholder>", "tbd", "todo", "n/a"}
 
 
+_REDACTION_MARKER = "<redacted-absolute>"
+
+# Evidence sources cross platforms (a report rendered on POSIX can carry Windows
+# paths and vice versa), so separator handling never relies on the local os.sep.
+_SEPARATOR_RE = re.compile(r"[\\/]+")
+_DRIVE_RE = re.compile(r"[A-Za-z]:")
+
+
+def _root_style(p: str) -> str | None:
+    """Classify how ``p`` is rooted on a host, or ``None`` when it is repo-relative.
+
+    Two consequences are deliberate rather than accidental:
+
+    ``//host/path`` is read as a UNC share, not as a protocol-relative URL, and so
+    collapses to the bare marker. Windows accepts forward slashes in UNC paths, so
+    the alternative reading would let ``//internal-fileserver/share/audit.md`` ship
+    verbatim. Losing an unusual reference is recoverable; publishing an internal
+    server name is not. Only ``http://`` and ``https://`` are treated as URLs.
+
+    A ``~``-rooted reference is redacted even though ``~`` hides the account name by
+    construction, because what follows it still describes the layout of a private
+    machine and the leaf is the only part a reader of a shared report can act on.
+    """
+
+    if p.startswith(("\\\\", "//")):
+        # UNC share: the server and share names disclose internal infrastructure.
+        return "unc"
+    if p.startswith(("/", "~/")):
+        return "posix"
+    if p.startswith(("\\", "~\\")):
+        return "windows"
+    if _DRIVE_RE.fullmatch(p[:2]):
+        return "windows"
+    return None
+
+
+def _home_chain() -> tuple[str, ...]:
+    """Home-directory components below the filesystem root (``Users``, account name...)."""
+
+    try:
+        parts = Path.home().parts
+    except (OSError, RuntimeError):  # pragma: no cover - only when HOME is unresolvable
+        return ()
+    return tuple(seg for seg in parts[1:] if seg)
+
+
+def _starts_with_home_chain(p: str) -> bool:
+    """True when a relative-looking path still leads with the real home directory.
+
+    An upstream layer that strips only the drive letter turns a home path into
+    something that no longer *looks* rooted while still carrying the account name.
+    """
+
+    chain = _home_chain()
+    if not chain:
+        return False
+    parts = [seg for seg in _SEPARATOR_RE.split(p) if seg]
+    if len(parts) < len(chain):
+        return False
+    return [seg.lower() for seg in parts[: len(chain)]] == [seg.lower() for seg in chain]
+
+
+def _leaf_component(p: str, style: str) -> str:
+    """Return the final path component, with host-identifying roots dropped first."""
+
+    parts = [seg for seg in _SEPARATOR_RE.split(p) if seg and seg != "~"]
+    if style == "unc":
+        # \\server\share is host-identifying in its own right, never a usable leaf.
+        parts = parts[2:]
+    elif parts and _DRIVE_RE.fullmatch(parts[0]):
+        parts = parts[1:]
+    return parts[-1] if parts else ""
+
+
 def _redact_path(path: str) -> tuple[str, bool]:
     """Best-effort: return (redacted_value, was_redacted).
 
-    The kit already operates on relative repo paths in most evidence sources,
-    but defensive normalization here strips a leading drive letter or absolute
-    POSIX root so reports/1.0 never leaks workstation paths.
+    Redaction is decided by CONTENT — a host root (drive, UNC share, POSIX root) or
+    the real home-directory chain — and keeps only the final component. Dropping a
+    fixed NUMBER of leading components instead let any target nested deeper than that
+    keep real host directory names, including the OS account name, in a reference the
+    report labels ``"redacted": true``; a field that claims redaction and does not
+    deliver it is worse than none, because a reviewer stops looking at it.
+
+    Repo-relative sources (the common case) pass through untouched.
     """
 
     p = path.strip()
     if not p:
         return p, False
-    if len(p) >= 2 and p[1] == ":":
-        # Windows user-profile absolute path: drop drive and home segments.
-        rest = p[2:].lstrip("\\/")
-        return (
-            f"<redacted-absolute>/{rest.split(chr(92), 4)[-1]}" if "\\" in rest else f"<redacted-absolute>/{rest}",
-            True,
-        )
-    if p.startswith("/"):
-        # POSIX absolute path
-        return f"<redacted-absolute>{p.rsplit('/', 1)[-1]}", True
-    return p, False
+    style = _root_style(p)
+    if style is None:
+        if not _starts_with_home_chain(p):
+            return p, False
+        style = "windows" if "\\" in p else "posix"
+    leaf = _leaf_component(p, style)
+    # Historical output shapes are part of the report surface: POSIX roots render as
+    # ``<redacted-absolute>file.md``, every other root as ``<redacted-absolute>/file.md``.
+    separator = "" if style == "posix" else "/"
+    return (f"{_REDACTION_MARKER}{separator}{leaf}" if leaf else _REDACTION_MARKER), True
 
 
 def _classify_reference(value: str) -> dict[str, Any]:

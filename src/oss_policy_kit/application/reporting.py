@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import uuid
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -34,6 +36,83 @@ REPORTS_V2_STATUS_MAP: dict[str, tuple[str, str | None]] = {
     "self-attested": ("SELF_ATTESTED", None),  # ADR-033: opt-in Insights self-reported evidence
     "waived": ("UNKNOWN", "waived"),
 }
+
+
+# Windows MAX_PATH (260) less the terminating NUL. Deliberately not `os.name`-gated:
+# a portable rule keeps the shrink branch reachable on every platform's test run.
+_MAX_TEMP_PATH = 259
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Publish ``text`` at ``path`` through a sibling temp file and a single rename.
+
+    Truncating the destination in place meant two evaluations sharing one
+    ``--output-dir`` could interleave into a corrupt ``evaluation-report.json`` while
+    both processes still exited 0, and any reader racing a write (a CI step, a
+    dashboard) could parse a half-written file. Swapping the finished file in with
+    ``os.replace`` leaves a reader with either the previous report or the new one,
+    whole, and a failed write leaves the previous report untouched.
+
+    The temp file is a sibling so the rename stays on one filesystem, and it is opened
+    with ``"x"`` (exclusive create, umask-derived mode) rather than ``tempfile.mkstemp``:
+    that refuses to follow a planted symlink while still producing exactly the
+    permissions and newline translation ``Path.write_text`` produced before.
+
+    Atomicity must not cost reach. A sibling temp file makes the path longer than the
+    destination, and on Windows a destination already near the 260-char limit then
+    fails to create a temp file it could have written directly -- turning an
+    ``--output-dir`` that used to work into exit 2. So the name shrinks to a bare
+    token when the descriptive form would overrun, and a destination that still has
+    no room for any sibling falls back to writing in place: no path that could be
+    written before this function existed loses the ability to be written now.
+    """
+
+    token = uuid.uuid4().hex[:8]
+    tmp = path.with_name(f".{path.name}.{token}.tmp")
+    if len(str(tmp)) > _MAX_TEMP_PATH:
+        # Drops the destination name from the temp file: less obvious if a hard kill
+        # ever orphans one, but 13 characters instead of the destination name plus 14
+        # puts the temp file back inside the budget the destination itself fits in.
+        # The check is not gated on Windows so the branch is exercised everywhere.
+        tmp = path.with_name(f".{token}.tmp")
+    try:
+        with tmp.open("x", encoding="utf-8") as handle:
+            handle.write(text)
+    except FileExistsError:
+        # Either a token collision or something planted at the temp path. Both are
+        # reasons to stop, never to write the destination by another route.
+        raise
+    except OSError:
+        # A write that got partway leaves the temp file behind; clean up before
+        # deciding what to do about the error.
+        tmp.unlink(missing_ok=True)
+        if len(str(tmp)) <= len(str(path)):
+            raise
+        # The temp path is the longer one, so a failure here can be the extra
+        # characters alone. Writing in place is what this function replaced; it is
+        # non-atomic, but it is strictly what the caller had before. A genuine
+        # ENOSPC / EACCES simply fails again here, and surfaces as it should.
+        path.write_text(text, encoding="utf-8")
+        return
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    try:
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
+def _md_cell(value: str) -> str:
+    """Escape a user-controlled value so it stays inside its Markdown table cell.
+
+    An unescaped ``|`` (or an embedded newline) splits the row, silently shifting
+    every later value under the wrong header for whoever reads or parses the report.
+    """
+
+    escaped = value.replace("|", "\\|")
+    return escaped.replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
 
 
 def _sanitize_target_path_for_payload(absolute: str, *, include_absolute: bool) -> str:
@@ -447,7 +526,7 @@ def write_json_report(
         include_absolute_path=include_absolute_path,
         extensions=extensions,
     )
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    _atomic_write_text(path, json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
 
 
 def write_markdown_report(  # noqa: C901
@@ -525,7 +604,7 @@ def write_markdown_report(  # noqa: C901
     lines.extend(_md_scorecard_supplemental_lines(report, include_absolute_path=include_absolute_path))
     lines.extend(_md_controls_table_lines(report))
     lines.extend(_md_control_detail_lines(report, include_absolute_path=include_absolute_path))
-    path.write_text("\n".join(lines), encoding="utf-8")
+    _atomic_write_text(path, "\n".join(lines))
 
 
 def _md_prioritization_lines(report: ExecutionReport) -> list[str]:
@@ -584,12 +663,13 @@ def _md_controls_table_lines(report: ExecutionReport) -> list[str]:
         "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for r in report.results:
-        w = f"yes ({r.waiver.owner})" if r.waiver else ""
-        reason = r.reason.replace("|", "\\|")
-        rem = r.remediation.replace("|", "\\|")
+        # Every cell below carries evaluator- or waiver-file-supplied text, so all of
+        # them are escaped — not just the two free-text columns.
+        w = f"yes ({_md_cell(r.waiver.owner)})" if r.waiver else ""
         out.append(
-            f"| `{r.control_id}` | {r.category} | {r.lifecycle} | `{r.assurance}` |"
-            f" `{r.status.value}` | {r.confidence} | {reason} | {rem} | {w} |"
+            f"| `{_md_cell(r.control_id)}` | {_md_cell(r.category)} | {_md_cell(r.lifecycle)} |"
+            f" `{_md_cell(r.assurance)}` | `{_md_cell(r.status.value)}` | {_md_cell(r.confidence)} |"
+            f" {_md_cell(r.reason)} | {_md_cell(r.remediation)} | {w} |"
         )
     out.append("")
     return out
@@ -717,6 +797,12 @@ def render_drift_report(report: DriftReport, fmt: str, *, color: bool = True) ->
     return _drift_table(report, color)
 
 
+def _drift_row(d: ControlDelta) -> str:
+    """One Markdown row of the drift table, with every cell escaped."""
+
+    return f"| `{_md_cell(d.control_id)}` | `{_md_cell(d.before_status)}` | `{_md_cell(d.after_status)}` |"
+
+
 def _drift_markdown(report: DriftReport) -> str:
     """Render a drift report as Markdown."""
 
@@ -744,9 +830,11 @@ def _drift_markdown(report: DriftReport) -> str:
             "| --- | --- | --- |",
         ]
     )
-    lines.extend(f"| `{d.control_id}` | `{d.before_status}` | `{d.after_status}` |" for d in report.regressions)
+    # Control ids and statuses come from whatever JSON the caller diffed, so they are
+    # escaped like any other user-controlled table cell.
+    lines.extend(_drift_row(d) for d in report.regressions)
     lines.extend(["", "## Improvements", "", "| Control | Before | After |", "| --- | --- | --- |"])
-    lines.extend(f"| `{d.control_id}` | `{d.before_status}` | `{d.after_status}` |" for d in report.improvements)
+    lines.extend(_drift_row(d) for d in report.improvements)
     if report.new_controls:
         lines.extend(["", "## New controls in after", ""])
         lines.extend(f"- `{c}`" for c in report.new_controls)
