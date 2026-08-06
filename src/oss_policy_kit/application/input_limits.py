@@ -39,6 +39,65 @@ MAX_SARIF_BYTES = 20 * 1024 * 1024  # 20 MiB
 #: ``oss-policy-kit.yaml`` — a handful of scalar fields; nothing legitimate is large.
 MAX_CONFIG_BYTES = 1 * 1024 * 1024  # 1 MiB
 
+#: Bracket-nesting depth allowed in any user-controlled document. Real evidence, config
+#: and scanner output sit under ten levels; 200 is generous enough that no honest file
+#: is refused.
+#:
+#: Catching ``RecursionError`` is not sufficient on its own, and the difference is not
+#: theoretical: CPython 3.12 separates the Python recursion limit from the C stack guard,
+#: so the C JSON scanner blows its stack around 3000 levels on Windows' 1 MB stack and
+#: parses the same document happily on Linux' 8 MB one. A guard that only fires on one
+#: platform is not a guard -- an adopter on Linux got no refusal at all. PyYAML's composer
+#: is pure Python and does hit the limit identically everywhere, which is why only the
+#: JSON path diverged. This check makes the answer the same on every platform, and the
+#: ``RecursionError`` handling stays as the backstop for block-style YAML, whose depth is
+#: expressed by indentation rather than brackets.
+MAX_JSON_DEPTH = 200
+
+
+def _advance_json_string(ch: str, escaped: bool) -> tuple[bool, bool]:
+    """Step the in-string scanner; return ``(still_in_string, escaped_next)``."""
+
+    if escaped:
+        return True, False
+    if ch == "\\":
+        return True, True
+    if ch == '"':
+        return False, False
+    return True, False
+
+
+def max_json_nesting_depth(raw: str) -> int:
+    """Max bracket-nesting depth of *raw*, ignoring brackets inside string literals."""
+
+    depth = 0
+    max_depth = 0
+    in_string = False
+    escaped = False
+    for ch in raw:
+        if in_string:
+            in_string, escaped = _advance_json_string(ch, escaped)
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch in "{[":
+            depth += 1
+            max_depth = max(max_depth, depth)
+        elif ch in "}]":
+            depth -= 1
+    return max_depth
+
+
+def too_deep_reason(raw: str, *, label: str, max_depth: int = MAX_JSON_DEPTH) -> str | None:
+    """Return a refusal message when *raw* nests past *max_depth*, else ``None``."""
+
+    if max_json_nesting_depth(raw) <= max_depth:
+        return None
+    # Deliberately the same "nested too deeply" wording ``bad_input_detail`` produces for
+    # RecursionError: which layer catches the document is an implementation detail, and an
+    # adopter should read one explanation for one problem.
+    return f"{label} is nested too deeply to parse safely (more than {max_depth} levels)."
+
 
 def _file_size(path: Path) -> int | None:
     """Return file size in bytes, or None when it cannot be stat-ed."""
@@ -151,6 +210,12 @@ def load_capped_document(
         raise InvalidInputError(reason)
     try:
         text = path.read_text(encoding=encoding)
+    except BAD_INPUT_ERRORS as exc:
+        raise InvalidInputError(bad_input_reason(exc, label=label, name=path.name)) from exc
+    too_deep = too_deep_reason(text, label=f"{label} '{path.name}'")
+    if too_deep is not None:
+        raise InvalidInputError(too_deep)
+    try:
         return parser(text)
     except BAD_INPUT_ERRORS as exc:
         raise InvalidInputError(bad_input_reason(exc, label=label, name=path.name)) from exc

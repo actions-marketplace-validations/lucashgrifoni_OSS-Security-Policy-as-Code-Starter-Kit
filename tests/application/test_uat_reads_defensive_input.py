@@ -22,14 +22,25 @@ from oss_policy_kit.application import batch_evaluate
 from oss_policy_kit.application.batch_evaluate import is_likely_repository, run_batch_evaluation
 from oss_policy_kit.application.config_loader import CONFIG_FILENAME, load_project_config
 from oss_policy_kit.application.findings_report import _load_enrichment
-from oss_policy_kit.application.input_limits import MAX_CONFIG_BYTES
+from oss_policy_kit.application.input_limits import MAX_CONFIG_BYTES, MAX_JSON_DEPTH
 from oss_policy_kit.application.loader import load_catalog, load_profile
 from oss_policy_kit.cli.main import app, prepare_cli_args
 from oss_policy_kit.domain.errors import InvalidInputError, LoadError
 
-#: Deeper than the default recursion limit (1000) so both the C JSON scanner and
-#: PyYAML's Python composer blow their stack, without making the fixture huge.
+#: Far past MAX_JSON_DEPTH, and past the 1000 default recursion limit as well, so the
+#: fixture is refused whichever layer catches it first.
+#:
+#: Depth must NOT be left to RecursionError alone. CPython 3.12 separates the Python
+#: recursion limit from the C stack guard, so the C JSON scanner raises at this depth on
+#: Windows' 1 MB stack and parses the document happily on Linux' 8 MB one -- this exact
+#: fixture passed locally and failed on CI with "DID NOT RAISE". PyYAML's composer is
+#: pure Python and hits the limit identically on both, which is why only the JSON branch
+#: diverged. The explicit guard is what makes the answer the same everywhere.
 _NESTING = 3000
+#: Just past the explicit budget: deep enough to be refused, shallow enough that no
+#: interpreter anywhere would run out of stack. If this one ever stops raising, the
+#: explicit guard is gone, whatever the 3000-level fixture happens to do.
+_JUST_PAST_BUDGET = MAX_JSON_DEPTH + 20
 #: Past CPython's ``sys.get_int_max_str_digits()`` default of 4300.
 _HUGE_INT = "9" * 5000
 
@@ -141,6 +152,37 @@ def test_deeply_nested_scorecard_json_is_a_load_error(tmp_path: Path) -> None:
 
     with pytest.raises(LoadError):
         load_scorecard_json(path)
+
+
+def test_scorecard_json_depth_is_refused_by_budget_not_by_stack_exhaustion(tmp_path: Path) -> None:
+    """The refusal must not depend on the interpreter running out of C stack.
+
+    This depth is trivial for every platform's stack, so nothing raises RecursionError
+    here. If the explicit budget is removed, this file parses cleanly and the test fails
+    -- which is what the 3000-level fixture could not detect, because it happened to blow
+    the stack on the maintainer's machine and not on CI.
+    """
+
+    body = "[" * _JUST_PAST_BUDGET + "]" * _JUST_PAST_BUDGET
+    path = _write(tmp_path / "scorecard-result.json", body)
+
+    with pytest.raises(LoadError) as excinfo:
+        load_scorecard_json(path)
+
+    assert "nested" in str(excinfo.value).lower()
+    assert str(MAX_JSON_DEPTH) in str(excinfo.value)
+
+
+def test_ordinary_scorecard_nesting_is_not_refused(tmp_path: Path) -> None:
+    """The budget must be generous enough that no honest scorecard is rejected."""
+
+    body = json.dumps({"score": 7.4, "checks": [{"name": "Branch-Protection", "score": 8}]})
+    path = _write(tmp_path / "scorecard-result.json", body)
+
+    bundle = load_scorecard_json(path)
+
+    assert bundle.aggregate_score == 7.4
+    assert [c.name for c in bundle.checks] == ["Branch-Protection"]
 
 
 def test_scorecard_json_with_over_long_integer_is_a_load_error(tmp_path: Path) -> None:

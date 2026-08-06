@@ -13,6 +13,7 @@ from oss_policy_kit.application.input_limits import (
     MAX_EVIDENCE_BYTES,
     bad_input_reason,
     oversize_reason,
+    too_deep_reason,
 )
 from oss_policy_kit.domain.errors import LoadError
 from oss_policy_kit.infrastructure.yaml_io import load_yaml_file
@@ -96,6 +97,13 @@ def load_scorecard_json(path: Path) -> ScorecardBundle:
 
     try:
         text = path.read_text(encoding="utf-8")
+        # Depth is checked before parsing, not left to RecursionError: the C JSON scanner
+        # blows its stack on Windows and parses the same document on Linux, so the
+        # exception-only guard silently did nothing on the platform CI and most adopters
+        # run. See input_limits.MAX_JSON_DEPTH.
+        too_deep = too_deep_reason(text, label=f"Scorecard JSON {path.name}")
+        if too_deep is not None:
+            raise LoadError(too_deep)
         data = json.loads(text)
     except UnicodeDecodeError as exc:
         # UTF-16/non-UTF-8 input: surface a clean LoadError (-> exit 2) instead of an exit-3

@@ -42,7 +42,15 @@ from oss_policy_kit.application.evaluators_common import (
 )
 from oss_policy_kit.application.evidence_loading import load_evidence_schema
 from oss_policy_kit.application.evidence_placeholders import has_placeholder_values, is_placeholder_digest
-from oss_policy_kit.application.input_limits import MAX_SARIF_BYTES, oversize_reason
+from oss_policy_kit.application.input_limits import (
+    MAX_JSON_DEPTH,
+    MAX_SARIF_BYTES,
+    max_json_nesting_depth,
+    oversize_reason,
+)
+from oss_policy_kit.application.input_limits import (
+    _advance_json_string as _advance_json_string_impl,
+)
 from oss_policy_kit.application.insights_evidence import InsightsEvidence
 from oss_policy_kit.domain.models import ControlStatus, EvalOutcome, EvidenceCollectionMethod, utc_now
 from oss_policy_kit.infrastructure.aws_ci_parser import AwsCiAnalysis
@@ -1070,39 +1078,13 @@ def _release_archive_signal_match(repo: Path) -> Path | None:
 
 _SAST_SEMGREP_EVIDENCE_FILENAME = "sast-semgrep.json"
 _SAST_SEMGREP_SCHEMA_PREFIX = "oss-policy-kit/evidence/sast-semgrep/"
-_MAX_SARIF_JSON_DEPTH = 200
-
-
-def _advance_json_string(ch: str, escaped: bool) -> tuple[bool, bool]:
-    """Step the in-string scanner; return ``(still_in_string, escaped_next)``."""
-
-    if escaped:
-        return True, False
-    if ch == "\\":
-        return True, True
-    if ch == '"':
-        return False, False
-    return True, False
-
-
-def _max_json_nesting_depth(raw: str) -> int:
-    """Max bracket-nesting depth of a JSON text, ignoring brackets inside strings."""
-    depth = 0
-    max_depth = 0
-    in_string = False
-    escaped = False
-    for ch in raw:
-        if in_string:
-            in_string, escaped = _advance_json_string(ch, escaped)
-            continue
-        if ch == '"':
-            in_string = True
-        elif ch in "{[":
-            depth += 1
-            max_depth = max(max_depth, depth)
-        elif ch in "}]":
-            depth -= 1
-    return max_depth
+# Re-exported from the module that owns defensive reading, so SARIF and every other
+# user-controlled document are measured by one scanner against one budget. Two copies
+# of a depth guard is two things to keep in step, and the SARIF copy was the only one
+# any loader actually consulted.
+_MAX_SARIF_JSON_DEPTH = MAX_JSON_DEPTH
+_advance_json_string = _advance_json_string_impl
+_max_json_nesting_depth = max_json_nesting_depth
 
 
 def _load_sarif_runs(sarif_path: Path) -> tuple[list[Any] | None, str | None]:
