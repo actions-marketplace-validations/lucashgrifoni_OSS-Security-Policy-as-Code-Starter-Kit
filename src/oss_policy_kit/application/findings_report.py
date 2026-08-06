@@ -25,7 +25,7 @@ from oss_policy_kit.application.finding_normalization import (
     normalize_kit_evidence,
 )
 from oss_policy_kit.application.finding_sarif import normalize_sarif_sources
-from oss_policy_kit.application.input_limits import MAX_EVIDENCE_BYTES, oversize_reason
+from oss_policy_kit.application.input_limits import BAD_INPUT_ERRORS, MAX_EVIDENCE_BYTES, oversize_reason
 from oss_policy_kit.application.reporting import _sanitize_target_path_for_payload
 from oss_policy_kit.application.vuln_waivers import VulnWaiver, load_vuln_waivers
 from oss_policy_kit.domain.findings import NormalizedFinding, SourceRecord, WaiverLink
@@ -159,11 +159,13 @@ def _load_enrichment(path: Path) -> tuple[dict[str, dict[str, Any]], SourceRecor
     if oversize_reason(path, MAX_EVIDENCE_BYTES, label="enrichment snapshot") is not None:
         return {}, SourceRecord(path=rel, kind="enrichment-snapshot", tool=tool, status="oversize")
     try:
-        # RecursionError guards deeply-nested input: json.loads raises it (not
-        # JSONDecodeError) past the recursion limit, and it must degrade to an
-        # honest "unreadable" record, never crash correlate-findings with exit 3.
+        # BAD_INPUT_ERRORS is the shared taxonomy of what an unreadable file can
+        # throw: json.loads raises RecursionError (not JSONDecodeError) past the
+        # nesting limit and a bare ValueError past CPython's 4300-digit integer
+        # conversion limit. Both must degrade to an honest "unreadable" record —
+        # correlate-findings documents that an unreadable source is never raised.
         raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError, RecursionError):
+    except BAD_INPUT_ERRORS:
         return {}, SourceRecord(path=rel, kind="enrichment-snapshot", tool=tool, status="unreadable")
     if not isinstance(raw, dict):
         return {}, SourceRecord(path=rel, kind="enrichment-snapshot", tool=tool, status="unreadable")

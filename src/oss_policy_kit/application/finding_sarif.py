@@ -7,10 +7,20 @@ Reads the four user-dropped SARIF files under ``.oss-policy-kit/evidence/sast/``
 them) plus the structured EPSS/KEV/CVSS enrichment properties the osv-scanner
 SARIF may carry.
 
-Reuses the hardened SARIF loader from the evaluators layer (size-capped via
-``MAX_SARIF_BYTES``, nesting-depth-guarded, encoding-tolerant) instead of
-growing another loader that could drift — the uncapped duplicate loaders were
-a confirmed v9.0.x defect class.
+Reuses the hardened SARIF primitives from the evaluators layer (the
+``MAX_SARIF_BYTES`` cap and the nesting-depth guard) instead of growing another
+set that could drift — the uncapped duplicate loaders were a confirmed v9.0.x
+defect class. Only the *decoding* differs: this layer reads ``utf-8-sig``
+because the drops are user-supplied files and most Windows tools write UTF-8
+with a BOM; a BOM used to make json.loads reject the whole document, so every
+finding in the drop disappeared while the ``--fail-on-severity`` gate stayed
+green.
+
+Attribution follows the document, not the filename: when ``tool.driver.name``
+positively identifies a *different* known scanner (a Trivy report saved as
+``gitleaks.sarif.json``), the findings carry that scanner's name and the
+:class:`SourceRecord` is demoted to ``error`` with no version, so nothing in the
+artifact asserts that the slot's scanner ran.
 
 Severity (x-severity-map/v1): the generic SARIF table maps result levels
 ``error/warning/note/none`` → ``high/medium/info/unknown`` with the SARIF-spec
@@ -24,11 +34,16 @@ the generic table (warning → medium).
 
 from __future__ import annotations
 
+import json
 import math
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
-from oss_policy_kit.application.evaluators._shared import _load_sarif_runs, _sarif_rule_levels
+from oss_policy_kit.application.evaluators._shared import (
+    _MAX_SARIF_JSON_DEPTH,
+    _max_json_nesting_depth,
+    _sarif_rule_levels,
+)
 from oss_policy_kit.application.input_limits import MAX_SARIF_BYTES, oversize_reason
 from oss_policy_kit.domain.findings import (
     FindingLocation,
@@ -77,6 +92,81 @@ _ZIZMOR_SEVERITY: dict[str, str] = {k: v for k, v in _ZIZMOR_SEVERITY_PAIRS}
 PER_TOOL_SEVERITY_OVERRIDES: dict[str, dict[str, str]] = {}
 
 _VULN_ID_PREFIXES = ("CVE-", "GHSA-", "PYSEC-", "OSV-", "RUSTSEC-", "GO-")
+
+#: Scanner identities the kit can recognize in ``tool.driver.name``, keyed by the
+#: name reduced to alphanumerics. A drop whose driver names one of these but NOT
+#: the tool its filename implies is a proven mis-file, so the artifact must not
+#: credit the filename's scanner. A generic or vendor-custom driver name (an
+#: in-house wrapper, a bare "tool") proves nothing and is left with its slot.
+_DRIVER_IDENTITY_PAIRS: tuple[tuple[str, str], ...] = (
+    ("zizmor", "zizmor"),
+    ("poutine", "poutine"),
+    ("osvscanner", "osv-scanner"),
+    ("osv", "osv-scanner"),
+    ("gitleaks", "gitleaks"),
+    # Other common SARIF producers, so their output landing in a registry slot
+    # is caught instead of silently re-badged as the slot's scanner.
+    ("trivy", "trivy"),
+    ("grype", "grype"),
+    ("semgrep", "semgrep"),
+    ("snyk", "snyk"),
+    ("snykcode", "snyk"),
+    ("snykopensource", "snyk"),
+    ("checkov", "checkov"),
+    ("kics", "kics"),
+    ("tfsec", "tfsec"),
+    ("codeql", "codeql"),
+    ("bandit", "bandit"),
+    ("gosec", "gosec"),
+    ("hadolint", "hadolint"),
+    ("trufflehog", "trufflehog"),
+    ("checkmarx", "checkmarx"),
+)
+_DRIVER_IDENTITY: dict[str, str] = {k: v for k, v in _DRIVER_IDENTITY_PAIRS}
+
+#: A driver name is echoed into every finding of the drop; cap it so a hostile
+#: or corrupt document cannot bloat the artifact through that field.
+_MAX_DRIVER_NAME_CHARS = 64
+
+#: SARIF result kinds that are NOT failures. ``kind`` defaults to "fail" when
+#: absent (SARIF 2.1.0 §3.27.9), and "review"/"open" mean the tool has not
+#: decided — dropping those would hide real work, so only these two are skipped.
+_NON_FINDING_KINDS = frozenset({"pass", "notapplicable"})
+
+
+def _load_runs(path: Path) -> tuple[list[Any] | None, str | None]:
+    """Read + validate a user-dropped SARIF file, returning ``(runs, None)`` or ``(None, error)``.
+
+    Decodes as ``utf-8-sig`` so the BOM that most Windows tools write does not
+    turn a whole drop into unparseable JSON. The size cap is applied by the
+    caller and the nesting-depth guard is the shared evaluator one, so neither
+    hardening step can drift from the evaluate path. Every failure is returned,
+    never raised: a corrupt drop is recorded as unread, it is not an exit 3.
+    """
+
+    try:
+        raw = path.read_text(encoding="utf-8-sig")
+    except OSError as exc:
+        return None, f"Could not read SARIF file: {exc}"
+    except UnicodeDecodeError as exc:
+        return None, f"Could not decode SARIF file as UTF-8: {exc}"
+    if _max_json_nesting_depth(raw) > _MAX_SARIF_JSON_DEPTH:
+        return None, "Could not parse SARIF JSON: document is too deeply nested."
+    try:
+        doc = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        return None, f"Could not parse SARIF JSON: {exc}"
+    except RecursionError as exc:
+        return None, f"Could not parse SARIF JSON: document is too deeply nested ({exc})"
+    if not isinstance(doc, dict):
+        return None, "SARIF file missing top-level 'runs' array."
+    # str() before endswith: a non-string "$schema" is malformed input, not a crash.
+    if "runs" not in doc and not str(doc.get("$schema", "")).endswith("sarif-schema-2.1.0.json"):
+        return None, "SARIF file missing top-level 'runs' array."
+    runs = doc.get("runs") or []
+    if not isinstance(runs, list):
+        return None, "SARIF 'runs' is not an array."
+    return runs, None
 
 
 def normalize_sarif_level(level: str) -> str:
@@ -211,42 +301,97 @@ def _normalize_result(
     )
 
 
-def _driver_version(run: dict[str, Any]) -> str | None:
-    """Return the run's driver semanticVersion/version if present, else None."""
+def _driver(run: dict[str, Any]) -> dict[str, Any]:
+    """Return the run's ``tool.driver`` object, or an empty dict for any other shape."""
 
-    driver = ((run.get("tool") or {}).get("driver") or {}) if isinstance(run.get("tool"), dict) else {}
+    tool = run.get("tool")
+    driver = tool.get("driver") if isinstance(tool, dict) else None
+    return driver if isinstance(driver, dict) else {}
+
+
+def _driver_version(driver: dict[str, Any]) -> str | None:
+    """Return the driver's semanticVersion/version if present, else None."""
+
     version = driver.get("semanticVersion") or driver.get("version")
     return version.strip() if isinstance(version, str) and version.strip() else None
 
 
-def _project_runs(runs: list[Any], tool: str, rel: str) -> tuple[list[NormalizedFinding], str | None, bool]:
+def _foreign_driver(driver: dict[str, Any], expected_tool: str) -> str | None:
+    """Return ``tool.driver.name`` when the run positively identifies another scanner.
+
+    ``None`` means "no proof of a mis-file": either the driver agrees with the
+    slot, or its name is one the kit cannot resolve to a scanner (an in-house
+    wrapper), in which case the filename convention stays authoritative.
+    """
+
+    name = driver.get("name")
+    if not isinstance(name, str) or not name.strip():
+        return None
+    identity = _DRIVER_IDENTITY.get("".join(ch for ch in name.lower() if ch.isalnum()))
+    if identity is None or identity == expected_tool:
+        return None
+    return name.strip()[:_MAX_DRIVER_NAME_CHARS]
+
+
+def _is_non_finding(result: dict[str, Any]) -> bool:
+    """True for results the SARIF spec marks as passing or not applicable.
+
+    Such results carry no failure — counting them turned a clean scan into a
+    FAIL and exit 1. Absent ``kind`` means "fail" per the spec, so the default
+    stays a finding.
+    """
+
+    kind = result.get("kind")
+    return isinstance(kind, str) and kind.strip().lower() in _NON_FINDING_KINDS
+
+
+class _Projection(NamedTuple):
+    """One drop's findings plus the honesty flags its SourceRecord must carry."""
+
+    findings: list[NormalizedFinding]
+    tool_version: str | None
+    container_invalid: bool
+    foreign_driver: str | None
+
+
+def _project_runs(runs: list[Any], tool: str, rel: str) -> _Projection:
     """Project every run's results into findings.
 
-    Returns ``(findings, tool_version, container_invalid)``. ``container_invalid``
-    is True when any run carries a ``results`` key that is present but not a list
-    (the results CONTAINER itself is malformed) — the caller demotes the record
-    to ``error`` so a corrupt drop is distinguishable from a genuinely-empty one.
-    A run with no ``results`` key, or with ``results: []``, stays honestly ``ok``.
+    ``container_invalid`` is True when any run carries a ``results`` key that is
+    present but not a list (the results CONTAINER itself is malformed) — the
+    caller demotes the record to ``error`` so a corrupt drop is distinguishable
+    from a genuinely-empty one. A run with no ``results`` key, or with
+    ``results: []``, stays honestly ``ok``. ``foreign_driver`` carries the name of
+    the scanner that actually produced the drop when it is not the one the
+    filename implies; its findings are attributed to it, never to the slot.
     """
 
     findings: list[NormalizedFinding] = []
     tool_version: str | None = None
     container_invalid = False
+    foreign_driver: str | None = None
     for run in runs:
         if not isinstance(run, dict):
             continue
+        driver = _driver(run)
         if tool_version is None:
-            tool_version = _driver_version(run)
-        rule_levels = _sarif_rule_levels(run)
+            tool_version = _driver_version(driver)
+        if foreign_driver is None:
+            foreign_driver = _foreign_driver(driver, tool)
+        # The shared helper walks tool.driver.rules unguarded; only hand it a run
+        # whose driver really is an object, so a malformed one degrades instead
+        # of raising through correlate-findings as an exit 3.
+        rule_levels = _sarif_rule_levels(run) if driver else {}
         results = run.get("results")
         if not isinstance(results, list):
             if "results" in run:
                 container_invalid = True
             continue
+        attributed_to = foreign_driver or tool
         for result in results:
-            if isinstance(result, dict):
-                findings.append(_normalize_result(tool, rel, result, rule_levels))
-    return findings, tool_version, container_invalid
+            if isinstance(result, dict) and not _is_non_finding(result):
+                findings.append(_normalize_result(attributed_to, rel, result, rule_levels))
+    return _Projection(findings, tool_version, container_invalid, foreign_driver)
 
 
 def normalize_sarif_sources(repo_root: Path) -> tuple[list[NormalizedFinding], list[SourceRecord]]:
@@ -268,15 +413,23 @@ def normalize_sarif_sources(repo_root: Path) -> tuple[list[NormalizedFinding], l
         if oversize_reason(path, MAX_SARIF_BYTES, label=filename) is not None:
             records.append(SourceRecord(path=rel, kind="external-sarif", tool=tool, status="oversize"))
             continue
-        runs, err = _load_sarif_runs(path)
+        runs, err = _load_runs(path)
         if err is not None or runs is None:
             records.append(SourceRecord(path=rel, kind="external-sarif", tool=tool, status="unreadable"))
             continue
-        run_findings, tool_version, container_invalid = _project_runs(runs, tool, rel)
-        findings.extend(run_findings)
-        status = "error" if container_invalid else "ok"
+        projection = _project_runs(runs, tool, rel)
+        findings.extend(projection.findings)
+        status = "error" if (projection.container_invalid or projection.foreign_driver) else "ok"
         records.append(
-            SourceRecord(path=rel, kind="external-sarif", tool=tool, status=status, tool_version=tool_version)
+            SourceRecord(
+                path=rel,
+                kind="external-sarif",
+                tool=tool,
+                status=status,
+                # A foreign document's version would read as "<slot tool> <version>":
+                # never state a version for a scanner that did not produce this drop.
+                tool_version=None if projection.foreign_driver else projection.tool_version,
+            )
         )
     return findings, records
 
