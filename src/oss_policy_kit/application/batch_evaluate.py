@@ -125,29 +125,19 @@ def _is_meta_directory(name: str) -> bool:
     return any(low.startswith(p) for p in _META_DIR_PREFIXES)
 
 
-def is_likely_repository(path: Path) -> tuple[bool, str]:
-    """Return ``(True, signal_found)`` when *path* looks like a repository root.
+def _quiet_probe(probe: Callable[[], bool]) -> bool:
+    """Run a filesystem existence/type check, reading permission-denied as ``False``.
 
-    Requires at least one primary signal (build manifest, CI file, Dockerfile, or ``.git``).
-    ``README.md`` alone is not sufficient to avoid false positives from utility subdirectories
-    in monorepos. As a fallback for monorepo-style layouts where signals live one or two
-    directories deep (e.g. ``infra/k8s-manifests/*.yaml``, ``targets/*/Dockerfile``),
-    also accept signals at depth 1 or 2 from the candidate root.
+    ``Path.exists`` and ``Path.is_dir`` re-raise ``PermissionError`` (EACCES /
+    WinError 5 is not in pathlib's ignored-error set), so probing a child directory
+    the auditor cannot read used to abort the whole ``evaluate-many`` discovery with
+    exit 3. A directory we cannot inspect simply shows us no repository signal.
     """
 
-    for signal in _REPO_PRIMARY_SIGNALS:
-        if (path / signal).exists():
-            return True, signal
-    for pattern in _REPO_GLOB_PRIMARY:
-        if list(path.glob(pattern)):
-            return True, pattern
-    deep = _repo_signal_at_depth(path)
-    if deep is not None:
-        return True, deep
-    k8s = _repo_k8s_manifest_signal(path)
-    if k8s is not None:
-        return True, k8s
-    return False, ""
+    try:
+        return probe()
+    except OSError:
+        return False
 
 
 def _glob_has_match(path: Path, pattern: str) -> bool:
@@ -157,6 +147,34 @@ def _glob_has_match(path: Path, pattern: str) -> bool:
         return next(iter(path.glob(pattern)), None) is not None
     except OSError:
         return False
+
+
+def is_likely_repository(path: Path) -> tuple[bool, str]:
+    """Return ``(True, signal_found)`` when *path* looks like a repository root.
+
+    Requires at least one primary signal (build manifest, CI file, Dockerfile, or ``.git``).
+    ``README.md`` alone is not sufficient to avoid false positives from utility subdirectories
+    in monorepos. As a fallback for monorepo-style layouts where signals live one or two
+    directories deep (e.g. ``infra/k8s-manifests/*.yaml``, ``targets/*/Dockerfile``),
+    also accept signals at depth 1 or 2 from the candidate root.
+
+    Every probe is permission-tolerant: this runs over directories the auditor may
+    not be allowed to read, and an unreadable candidate must not abort discovery.
+    """
+
+    for signal in _REPO_PRIMARY_SIGNALS:
+        if _quiet_probe((path / signal).exists):
+            return True, signal
+    for pattern in _REPO_GLOB_PRIMARY:
+        if _glob_has_match(path, pattern):
+            return True, pattern
+    deep = _repo_signal_at_depth(path)
+    if deep is not None:
+        return True, deep
+    k8s = _repo_k8s_manifest_signal(path)
+    if k8s is not None:
+        return True, k8s
+    return False, ""
 
 
 def _repo_signal_at_depth(path: Path) -> str | None:
@@ -231,9 +249,17 @@ def discover_batch_targets(
 ) -> list[Path]:
     """Return immediate child directories of *target_root* suitable as repo roots."""
 
+    try:
+        children = sorted(target_root.iterdir(), key=lambda p: p.name.lower())
+    except OSError as exc:
+        # An unlistable --target-root is an operational condition, not an internal
+        # defect: exit 2 with the OS error only, never the resolved path (M-002).
+        raise InvalidInputError(
+            f"Cannot list --target-root '{target_root.name}': {exc.strerror or 'unreadable'}"
+        ) from exc
     out: list[Path] = []
-    for child in sorted(target_root.iterdir(), key=lambda p: p.name.lower()):
-        if not child.is_dir():
+    for child in children:
+        if not _quiet_probe(child.is_dir):
             continue
         if child.name.startswith("."):
             continue
@@ -312,12 +338,24 @@ def _execute_one_run(
     _ensure_batch_dir(dest)
     json_path = dest / "evaluation-report.json"
     md_path = dest / "evaluation-report.md"
-    json_path.write_text(
-        json.dumps(report_to_dict(report, include_absolute_path=include_absolute_path), indent=2, ensure_ascii=False)
-        + "\n",
-        encoding="utf-8",
-    )
-    write_markdown_report(report, md_path, include_absolute_path=include_absolute_path)
+    # Output failures are converted before they can reach the caller's `except OSError`,
+    # which exists to skip targets that cannot be READ. A full disk or a revoked
+    # --output-dir is not a property of this target: left as an OSError it would be
+    # recorded as "skipped directory" and the batch would exit 0 having written
+    # nothing, which is the silent-success failure this project refuses to ship.
+    try:
+        json_path.write_text(
+            json.dumps(
+                report_to_dict(report, include_absolute_path=include_absolute_path), indent=2, ensure_ascii=False
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        write_markdown_report(report, md_path, include_absolute_path=include_absolute_path)
+    except OSError as exc:
+        raise InvalidInputError(
+            f"Cannot write the report for '{target.name}': {exc.strerror or 'filesystem error'}"
+        ) from exc
     target_path_display = _sanitize_target_path_for_payload(str(repo.resolve()), include_absolute=include_absolute_path)
     json_report_display = _sanitize_target_path_for_payload(
         str(json_path.resolve()), include_absolute=include_absolute_path
@@ -348,6 +386,16 @@ def _execute_one_run(
     return row, payload, dict(report.summary_by_status)
 
 
+@dataclass(slots=True)
+class _BatchRunOutcome:
+    """Everything one pass over the evaluation queue produced."""
+
+    rows: list[BatchRunRow]
+    consolidated_reports: list[dict[str, Any]]
+    summaries_for_gate: list[dict[str, int]]
+    skipped: list[dict[str, str]]
+
+
 def _execute_batch_runs(
     eval_queue: list[tuple[Path, bool]],
     profile_ids: list[str],
@@ -358,37 +406,65 @@ def _execute_batch_runs(
     skip_non_repos: bool,
     progress_callback: Callable[[str, int, int], None] | None,
     include_absolute_path: bool = False,
-) -> tuple[list[BatchRunRow], list[dict[str, Any]], list[dict[str, int]]]:
-    """Run every (target × profile) evaluation and return (rows, consolidated_reports, summaries)."""
+) -> _BatchRunOutcome:
+    """Run every (target × profile) evaluation, degrading past targets we cannot read.
 
-    rows: list[BatchRunRow] = []
-    consolidated_reports: list[dict[str, Any]] = []
-    summaries_for_gate: list[dict[str, int]] = []
+    A repository the process has no permission to read is an ordinary operational
+    condition in a monorepo scan, not a defect: it is recorded in ``skipped`` and the
+    batch continues. Before this guard a single unreadable file anywhere under one
+    child aborted the whole run with exit 3 and discarded every result already
+    computed. Usage errors (an unknown profile id, an unwritable ``--output-dir``)
+    still abort, because they are wrong for every target alike.
+
+    The guard covers the INPUT side only. ``_execute_one_run`` converts its own write
+    failures to ``InvalidInputError`` before they get here, so a full disk mid-batch
+    aborts with exit 2 instead of being filed as a per-target skip.
+    """
+
+    outcome = _BatchRunOutcome(rows=[], consolidated_reports=[], summaries_for_gate=[], skipped=[])
     total_runs = len(eval_queue) * len(profile_ids)
     run_index = 0
     for target, likely_repo in eval_queue:
-        repo = resolve_existing_dir(str(target))
         safe_name = target.name.replace("/", "_").replace("\\", "_")
         for pid in profile_ids:
             run_index += 1
             if progress_callback is not None:
                 progress_callback(target.name, run_index, total_runs)
-            row, payload, summary = _execute_one_run(
-                target,
-                likely_repo,
-                pid,
-                repo=repo,
-                safe_name=safe_name,
-                root=root,
-                catalog=catalog,
-                output_dir=output_dir,
-                skip_non_repos=skip_non_repos,
-                include_absolute_path=include_absolute_path,
-            )
-            rows.append(row)
-            consolidated_reports.append(payload)
-            summaries_for_gate.append(summary)
-    return rows, consolidated_reports, summaries_for_gate
+            try:
+                row, payload, summary = _execute_one_run(
+                    target,
+                    likely_repo,
+                    pid,
+                    repo=resolve_existing_dir(str(target)),
+                    safe_name=safe_name,
+                    root=root,
+                    catalog=catalog,
+                    output_dir=output_dir,
+                    skip_non_repos=skip_non_repos,
+                    include_absolute_path=include_absolute_path,
+                )
+            except OSError as exc:
+                outcome.skipped.append(_unreadable_target_record(target, pid, exc, include_absolute_path))
+                continue
+            outcome.rows.append(row)
+            outcome.consolidated_reports.append(payload)
+            outcome.summaries_for_gate.append(summary)
+    return outcome
+
+
+def _unreadable_target_record(target: Path, pid: str, exc: OSError, include_absolute_path: bool) -> dict[str, str]:
+    """Describe a target the batch had to skip, without leaking where it lives.
+
+    ``str(exc)`` and the ``OSError`` repr both embed the absolute filename, so only
+    ``strerror`` is reported and the path goes through the same basename sanitizer
+    as every other emitted path (M-002).
+    """
+
+    return {
+        "name": target.name,
+        "path": _sanitize_target_path_for_payload(str(target.resolve()), include_absolute=include_absolute_path),
+        "reason": f"Could not be evaluated against profile '{pid}': {exc.strerror or 'filesystem error'}.",
+    }
 
 
 def run_batch_evaluation(  # noqa: C901
@@ -433,7 +509,7 @@ def run_batch_evaluation(  # noqa: C901
         )
 
     _ensure_batch_dir(output_dir)
-    rows, consolidated_reports, summaries_for_gate = _execute_batch_runs(
+    outcome = _execute_batch_runs(
         eval_queue,
         profile_ids,
         root=root,
@@ -443,9 +519,12 @@ def run_batch_evaluation(  # noqa: C901
         progress_callback=progress_callback,
         include_absolute_path=include_absolute_path,
     )
+    rows = outcome.rows
+    consolidated_reports = outcome.consolidated_reports
+    skipped_dirs.extend(outcome.skipped)
 
     generated_at = report_generated_at()
-    gate_violated = _gate_violated_for_batch(policy, summaries_for_gate)
+    gate_violated = _gate_violated_for_batch(policy, outcome.summaries_for_gate)
     stats = _compute_batch_stats(rows, consolidated_reports)
 
     batch_payload: dict[str, Any] = {

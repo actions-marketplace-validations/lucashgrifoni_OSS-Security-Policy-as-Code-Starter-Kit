@@ -1,4 +1,12 @@
-"""Size caps for user-controlled SARIF / evidence / scorecard / waiver inputs.
+"""Defensive reading of user-controlled SARIF / evidence / scorecard / waiver / config input.
+
+Two related jobs live here. The size caps below are the local CI denial-of-service
+hardening described next. On top of them, :data:`BAD_INPUT_ERRORS`,
+:func:`bad_input_detail` and :func:`load_capped_document` are the single shared
+answer to "what can an ordinary bad file throw, and how do we say so" — so a hostile
+document (nested past the parser stack, an integer literal past CPython's
+4300-digit conversion limit, permission denied, wrong encoding) is a usage error
+with exit 2, never the exit 3 the contract reserves for a defect in the kit.
 
 Local CI denial-of-service hardening (backlog: v6 input size limits). Several
 loaders read an entire user-controlled file before parsing; an oversized file in
@@ -16,7 +24,11 @@ adopter use case appears (per the backlog acceptance criteria).
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
+
+import yaml
 
 from oss_policy_kit.domain.errors import InvalidInputError
 
@@ -24,6 +36,8 @@ from oss_policy_kit.domain.errors import InvalidInputError
 MAX_EVIDENCE_BYTES = 5 * 1024 * 1024  # 5 MiB
 #: SARIF documents (scanner output) — can be larger than evidence files.
 MAX_SARIF_BYTES = 20 * 1024 * 1024  # 20 MiB
+#: ``oss-policy-kit.yaml`` — a handful of scalar fields; nothing legitimate is large.
+MAX_CONFIG_BYTES = 1 * 1024 * 1024  # 1 MiB
 
 
 def _file_size(path: Path) -> int | None:
@@ -65,3 +79,78 @@ def read_text_capped(
     if reason is not None:
         raise InvalidInputError(reason)
     return path.read_text(encoding=encoding, errors=errors)
+
+
+#: Every failure an ordinary bad input file can raise while being read and parsed.
+#: ``OSError`` is missing / permission-denied / is-a-directory; ``ValueError`` covers
+#: ``json.JSONDecodeError``, ``UnicodeDecodeError``, and CPython's 4300-digit integer
+#: string-conversion limit; ``yaml.YAMLError`` is malformed YAML; ``RecursionError``
+#: is a document nested deeper than the parser's stack — it derives from
+#: ``RuntimeError``, so none of the others catch it, which is exactly how it kept
+#: escaping as an exit-3 "unexpected internal error". None of these is a defect in
+#: the kit, so none of them may reach the CLI's last-resort handler.
+BAD_INPUT_ERRORS: tuple[type[Exception], ...] = (OSError, ValueError, yaml.YAMLError, RecursionError)
+
+#: Substring of CPython's ``int(str)`` limit message (``ValueError``), used only to
+#: replace the interpreter-internal "use sys.set_int_max_str_digits()" advice with
+#: something an adopter can act on.
+_INT_LIMIT_MARKER = "integer string conversion"
+
+
+def bad_input_detail(exc: BaseException) -> str:
+    """Return the "why" clause for a read/parse failure, in words an adopter can act on.
+
+    Never embeds a path: ``str(OSError)`` and the ``OSError`` repr both carry the
+    absolute filename, which would leak the cwd / home directory / OS username
+    (M-002). The integer-limit case also drops CPython's
+    ``use sys.set_int_max_str_digits()`` advice, which is about the interpreter, not
+    about the file the user has to fix.
+    """
+
+    if isinstance(exc, RecursionError):
+        return "it is nested too deeply to parse safely"
+    if isinstance(exc, UnicodeDecodeError):
+        return f"it is not valid UTF-8 text ({exc.reason})"
+    if isinstance(exc, OSError):
+        return f"it could not be read ({exc.strerror or 'unreadable'})"
+    if isinstance(exc, yaml.YAMLError):
+        return f"it is invalid YAML ({exc})"
+    if _INT_LIMIT_MARKER in str(exc):
+        return "it contains a number longer than the 4300 digits Python will convert"
+    return f"it could not be parsed ({exc})"
+
+
+def bad_input_reason(exc: BaseException, *, label: str, name: str) -> str:
+    """Return a full user-safe explanation of why reading *name* failed.
+
+    *name* must be a bare file name, for the same M-002 reason as
+    :func:`bad_input_detail`.
+    """
+
+    return f"{label} '{name}' was rejected: {bad_input_detail(exc)}."
+
+
+def load_capped_document(
+    path: Path,
+    max_bytes: int,
+    *,
+    label: str,
+    parser: Callable[[str], Any] = yaml.safe_load,
+    encoding: str = "utf-8",
+) -> Any:
+    """Size-cap, read, and parse *path*, mapping every bad-input failure to exit 2.
+
+    The one defensive read for user-controlled documents: oversize, unreadable,
+    permission-denied, wrongly-encoded, unparseable, too-deeply-nested, and
+    over-long-integer inputs all raise :class:`InvalidInputError`. A loader that
+    routes its reads through here cannot emit exit 3 for ordinary bad input.
+    """
+
+    reason = oversize_reason(path, max_bytes, label=label)
+    if reason is not None:
+        raise InvalidInputError(reason)
+    try:
+        text = path.read_text(encoding=encoding)
+        return parser(text)
+    except BAD_INPUT_ERRORS as exc:
+        raise InvalidInputError(bad_input_reason(exc, label=label, name=path.name)) from exc

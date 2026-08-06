@@ -10,6 +10,7 @@ from pathlib import Path
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
+from oss_policy_kit.application.input_limits import BAD_INPUT_ERRORS, bad_input_detail
 from oss_policy_kit.domain.errors import LoadError, ProfileLoadError
 from oss_policy_kit.infrastructure.yaml_io import load_yaml_file
 
@@ -122,6 +123,11 @@ def load_catalog(controls_yaml: Path) -> dict[str, ControlSpec]:
         # OSError repr, which embeds it) would leak cwd/home/OS username. Report the
         # basename and the OS error string only.
         raise LoadError(f"Failed to load catalog '{controls_yaml.name}': {exc.strerror or 'unreadable'}") from exc
+    except BAD_INPUT_ERRORS as exc:
+        # Shared taxonomy: malformed YAML, nesting past the parser stack, an integer
+        # literal past CPython's conversion limit. Already exit 2 before this change;
+        # bad_input_detail replaces the raw interpreter text with actionable wording.
+        raise LoadError(f"Failed to load catalog '{controls_yaml.name}': {bad_input_detail(exc)}") from exc
     except Exception as exc:  # noqa: BLE001
         # Parse errors (YAML) reference the in-memory buffer, not the path on disk.
         raise LoadError(f"Failed to load catalog '{controls_yaml.name}': {exc}") from exc
@@ -180,6 +186,8 @@ def load_profile(path: Path, *, validate_external_schema: bool = False) -> Profi
         raw = load_yaml_file(path)
     except OSError as exc:
         raise LoadError(f"Failed to load profile '{display}': {exc.strerror or 'unreadable'}") from exc
+    except BAD_INPUT_ERRORS as exc:
+        raise LoadError(f"Failed to load profile '{display}': {bad_input_detail(exc)}") from exc
     except Exception as exc:  # noqa: BLE001
         # Parse errors (YAML) reference the in-memory buffer, not the path on disk.
         raise LoadError(f"Failed to load profile '{display}': {exc}") from exc

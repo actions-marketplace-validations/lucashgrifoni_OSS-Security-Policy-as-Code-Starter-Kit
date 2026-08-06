@@ -16,6 +16,48 @@ from oss_policy_kit.application.batch_evaluate import (
     is_likely_repository,
     run_batch_evaluation,
 )
+from oss_policy_kit.domain.errors import InvalidInputError
+
+
+def test_mid_batch_write_failure_aborts_instead_of_being_filed_as_a_skip(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A full disk is not a property of the target being evaluated.
+
+    The per-target ``except OSError`` exists so a repository the process cannot READ
+    is skipped and the batch continues. While it also caught write failures, a disk
+    that filled up mid-run was filed as a ``skipped_directories`` entry and the batch
+    exited 0 -- a green run that produced no reports, which is exactly the
+    silent-success shape this project treats as a defect.
+    """
+
+    mono = tmp_path / "mono"
+    shutil.copytree(EXAMPLE_VULNERABLE, mono / "a-repo")
+    shutil.copytree(EXAMPLE_VULNERABLE, mono / "b-repo")
+    out = tmp_path / "out"
+    real_write_text = Path.write_text
+
+    def failing(self: Path, *args: object, **kwargs: object) -> int:
+        if self.name == "evaluation-report.json" and self.parent.parent.name == "b-repo":
+            raise OSError(28, "No space left on device")
+        return real_write_text(self, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(Path, "write_text", failing)
+
+    with pytest.raises(InvalidInputError) as excinfo:
+        run_batch_evaluation(
+            target_root=mono,
+            profile_ids=["github-level-1"],
+            output_dir=out,
+            kit_root=None,
+            include=None,
+            exclude=None,
+        )
+
+    message = str(excinfo.value)
+    assert "No space left on device" in message
+    assert "b-repo" in message
+    assert not (out / "evaluation-batch.json").exists(), "a batch summary was published after a run failed to write"
 
 
 def test_discover_skips_dot_directories(tmp_path: Path) -> None:

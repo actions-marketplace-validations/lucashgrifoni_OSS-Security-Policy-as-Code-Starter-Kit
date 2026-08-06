@@ -8,6 +8,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from oss_policy_kit.application.input_limits import (
+    BAD_INPUT_ERRORS,
+    MAX_EVIDENCE_BYTES,
+    bad_input_reason,
+    oversize_reason,
+)
 from oss_policy_kit.domain.errors import LoadError
 from oss_policy_kit.infrastructure.yaml_io import load_yaml_file
 
@@ -93,9 +99,19 @@ def load_scorecard_json(path: Path) -> ScorecardBundle:
         data = json.loads(text)
     except UnicodeDecodeError as exc:
         # UTF-16/non-UTF-8 input: surface a clean LoadError (-> exit 2) instead of an exit-3
-        # crash. OSError and json.JSONDecodeError keep propagating to the existing evaluate-path
-        # handler (cli/common.py) which already renders the friendly "could not be parsed" message.
+        # crash.
         raise LoadError(f"Scorecard JSON {path.name} could not be decoded as UTF-8: {exc}") from exc
+    except json.JSONDecodeError:
+        # Ordinary malformed JSON keeps propagating to the evaluate-path handler
+        # (cli/common.py), which renders the friendly "could not be parsed
+        # (line N, column M)" message users already rely on.
+        raise
+    except BAD_INPUT_ERRORS as exc:
+        # Everything else a hostile file throws — permission denied, a directory,
+        # nesting past the parser's stack (RecursionError), an integer literal past
+        # CPython's 4300-digit conversion limit — is bad input, not a defect in the
+        # kit, so it must not reach the CLI's exit-3 handler.
+        raise LoadError(bad_input_reason(exc, label="Scorecard JSON", name=path.name)) from exc
     checks: list[ScorecardCheck] = []
     aggregate: float | None = None
     result_date: str | None = None
@@ -114,12 +130,30 @@ def load_scorecard_json(path: Path) -> ScorecardBundle:
     )
 
 
+def _load_scorecard_yaml(path: Path) -> Any:
+    """Read a YAML scorecard-like file, refusing bad input instead of crashing.
+
+    The YAML branch needs the same guard as :func:`load_scorecard_json`: a
+    deeply-nested document raises ``RecursionError`` out of PyYAML's composer, and
+    an over-long integer scalar raises ``ValueError`` — neither is a JSON error, so
+    neither was caught anywhere before reaching the CLI's exit-3 handler.
+    """
+
+    reason = oversize_reason(path, MAX_EVIDENCE_BYTES, label="Scorecard YAML")
+    if reason is not None:
+        raise LoadError(reason)
+    try:
+        return load_yaml_file(path)
+    except BAD_INPUT_ERRORS as exc:
+        raise LoadError(bad_input_reason(exc, label="Scorecard YAML", name=path.name)) from exc
+
+
 def load_scorecard_auto(path: Path) -> ScorecardBundle:
     """Load JSON or YAML scorecard-like file."""
 
     suf = path.suffix.lower()
     if suf in {".yaml", ".yml"}:
-        data = load_yaml_file(path)
+        data = _load_scorecard_yaml(path)
         checks = _coerce_checks(data if isinstance(data, dict) else None)
         aggregate: float | None = None
         result_date: str | None = None
