@@ -217,6 +217,10 @@ def _build_vex_document(
       always copied to ``analysis.detail``.
     - With ``references`` mapping: advisory URLs (OSV record, GHSA page,
       etc.) are embedded as ``advisories[].url`` per CycloneDX VEX 1.6 shape.
+
+    ``source_path`` is cited by basename only: a VEX document is published to
+    downstream consumers, so the full ``--osv-sarif`` path would ship the
+    producer's directory layout (and OS username) to every reader.
     """
 
     waivers = waivers or {}
@@ -233,7 +237,7 @@ def _build_vex_document(
             entry["analysis"] = {
                 "state": "in_triage",
                 "detail": (
-                    f"Imported from {source_path.as_posix()} by oss-policy-kit "
+                    f"Imported from {source_path.name} by oss-policy-kit "
                     "emit-vex. Manufacturer analysis pending; fill in state, "
                     "justification, and response per CycloneDX VEX 1.6 vocabulary."
                 ),
@@ -285,6 +289,9 @@ def _build_openvex_statement(
     - The first advisory URL (when ``--include-references`` collected one) is
       mapped to ``vulnerability.@id`` (OpenVEX carries a single canonical URI,
       not a CycloneDX-style advisories array).
+
+    As on the CycloneDX side, ``source_path`` is cited by basename only so the
+    published document does not disclose the producer's directory layout.
     """
 
     vuln_obj: dict[str, Any] = {"name": vid}
@@ -297,7 +304,7 @@ def _build_openvex_statement(
     if waiver is None:
         stmt["status"] = "under_investigation"
         stmt["status_notes"] = (
-            f"Imported from {source_path.as_posix()} by oss-policy-kit emit-vex. "
+            f"Imported from {source_path.name} by oss-policy-kit emit-vex. "
             "Manufacturer analysis pending; set status, justification, and "
             "action/impact statements per the OpenVEX vocabulary."
         )

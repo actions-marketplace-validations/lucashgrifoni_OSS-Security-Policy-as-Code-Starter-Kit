@@ -13,7 +13,8 @@ the correlated finding set only.
 
 Exit codes: 0 ok (incl. no sources / no findings); 1 a ``--fail-on-*`` gate
 tripped; 2 usage/validation (bad ``--format``/``--fail-on-severity``, bad
-``--target``, unwritable ``--output``); 3 unexpected internal error.
+``--target``, oversized ``--waivers``, unwritable ``--output``); 3 unexpected
+internal error.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from oss_policy_kit import __version__ as _KIT_VERSION
 from oss_policy_kit.application.finding_normalization import NORMALIZED_SEVERITIES
 from oss_policy_kit.application.findings_report import build_findings_report
 from oss_policy_kit.application.findings_sarif_export import render_findings_sarif
+from oss_policy_kit.application.input_limits import MAX_EVIDENCE_BYTES, oversize_reason
 from oss_policy_kit.cli.common import app, stderr_console, write_stdout_text
 from oss_policy_kit.cli.help_text import CMD_PANEL_EXPORT
 from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
@@ -137,6 +139,12 @@ def _resolve_paths(
         waivers_path = waivers if waivers.is_absolute() else target_path / waivers
         if not waivers_path.is_file():
             raise InvalidInputError(f"--waivers {waivers} is not a file.")
+        # Same 5 MiB cap `evaluate --waivers` enforces on the same file. Without it the
+        # YAML loader spends seconds on the whole document and the operator's waivers
+        # are then dropped with no message - one flag behaving two ways.
+        oversize = oversize_reason(waivers_path, MAX_EVIDENCE_BYTES, label="Waivers")
+        if oversize is not None:
+            raise InvalidInputError(oversize)
     enrichment_path: Path | None = None
     if enrichment_file is not None:
         enrichment_path = enrichment_file if enrichment_file.is_absolute() else target_path / enrichment_file

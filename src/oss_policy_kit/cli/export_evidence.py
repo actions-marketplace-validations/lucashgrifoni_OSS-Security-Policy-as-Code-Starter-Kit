@@ -153,46 +153,101 @@ def _now_iso8601_z() -> str:
     return utc_now().strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _load_evaluation_report(target: Path, explicit_report: Path | None) -> dict[str, Any]:
-    """Load the most recent evaluation report for ``target``.
+def _report_label(path: Path) -> str:
+    """Basename to cite in user-facing messages — never the resolved path (M-002 privacy)."""
+    return path.name or str(path)
 
-    Lookup order:
 
-    1. ``explicit_report`` if provided.
-    2. ``<target>/out/evaluation-report.json``.
-    3. ``<cwd>/out/evaluation-report.json``.
+def _reject_unusable_report_flag(path: Path) -> None:
+    """Fail closed when an explicitly named ``--report`` cannot be used.
 
-    Raises ``InvalidInputError`` when no report is available.
+    Falling through to auto-discovery here would export a *different* evaluation
+    than the operator named, at exit 0 — a release attestation for a run nobody
+    asked for. Once the flag is supplied, that file is the only admissible input.
     """
-    candidates: list[Path] = []
+    label = _report_label(path)
+    if path.is_dir():
+        raise InvalidInputError(
+            f"--report {label} is a directory, not an evaluation report file. "
+            "Pass the report JSON itself (e.g. out/evaluation-report.json), or omit "
+            "--report to auto-discover <target>/out/evaluation-report.json."
+        )
+    if not path.exists():
+        raise InvalidInputError(
+            f"--report {label} does not exist. Run `oss-policy-kit evaluate --target <repo>` "
+            "to produce it, or omit --report to auto-discover <target>/out/evaluation-report.json."
+        )
+    if not path.is_file():
+        raise InvalidInputError(f"--report {label} is not a regular file.")
+
+
+def _read_report(path: Path) -> dict[str, Any]:
+    """Read one candidate report file and enforce the reports/2.0 contract.
+
+    Every message cites the basename only: the resolved candidate would carry the
+    auditor's cwd/home/username into a shared terminal or a CI log (M-002).
+    """
+    label = _report_label(path)
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        # OSError stringifies with the offending absolute path; use strerror instead.
+        raise InvalidInputError(
+            f"Failed to read evaluation report {label}: {exc.strerror or 'filesystem error'}."
+        ) from exc
+    except UnicodeDecodeError as exc:
+        raise InvalidInputError(
+            f"Evaluation report {label} is not valid UTF-8 (looks like UTF-16 or binary). "
+            "Re-run `oss-policy-kit evaluate` to produce it, or re-encode the file as UTF-8."
+        ) from exc
+    if not raw.strip():
+        # A truncated or half-written artifact reads as a json decoder position
+        # ("Expecting value: line 1 column 1"), which sends operators hunting for a
+        # syntax error that is not there. Name the real condition.
+        raise InvalidInputError(
+            f"Evaluation report {label} is empty. Re-run "
+            "`oss-policy-kit evaluate --target <repo>` to produce a report with results."
+        )
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise InvalidInputError(f"Failed to parse {label}: {exc}") from exc
+    if not isinstance(parsed, dict):
+        raise InvalidInputError(
+            f"Evaluation report {label} must be a JSON object, got {type(parsed).__name__}. "
+            "Pass a report produced by `oss-policy-kit evaluate`, or a correct --report path."
+        )
+    # Reject a removed pre-2.0 contract BEFORE any renderer runs (not gated
+    # behind --validate), so legacy input fails fast with the migration pointer
+    # instead of silently emitting all-unknown/content-dropped evidence.
+    _reject_removed_contract(parsed, path)
+    # Then positively require the reports/2.0 shape, so an unrelated JSON
+    # object (not a report) is rejected instead of rendering an empty
+    # attestation at exit 0 (item #11).
+    _reject_non_report(parsed, path)
+    return parsed
+
+
+def _load_evaluation_report(target: Path, explicit_report: Path | None) -> dict[str, Any]:
+    """Load the evaluation report to export.
+
+    With ``--report``, that file is the only candidate: an explicitly named input
+    that cannot be used is an error, never a silent substitution. Auto-discovery
+    applies only when the flag was omitted, and then tries
+    ``<target>/out/evaluation-report.json`` before ``<cwd>/out/evaluation-report.json``.
+
+    Raises ``InvalidInputError`` when no usable report is available.
+    """
     if explicit_report is not None:
-        candidates.append(explicit_report)
-    candidates.append(target / "out" / "evaluation-report.json")
-    candidates.append(Path.cwd() / "out" / "evaluation-report.json")
-    for c in candidates:
+        _reject_unusable_report_flag(explicit_report)
+        return _read_report(explicit_report)
+    for c in (target / "out" / "evaluation-report.json", Path.cwd() / "out" / "evaluation-report.json"):
         if c.is_file():
-            try:
-                parsed = json.loads(c.read_text(encoding="utf-8"))
-            except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-                raise InvalidInputError(f"Failed to parse {c}: {exc}") from exc
-            if not isinstance(parsed, dict):
-                raise InvalidInputError(
-                    f"Evaluation report {c} must be a JSON object, got {type(parsed).__name__}. "
-                    "Pass a report produced by `oss-policy-kit evaluate`, or a correct --report path."
-                )
-            # Reject a removed pre-2.0 contract BEFORE any renderer runs (not gated
-            # behind --validate), so legacy input fails fast with the migration pointer
-            # instead of silently emitting all-unknown/content-dropped evidence.
-            _reject_removed_contract(parsed, c)
-            # Then positively require the reports/2.0 shape, so an unrelated JSON
-            # object (not a report) is rejected instead of rendering an empty
-            # attestation at exit 0 (item #11).
-            _reject_non_report(parsed, c)
-            return parsed
-    tried = ", ".join(str(c) for c in candidates)
+            return _read_report(c)
     raise InvalidInputError(
         "No evaluation report found. Run `oss-policy-kit evaluate --target <repo>` first, "
-        f"or pass --report <path>. Locations tried: {tried}"
+        "or pass --report <path>. Locations tried: <target>/out/evaluation-report.json, "
+        "<cwd>/out/evaluation-report.json."
     )
 
 

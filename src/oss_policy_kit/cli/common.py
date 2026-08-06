@@ -7,7 +7,7 @@ import logging
 import sys
 import textwrap
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, cast
 
@@ -28,7 +28,7 @@ from oss_policy_kit.application.loader import (
     load_profile_by_id,
     merge_kit_root,
 )
-from oss_policy_kit.application.reporting import write_reports
+from oss_policy_kit.application.reporting import _sanitize_target_path_for_payload, write_reports
 from oss_policy_kit.application.waivers import parse_waivers_file
 from oss_policy_kit.cli import terminal_ui
 from oss_policy_kit.cli.help_text import ROOT_CLI_EPILOG
@@ -112,6 +112,19 @@ def write_stdout_text(text: str) -> None:
         sys.stdout.write(text)
     except UnicodeEncodeError:
         buf = getattr(sys.stdout, "buffer", None)
+        if buf is None:
+            raise
+        buf.write(text.encode("utf-8", errors="replace"))
+        buf.flush()
+
+
+def write_stderr_text(text: str) -> None:
+    """Write *text* to stderr; fall back to UTF-8 bytes when the console codepage cannot encode symbols."""
+
+    try:
+        sys.stderr.write(text)
+    except UnicodeEncodeError:
+        buf = getattr(sys.stderr, "buffer", None)
         if buf is None:
             raise
         buf.write(text.encode("utf-8", errors="replace"))
@@ -483,15 +496,23 @@ def _load_eval_scorecard(scorecard_json: Path | None):  # type: ignore[no-untype
         ) from exc
 
 
-def _make_verbose_emit(verbose: bool) -> Callable[[str], None] | None:
+def _make_verbose_emit(verbose: bool, *, machine_stdout: bool = False) -> Callable[[str], None] | None:
+    """Build the ``--verbose`` per-control line emitter, or ``None`` when ``--verbose`` is off.
+
+    Under ``--format json`` the lines go to stderr instead of stdout: stdout is the machine
+    contract there, and interleaving prose with the JSON payload makes it unparseable for
+    the very consumer that ``--format json`` exists to serve.
+    """
+
     if not verbose:
         return None
-    verbose_console = terminal_ui.build_stdout_console()
+    verbose_console = terminal_ui.build_stderr_console() if machine_stdout else terminal_ui.build_stdout_console()
+    sink = write_stderr_text if machine_stdout else write_stdout_text
 
     def emit(line: str) -> None:
         with verbose_console.capture() as cap:
             verbose_console.print(line)
-        write_stdout_text(cap.get())
+        sink(cap.get())
 
     return emit
 
@@ -541,6 +562,26 @@ def _render_eval_table(report, out: Path) -> None:  # type: ignore[no-untyped-de
     write_stdout_text(cap.get())
 
 
+def _sanitize_report_for_human_stdout(report, *, include_absolute_path: bool):  # type: ignore[no-untyped-def]
+    """Return *report* with host paths sanitized the way :func:`write_reports` sanitizes them (M-002).
+
+    The human summary layout echoes ``target_path`` and the external waiver path verbatim,
+    so ``--summary-only`` printed the auditor's home directory and OS username even though
+    every report written to disk honours the privacy default. Sanitizing here — rather than
+    inside the printer — keeps ``--include-absolute-path`` the single place that decides,
+    and leaves the printer a pure renderer of whatever it is handed.
+    """
+
+    if include_absolute_path:
+        return report
+    waiver = report.external_waiver_path
+    return replace(
+        report,
+        target_path=_sanitize_target_path_for_payload(report.target_path, include_absolute=False),
+        external_waiver_path=(_sanitize_target_path_for_payload(waiver, include_absolute=False) if waiver else waiver),
+    )
+
+
 def _render_eval_report(  # type: ignore[no-untyped-def]
     report,
     req: EvaluateRequest,
@@ -563,7 +604,10 @@ def _render_eval_report(  # type: ignore[no-untyped-def]
             print_operational_warning_summary(warnings)
         return
     if req.summary_only:
-        print_stdout_summary(report, output_format="human")
+        print_stdout_summary(
+            _sanitize_report_for_human_stdout(report, include_absolute_path=req.include_absolute_path),
+            output_format="human",
+        )
         if not req.quiet:
             print_operational_warning_summary(warnings)
         return
@@ -617,7 +661,7 @@ def _run_evaluate(req: EvaluateRequest) -> None:
         waiver_outcome=waiver_outcome,
         scorecard=scorecard,
         external_waiver_path=ext_waiver,
-        verbose_emit=_make_verbose_emit(req.verbose),
+        verbose_emit=_make_verbose_emit(req.verbose, machine_stdout=(fmt == "json")),
         report_json_contract=settings.report_json_contract,
         insights_evidence=insights_evidence,
         applicability_engine=req.applicability_engine,

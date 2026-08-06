@@ -138,7 +138,12 @@ def cli_root(
         False,
         "--summary-only",
         "-so",
-        help="Print only the summary on stdout.",
+        help=(
+            "Print only the summary on stdout. Also silences the stderr file-write confirmations, "
+            "and under --format json the operational-warning summary, so '--format json --summary-only' "
+            "stays parseable JSON even with stderr merged into stdout (--verbose/--debug still write "
+            "there). Drop --summary-only to see them."
+        ),
         rich_help_panel=OPT_PANEL_OUTPUT,
     ),
     fail_on: str = typer.Option(
@@ -157,7 +162,10 @@ def cli_root(
         False,
         "--verbose",
         "-v",
-        help="Print per-control evaluation lines to stdout (dim), pipe-friendly.",
+        help=(
+            "Print per-control evaluation lines (dim), pipe-friendly. Human mode writes them "
+            "to stdout; under --format json they go to stderr so stdout stays parseable JSON."
+        ),
         rich_help_panel=OPT_PANEL_DIAGNOSTICS,
     ),
     report_json_contract: str = typer.Option(
@@ -280,7 +288,11 @@ def cli_root(
             verbose=verbose,
             sarif_output=sarif_output,
             quiet=quiet,
-            report_json_contract=report_json_contract.strip().lower().removeprefix("v"),
+            # Passed through verbatim: ``report_json_schema_url`` owns the single
+            # normalization pass. Pre-normalizing here made it run twice, so 'vv2.0'
+            # was accepted despite the documented single optional leading 'v', and the
+            # rejection message quoted a value the user never typed.
+            report_json_contract=report_json_contract,
             use_insights_evidence=use_insights_evidence,
             applicability_engine=applicability_engine,
             enable_attested=enable_attested,
@@ -362,7 +374,12 @@ def evaluate_cmd(
         False,
         "--summary-only",
         "-so",
-        help="Print only the summary on stdout.",
+        help=(
+            "Print only the summary on stdout. Also silences the stderr file-write confirmations, "
+            "and under --format json the operational-warning summary, so '--format json --summary-only' "
+            "stays parseable JSON even with stderr merged into stdout (--verbose/--debug still write "
+            "there). Drop --summary-only to see them."
+        ),
         rich_help_panel=OPT_PANEL_OUTPUT,
     ),
     fail_on: str = typer.Option(
@@ -381,7 +398,10 @@ def evaluate_cmd(
         False,
         "--verbose",
         "-v",
-        help="Print per-control evaluation lines to stdout (dim); json mode unchanged.",
+        help=(
+            "Print per-control evaluation lines (dim), pipe-friendly. Human mode writes them "
+            "to stdout; under --format json they go to stderr so stdout stays parseable JSON."
+        ),
         rich_help_panel=OPT_PANEL_DIAGNOSTICS,
     ),
     report_json_contract: str = typer.Option(
@@ -497,7 +517,11 @@ def evaluate_cmd(
             fail_on=fail_on,
             verbose=verbose,
             quiet=quiet,
-            report_json_contract=report_json_contract.strip().lower().removeprefix("v"),
+            # Passed through verbatim: ``report_json_schema_url`` owns the single
+            # normalization pass. Pre-normalizing here made it run twice, so 'vv2.0'
+            # was accepted despite the documented single optional leading 'v', and the
+            # rejection message quoted a value the user never typed.
+            report_json_contract=report_json_contract,
             sarif_output=sarif_output,
             include_absolute_path=include_absolute_path,
             use_insights_evidence=use_insights_evidence,
