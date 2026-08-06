@@ -179,6 +179,43 @@ def bad_input_detail(exc: BaseException) -> str:
     return f"it could not be parsed ({exc})"
 
 
+def is_bad_input(exc: BaseException) -> bool:
+    """True when *exc* describes input we could not read, not a defect in the kit.
+
+    This is the classifier the CLI's last-resort handlers use, and it exists because
+    guarding read sites one at a time does not converge. An AST sweep of ``src/`` found
+    **128** parses of repository-controlled input, 76 of them inside no ``try`` at all,
+    across evaluators, scanners and parsers. Three separate releases "fixed" this class
+    by walking a list of sites, and each time a site was missed -- most recently the
+    evaluators' own evidence reader, which turned a 1 KB file inside a scanned repository
+    into an exit 3.
+
+    So the guarantee moves to the boundary, where it holds no matter how many sites
+    exist. Per-site handling still matters -- it is what lets ONE unreadable file degrade
+    ONE control instead of ending the run -- but it is no longer what stands between an
+    adopter and a crash.
+
+    Deliberately narrower than :data:`BAD_INPUT_ERRORS`. Every type below is a statement
+    about the input:
+
+    - ``OSError`` -- a filesystem condition (missing, a directory, permission denied,
+      no space). Never a logic error.
+    - ``RecursionError`` -- a document nested past the parser's stack.
+    - ``UnicodeDecodeError`` -- bytes that are not the declared encoding.
+    - ``yaml.YAMLError`` -- malformed YAML.
+    - CPython's 4300-digit integer-conversion ``ValueError``, identified by its message.
+
+    A bare ``ValueError`` is NOT included. ``BAD_INPUT_ERRORS`` catches it at reader
+    boundaries where the surrounding code proves the value came from a file, but here
+    there is no such proof, and swallowing it would relabel a genuine defect as the
+    adopter's fault -- the opposite of what exit 3 is for.
+    """
+
+    if isinstance(exc, OSError | RecursionError | UnicodeDecodeError | yaml.YAMLError):
+        return True
+    return isinstance(exc, ValueError) and _INT_LIMIT_MARKER in str(exc)
+
+
 def bad_input_reason(exc: BaseException, *, label: str, name: str) -> str:
     """Return a full user-safe explanation of why reading *name* failed.
 

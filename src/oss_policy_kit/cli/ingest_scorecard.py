@@ -32,7 +32,7 @@ from oss_policy_kit.application.scorecard_ingest import (
     ScorecardIngestReport,
     ingest_scorecard,
 )
-from oss_policy_kit.cli.common import app, markup_safe, stderr_console, write_stdout_text
+from oss_policy_kit.cli.common import app, exit_for_unexpected, markup_safe, stderr_console, write_stdout_text
 from oss_policy_kit.cli.help_text import CMD_PANEL_EXPORT
 from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
 
@@ -237,5 +237,4 @@ def ingest_scorecard_cmd(
     except typer.Exit:
         raise
     except Exception as exc:  # noqa: BLE001 - last-resort user message, no traceback leak
-        stderr_console().print(f"[red]Unexpected error:[/red] {markup_safe(exc)}")
-        raise typer.Exit(code=3) from exc
+        exit_for_unexpected(exc)

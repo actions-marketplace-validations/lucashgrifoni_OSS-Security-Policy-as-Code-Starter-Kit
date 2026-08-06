@@ -21,7 +21,7 @@ import sys
 import typer
 
 from oss_policy_kit.adapters.local_paths import resolve_existing_dir
-from oss_policy_kit.cli.common import app, markup_safe, stderr_console, write_stdout_text
+from oss_policy_kit.cli.common import app, exit_for_unexpected, markup_safe, stderr_console, write_stdout_text
 from oss_policy_kit.cli.help_text import CMD_PANEL_SCAN
 from oss_policy_kit.domain.errors import OssPolicyKitError
 from oss_policy_kit.infrastructure.iac.scanner import (
@@ -139,5 +139,4 @@ def scan_iac_cmd(
         stderr_console().print(f"[red]Error:[/red] {markup_safe(exc)}")
         raise typer.Exit(code=2) from exc
     except Exception as exc:  # noqa: BLE001 - last-resort user message
-        stderr_console().print(f"[red]Unexpected error:[/red] {markup_safe(exc)}")
-        raise typer.Exit(code=3) from exc
+        exit_for_unexpected(exc)

@@ -9,7 +9,7 @@ import textwrap
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, NoReturn, cast
 
 import typer
 from rich.console import Console
@@ -21,7 +21,12 @@ from oss_policy_kit.adapters.scorecard_json import load_scorecard_auto
 from oss_policy_kit.application.cli_output import FailOnPolicy, fail_on_violated, print_stdout_summary
 from oss_policy_kit.application.config_loader import load_project_config_for_target
 from oss_policy_kit.application.engine import evaluate_repository
-from oss_policy_kit.application.input_limits import MAX_EVIDENCE_BYTES, oversize_reason
+from oss_policy_kit.application.input_limits import (
+    MAX_EVIDENCE_BYTES,
+    bad_input_detail,
+    is_bad_input,
+    oversize_reason,
+)
 from oss_policy_kit.application.insights_evidence import load_insights_evidence
 from oss_policy_kit.application.loader import (
     PROFILE_DIRECTORY_ALIASES,
@@ -118,6 +123,30 @@ def markup_safe(value: object) -> str:
     """
 
     return _rich_markup_escape(str(value))
+
+
+def exit_for_unexpected(exc: BaseException) -> NoReturn:
+    """The one last-resort handler: exit 2 for unreadable input, exit 3 for our defect.
+
+    Every command ended with the same two lines -- print "Unexpected error", exit 3 --
+    which made exit 3 the outcome for anything that escaped, including an evidence file
+    the adopter's own repository happened to contain. Exit 3 is documented as "always a
+    bug in the kit", so that told adopters the tool was broken when their input was.
+
+    Routing all 23 handlers through here means the classification is stated once and
+    cannot drift between commands. ``is_bad_input`` deliberately keeps a bare
+    ``ValueError`` on the exit-3 side: the point is to stop misreporting input problems,
+    not to stop reporting defects.
+
+    The message carries no path. ``str(OSError)`` embeds the absolute filename, which is
+    how these handlers leaked the home directory and OS account name (M-002).
+    """
+
+    if is_bad_input(exc):
+        stderr_console().print(f"[red]Error:[/red] input could not be read: {markup_safe(bad_input_detail(exc))}")
+        raise typer.Exit(code=2) from exc
+    stderr_console().print(f"[red]Unexpected error:[/red] {markup_safe(exc)}")
+    raise typer.Exit(code=3) from exc
 
 
 def write_stdout_text(text: str) -> None:
@@ -794,5 +823,4 @@ def execute_evaluate(req: EvaluateRequest) -> None:
     except typer.Exit:
         raise
     except Exception as exc:  # noqa: BLE001 - last-resort user message
-        stderr_console().print(f"[red]Unexpected error:[/red] {markup_safe(exc)}")
-        raise typer.Exit(code=3) from exc
+        exit_for_unexpected(exc)

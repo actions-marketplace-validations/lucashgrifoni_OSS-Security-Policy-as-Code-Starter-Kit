@@ -52,7 +52,7 @@ from oss_policy_kit.application.vuln_waivers import (
 from oss_policy_kit.application.vuln_waivers import (
     load_vuln_waivers as _load_vuln_waivers,
 )
-from oss_policy_kit.cli.common import app, markup_safe, stderr_console, write_stdout_text
+from oss_policy_kit.cli.common import app, exit_for_unexpected, markup_safe, stderr_console, write_stdout_text
 from oss_policy_kit.cli.help_text import CMD_PANEL_EXPORT
 from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
 from oss_policy_kit.domain.models import utc_now
@@ -909,5 +909,4 @@ def emit_vex_cmd(
     except typer.Exit:
         raise
     except Exception as exc:  # noqa: BLE001
-        stderr_console().print(f"[red]Unexpected error:[/red] {markup_safe(exc)}")
-        raise typer.Exit(code=3) from exc
+        exit_for_unexpected(exc)

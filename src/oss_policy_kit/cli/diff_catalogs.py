@@ -20,7 +20,7 @@ import typer
 
 from oss_policy_kit.application.catalog_diff import diff_catalogs, load_snapshot, render_human
 from oss_policy_kit.application.loader import bundled_kit_root
-from oss_policy_kit.cli.common import app, markup_safe, stderr_console, write_stdout_text
+from oss_policy_kit.cli.common import app, exit_for_unexpected, markup_safe, stderr_console, write_stdout_text
 from oss_policy_kit.cli.help_text import CMD_PANEL_DISCOVER
 from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
 
@@ -111,5 +111,4 @@ def diff_catalogs_cmd(
     except typer.Exit:
         raise
     except Exception as exc:  # noqa: BLE001 - last-resort user message, no traceback leak
-        stderr_console().print(f"[red]Unexpected error:[/red] {markup_safe(exc)}")
-        raise typer.Exit(code=3) from exc
+        exit_for_unexpected(exc)

@@ -16,6 +16,7 @@ from oss_policy_kit.application.evidence_scaffold import scaffold_evidence_files
 from oss_policy_kit.cli import terminal_ui
 from oss_policy_kit.cli.common import (
     app,
+    exit_for_unexpected,
     markup_safe,
     stderr_console,
     write_wrapped_stdout_block,
@@ -215,8 +216,7 @@ def scaffold_evidence_cmd(
         stderr_console().print(f"[red]Error:[/red] cannot write output ({markup_safe(detail)}).")
         raise typer.Exit(code=2) from exc
     except Exception as exc:  # noqa: BLE001 - last-resort user message, no traceback leak
-        stderr_console().print(f"[red]Unexpected error:[/red] {markup_safe(exc)}")
-        raise typer.Exit(code=3) from exc
+        exit_for_unexpected(exc)
 
 
 def _build_evidence_collector(
@@ -388,5 +388,4 @@ def collect_evidence_cmd(
     except typer.Exit:
         raise
     except Exception as exc:  # noqa: BLE001
-        stderr_console().print(f"[red]Unexpected error:[/red] {markup_safe(exc)}")
-        raise typer.Exit(code=3) from exc
+        exit_for_unexpected(exc)

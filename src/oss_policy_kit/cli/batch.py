@@ -10,6 +10,7 @@ from oss_policy_kit.adapters.local_paths import resolve_existing_dir
 from oss_policy_kit.application.batch_evaluate import run_batch_evaluation
 from oss_policy_kit.cli.common import (
     app,
+    exit_for_unexpected,
     markup_safe,
     stderr_console,
     warn_if_batch_skipped_directories,
@@ -134,5 +135,4 @@ def evaluate_many_cmd(
     except typer.Exit:
         raise
     except Exception as exc:  # noqa: BLE001
-        stderr_console().print(f"[red]Unexpected error:[/red] {markup_safe(exc)}")
-        raise typer.Exit(code=3) from exc
+        exit_for_unexpected(exc)

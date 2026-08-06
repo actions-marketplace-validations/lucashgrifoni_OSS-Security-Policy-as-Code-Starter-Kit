@@ -44,7 +44,7 @@ from oss_policy_kit.application.input_limits import (
     bad_input_reason,
     too_deep_reason,
 )
-from oss_policy_kit.cli.common import app, markup_safe, stderr_console, write_stdout_text
+from oss_policy_kit.cli.common import app, exit_for_unexpected, markup_safe, stderr_console, write_stdout_text
 from oss_policy_kit.cli.help_text import CMD_PANEL_EXPORT
 from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
 from oss_policy_kit.domain.models import utc_now
@@ -929,8 +929,7 @@ def export_evidence_cmd(
     except typer.Exit:
         raise
     except Exception as exc:  # noqa: BLE001 - last-resort user message, no traceback leak
-        stderr_console().print(f"[red]Unexpected error:[/red] {markup_safe(exc)}")
-        raise typer.Exit(code=3) from exc
+        exit_for_unexpected(exc)
 
 
 def _run_export_evidence(target: Path, fmt: str, output: Path, report: Path | None, validate: bool) -> None:
