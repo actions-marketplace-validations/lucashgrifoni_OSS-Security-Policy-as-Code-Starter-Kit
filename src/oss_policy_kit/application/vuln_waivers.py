@@ -30,6 +30,22 @@ DEFAULT_WAIVER_STATUS = "approved"
 
 _EXPECTED_STATUSES = ", ".join(sorted(ACTIVE_WAIVER_STATUSES))
 
+#: The canonical expiry key, then the legacy spelling. ``expires_on`` is accepted
+#: exactly as the control-gate loader accepts it (``application.waivers._waiver_expiry``,
+#: v9.0.2) because the kit's own remediation text and docs teach that spelling —
+#: reading only ``expires_at`` here silently turned every documented waiver into a
+#: waiver that never expires. Canonical wins when both are present and agree.
+EXPIRY_KEYS: tuple[str, ...] = ("expires_at", "expires_on")
+
+_EXPECTED_EXPIRY_KEYS = " or ".join(f'"{key}"' for key in EXPIRY_KEYS)
+
+#: Near-miss spellings that unambiguously mean "expiry" without being one of
+#: :data:`EXPIRY_KEYS`. Anything normalizing to an ``expir`` prefix (``expiry``,
+#: ``expiration_date``, ``Expires-At``) is caught by the prefix rule; these are the
+#: non-``expir`` phrasings worth naming. Such a key must never be read as "no
+#: expiry" — that silent default is how this fail-open class keeps recurring.
+_EXPIRY_LOOKALIKES: frozenset[str] = frozenset({"validuntil", "validthrough", "validto"})
+
 #: CycloneDX 1.6 allowed enum values for analysis.justification.
 CDX_JUSTIFICATIONS: frozenset[str] = frozenset(
     {
@@ -59,52 +75,99 @@ class VulnWaiver:
     cdx_justification: str | None  # one of CDX_JUSTIFICATIONS or None
 
 
+def _looks_like_expiry_key(key: object) -> bool:
+    """True for a key that means "expiry" but is not one of :data:`EXPIRY_KEYS`."""
+
+    if not isinstance(key, str):
+        return False
+    normalized = "".join(ch for ch in key.lower() if ch.isalnum())
+    return normalized.startswith("expir") or normalized in _EXPIRY_LOOKALIKES
+
+
+def _unrecognised_expiry_keys(item: dict[str, Any]) -> list[str]:
+    """Expiry-shaped keys the loader does not read (``expiry``, ``Expires-At``, ``valid_until``)."""
+
+    return sorted(key for key in item if key not in EXPIRY_KEYS and _looks_like_expiry_key(key))
+
+
 def parse_waiver_expiry(idx: int, item: dict[str, Any], today: date, warnings: list[str]) -> tuple[date | None, bool]:
     """Return ``(expires_at, ok)``; ``ok`` is False when the entry should be skipped (bad/expired).
 
-    Only an absent (or explicitly null) ``expires_at`` means "no expiry". A value
-    that is present but not a date — an integer, a float, or the boolean YAML
-    produces for an unquoted ``yes``/``no`` — is a typo, and reading it as "never
-    expires" would silently turn an expired waiver into a permanent one.
+    Reads the canonical ``expires_at`` and the legacy ``expires_on`` alias, so a
+    waiver written the way the kit's own remediation text and docs teach actually
+    expires (before v10.0.7 ``expires_on`` was ignored, which meant *never
+    expires* — an expired entry still produced ``"state": "not_affected"``).
+
+    Only an absent (or explicitly null) expiry means "no expiry". Everything else
+    fails the entry closed with a visible reason: a value that is present but not
+    a date (an integer, a float, or the boolean YAML produces for an unquoted
+    ``yes``/``no``), two expiry keys that disagree, or an expiry-shaped key the
+    loader does not read. Reading any of those as "never expires" would silently
+    turn an expired waiver into a permanent one.
     """
 
-    if "expires_at" not in item:
-        return None, True
-    raw = item["expires_at"]
-    if raw is None:
-        return None, True
-    expires_at: date | None
-    if isinstance(raw, str):
-        expires_at = _expiry_from_text(idx, raw, warnings)
-        if expires_at is None:
-            return None, False
-    elif isinstance(raw, datetime):
-        expires_at = raw.date()
-    elif isinstance(raw, date):
-        expires_at = raw
-    else:
+    stray = _unrecognised_expiry_keys(item)
+    if stray:
+        names = ", ".join(repr(key) for key in stray)
         warnings.append(
-            f"Waiver entry {idx} ignored: expires_at={raw!r} is not a date; "
-            'quote it as "YYYY-MM-DD" (a malformed expiry is never read as "no expiry").'
+            f"Waiver entry {idx} ignored: unrecognised expiry field(s) {names}; "
+            f'use {_EXPECTED_EXPIRY_KEYS} (an unrecognised expiry key is never read as "no expiry").'
         )
         return None, False
+
+    present = [key for key in EXPIRY_KEYS if key in item and item[key] is not None]
+    if not present:
+        return None, True
+
+    parsed: dict[str, date] = {}
+    for key in present:
+        value = _expiry_from_value(idx, key, item[key], warnings)
+        if value is None:
+            return None, False
+        parsed[key] = value
+
+    if len(set(parsed.values())) > 1:
+        detail = ", ".join(f"{key}={value.isoformat()}" for key, value in parsed.items())
+        warnings.append(
+            f"Waiver entry {idx} ignored: expiry fields disagree ({detail}); "
+            "keep exactly one so the effective expiry is unambiguous."
+        )
+        return None, False
+
+    expires_at = parsed[present[0]]
     if expires_at < today:
         warnings.append(f"Waiver entry {idx} ignored: expired at {expires_at.isoformat()}.")
         return None, False
     return expires_at, True
 
 
-def _expiry_from_text(idx: int, raw: str, warnings: list[str]) -> date | None:
-    """Parse a textual ``expires_at``; None (with a warning) when it is blank or unparseable."""
+def _expiry_from_value(idx: int, key: str, raw: Any, warnings: list[str]) -> date | None:
+    """Coerce one expiry value to a date; None (with a warning) when it is not a date."""
+
+    if isinstance(raw, str):
+        return _expiry_from_text(idx, key, raw, warnings)
+    if isinstance(raw, datetime):
+        return raw.date()
+    if isinstance(raw, date):
+        return raw
+    warnings.append(
+        f"Waiver entry {idx} ignored: {key}={raw!r} is not a date; "
+        'quote it as "YYYY-MM-DD" (a malformed expiry is never read as "no expiry").'
+    )
+    return None
+
+
+def _expiry_from_text(idx: int, key: str, raw: str, warnings: list[str]) -> date | None:
+    """Parse a textual expiry; None (with a warning) when it is blank or unparseable."""
 
     text = raw.strip()
     if not text:
-        warnings.append(f"Waiver entry {idx} ignored: expires_at is blank; use a date or drop the field.")
+        warnings.append(f"Waiver entry {idx} ignored: {key} is blank; use a date or drop the field.")
         return None
     try:
         return date.fromisoformat(text[:10])
     except ValueError:
-        warnings.append(f"Waiver entry {idx} has unparseable expires_at={raw!r}; ignored.")
+        warnings.append(f"Waiver entry {idx} has unparseable {key}={raw!r}; ignored.")
         return None
 
 
