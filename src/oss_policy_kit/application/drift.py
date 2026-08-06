@@ -7,6 +7,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from oss_policy_kit.domain.errors import InvalidInputError
+
+#: The only report contract since v9.0.0 removed the pre-2.0 ones under ADR-043.
+REPORT_CONTRACT = "reports/2.0"
+
+#: Control states that mean the target has earned the control. Losing one to ``FAIL`` is
+#: a regression. ``UNKNOWN`` and ``NOT_APPLICABLE`` are deliberately absent: "could not
+#: determine" is not "failed", and gating on it would break builds on flaky evidence.
+_POSITIVE_STATES = frozenset({"PASS", "ATTESTED", "SELF_ATTESTED"})
+
 
 @dataclass
 class ControlDelta:
@@ -66,13 +76,21 @@ def _extract_profile_id(report: dict[str, Any]) -> str | None:
 
 
 def _result_map(report: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    rows = report.get("results")
+    """Index a ``reports/2.0`` payload by control id.
+
+    ``reports/2.0`` carries ``controls[]`` keyed by ``id``. This module previously read
+    ``results[]`` keyed by ``control_id`` — the ``reports/1.0`` shape removed in v9.0.0
+    under ADR-043 — so every report the kit produces indexed to an empty map and drift
+    was always empty.
+    """
+
+    rows = report.get("controls")
     if not isinstance(rows, list):
         return {}
     out: dict[str, dict[str, Any]] = {}
     for row in rows:
         if isinstance(row, dict):
-            cid = str(row.get("control_id", "")).strip()
+            cid = str(row.get("id", "")).strip()
             if cid:
                 out[cid] = row
     return out
@@ -83,15 +101,23 @@ def _title(row: dict[str, Any]) -> str:
 
 
 def _status(row: dict[str, Any]) -> str:
-    return str(row.get("status", ""))
+    """Return the ``reports/2.0`` control state (``PASS``, ``FAIL``, ...)."""
+
+    return str(row.get("state", ""))
 
 
-def _is_positive(status: str) -> bool:
-    return status in {"pass", "self-attested"}
+def _is_positive(state: str) -> bool:
+    """States that represent a control the target has earned.
+
+    ``ATTESTED`` and ``SELF_ATTESTED`` are earned outcomes, so losing one to ``FAIL`` is
+    a real posture regression and must trip the gate.
+    """
+
+    return state in _POSITIVE_STATES
 
 
-def _is_negative(status: str) -> bool:
-    return status == "fail"
+def _is_negative(state: str) -> bool:
+    return state == "FAIL"
 
 
 def compute_drift(before: dict[str, Any], after: dict[str, Any]) -> DriftReport:
@@ -187,12 +213,30 @@ def compute_drift(before: dict[str, Any], after: dict[str, Any]) -> DriftReport:
 
 
 def load_report_json(path: Path) -> dict[str, Any]:
-    """Load an evaluation report JSON object, annotating ``_path`` for diagnostics."""
+    """Load an evaluation report, rejecting anything that is not ``reports/2.0``.
+
+    The contract check is the point. Without it a pre-2.0 report loads fine, indexes to
+    an empty control map, and ``diff-reports`` prints "no status changes" with exit 0 —
+    a clean drift verdict for a report it never understood. Failing closed here is the
+    same rule ``--report-json-contract`` already applies on the ``evaluate`` side.
+    """
 
     raw = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         msg = f"Report root must be an object: {path}"
         raise ValueError(msg)
+
+    contract = raw.get("contract_version")
+    if contract != REPORT_CONTRACT:
+        seen = contract if isinstance(contract, str) and contract.strip() else "none"
+        msg = (
+            f"{path} is not a '{REPORT_CONTRACT}' report (contract_version: {seen}). "
+            f"'{REPORT_CONTRACT}' is the only contract since v9.0.0 removed the earlier ones "
+            "(ADR-043). Re-run 'evaluate' with this version of the kit to produce a comparable "
+            "report. See docs/v9.0.0-migration-guide.md."
+        )
+        raise InvalidInputError(msg)
+
     raw = dict(raw)
     raw["_path"] = str(path.resolve())
     return raw
