@@ -221,12 +221,21 @@ runaway file in an adopter repository cannot exhaust evaluator/CI memory or time
 
 | Input | Default cap | On oversize |
 | ----- | ----------- | ----------- |
-| Evidence JSON (`.oss-policy-kit/evidence/*.json`), `--scorecard-json`, `--waivers` | **5 MiB** | evidence degrades to `manual-review-required`; CLI inputs (`--scorecard-json`, `--waivers`) fail with a clear validation error (exit 2) |
+| Evidence JSON/YAML (`.oss-policy-kit/evidence/*`), `--scorecard-json`, `--waivers` (including `correlate-findings --waivers`) | **5 MiB** | evidence degrades to `manual-review-required`; CLI inputs fail with a clear validation error (exit 2) |
 | SARIF (`--sarif-output` ingestion, `emit-vex --osv-sarif`, SAST evidence `*.sarif.json`) | **20 MiB** | SARIF-backed controls degrade to `manual-review-required`; `emit-vex` reports a clear error |
+| `oss-policy-kit.yaml` | **1 MiB** | fails with a clear validation error (exit 2) |
 
-The caps are conservative defaults (evidence files are small attestations; SARIF can be
-larger). There is no override flag yet — it will be added only if a concrete adopter use
-case appears. Files are refused *before* being read into memory.
+The caps are conservative defaults (config holds a handful of scalar fields, evidence
+files are small attestations, and SARIF can legitimately be large). There is no override
+flag yet — it will be added only if a concrete adopter use case appears. Files are
+refused *before* being read into memory.
+
+Size is not the only way a file can be hostile. Every user-controlled document is read
+through one defensive path, so a document nested deeper than the parser's stack, an
+integer literal longer than the 4300 digits Python will convert, a file in the wrong
+encoding, and a file the process has no permission to read all surface as usage errors
+(**exit 2**) with an actionable message. None of them reaches exit 3, which stays
+reserved for a defect in the kit itself.
 
 ### Third-party evaluator plugin visibility
 
