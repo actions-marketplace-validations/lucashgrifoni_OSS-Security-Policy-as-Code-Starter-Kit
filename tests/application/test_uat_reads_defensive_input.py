@@ -344,7 +344,13 @@ def test_batch_records_an_unreadable_target_and_keeps_going(tmp_path: Path, monk
     skipped = {s["name"]: s for s in payload.get("skipped_directories", [])}
     assert "b-repo" in skipped
     assert "Permission denied" in skipped["b-repo"]["reason"]
-    assert str(tmp_path) not in json.dumps(payload)
+    # json.dumps doubles every backslash, so a Windows needle can never be a substring
+    # of the serialized text and this guard would be vacuous on the platform it is
+    # written and mutation-tested on. Collapsing the escaping first is a no-op on Linux
+    # and makes the assertion mean the same thing everywhere.
+    assert str(tmp_path) not in json.dumps(payload).replace("\\\\", "\\")
+    # Separator-free, so it survives JSON escaping unchanged on both platforms.
+    assert tmp_path.name not in json.dumps(payload)
 
 
 def test_batch_discovery_permission_error_is_a_usage_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

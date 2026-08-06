@@ -309,7 +309,8 @@ def test_cyclonedx_detail_names_the_sarif_basename_only(tmp_path: Path) -> None:
     doc = _build_vex_document(["CVE-2024-0001"], source)
     detail = doc["vulnerabilities"][0]["analysis"]["detail"]
     assert "osv-scanner.sarif.json" in detail
-    assert "evidence/sast" not in detail, detail
+    # Separator-free needles: "evidence/sast" cannot match a Windows-shaped leak.
+    assert "evidence" not in detail and "sast" not in detail, detail
     assert str(tmp_path) not in detail and tmp_path.as_posix() not in detail, detail
 
 
@@ -319,7 +320,8 @@ def test_openvex_status_notes_names_the_sarif_basename_only(tmp_path: Path) -> N
     doc = _build_openvex_document(["CVE-2024-0001"], source, product="pkg:pypi/acme@1.2.3")
     notes = doc["statements"][0]["status_notes"]
     assert "osv-scanner.sarif.json" in notes
-    assert "evidence/sast" not in notes, notes
+    # Separator-free needles: "evidence/sast" cannot match a Windows-shaped leak.
+    assert "evidence" not in notes and "sast" not in notes, notes
     assert str(tmp_path) not in notes and tmp_path.as_posix() not in notes, notes
 
 
@@ -346,7 +348,15 @@ def test_emitted_vex_document_carries_no_directory_component(tmp_path: Path, fmt
         args += ["--product", "pkg:pypi/acme@1.2.3"]
     res = runner.invoke(app, args)
     assert res.exit_code == 0, res.output
-    payload = out.read_text(encoding="utf-8")
-    assert "osv.sarif.json" in payload, payload
-    assert tmp_path.as_posix() not in payload, payload
-    assert "nested/" not in payload, payload
+    doc = json.loads(out.read_text(encoding="utf-8"))
+    cited = (
+        doc["vulnerabilities"][0]["analysis"]["detail"] if fmt == "cyclonedx" else doc["statements"][0]["status_notes"]
+    )
+    assert "osv.sarif.json" in cited, cited
+    # Asserted on the DECODED value, not the raw file text: json.dumps doubles Windows
+    # separators, so a leak written as C:\...\nested\osv.sarif.json could never match a
+    # POSIX-shaped needle -- the guard had no force on the platform it was written on.
+    # parent.name carries no separator at all, so it catches a leak on either platform.
+    assert sarif.parent.name not in cited, cited
+    assert str(sarif.parent) not in cited, cited
+    assert sarif.parent.as_posix() not in cited, cited
