@@ -119,6 +119,26 @@ def map_status_to_reports_v2(status: str) -> tuple[str, str | None]:
     return ("UNKNOWN", "unmapped-source-status")
 
 
+#: The report contracts that really existed and were really removed in v9.0.0 (ADR-043),
+#: in both the bare and ``reports/``-prefixed spellings a user might type.
+#:
+#: Only these may be told they "were removed": ``--report-json-contract 3.0`` or ``two``
+#: or ``2.0.0`` never named a contract of this kit, and sending that user to a migration
+#: guide for a version they never used is a false statement about the kit's own history.
+_REMOVED_REPORT_JSON_CONTRACTS = frozenset(
+    {
+        "0.1",
+        "0.2",
+        "0.3",
+        "1.0",
+        "reports/0.1",
+        "reports/0.2",
+        "reports/0.3",
+        "reports/1.0",
+    }
+)
+
+
 def report_json_schema_url(contract: str) -> str:
     """Return the full ``schema_version`` URL for an evaluation JSON report contract.
 
@@ -126,6 +146,9 @@ def report_json_schema_url(contract: str) -> str:
     selectable contracts (``0.1``/``0.2``/``0.3``/``1.0``) were removed; only ``2.0``
     is accepted and any other value — including an empty or whitespace-only value —
     is a hard error (no silent fallback to the default).
+
+    Rejection is uniform; the *explanation* is not. A removed contract gets the
+    migration pointer; anything else is simply not a contract this kit ever wrote.
     """
 
     c = contract.strip().lower().removeprefix("v")
@@ -137,10 +160,15 @@ def report_json_schema_url(contract: str) -> str:
             "Drop --report-json-contract (2.0 is the default) or pass '2.0'. "
             "See docs/v9.0.0-migration-guide.md."
         )
+    if c in _REMOVED_REPORT_JSON_CONTRACTS:
+        raise LoadError(
+            f"Report JSON contract {contract!r} was removed in v9.0.0 (ADR-043); 'reports/2.0' is the only "
+            "contract. Drop --report-json-contract (2.0 is the default) or pass '2.0'. "
+            "See docs/v9.0.0-migration-guide.md."
+        )
     raise LoadError(
-        f"Report JSON contract {contract!r} was removed in v9.0.0 (ADR-043); 'reports/2.0' is the only "
-        "contract. Drop --report-json-contract (2.0 is the default) or pass '2.0'. "
-        "See docs/v9.0.0-migration-guide.md."
+        f"Report JSON contract {contract!r} is not a recognised contract; 'reports/2.0' is the only "
+        "contract this kit writes. Drop --report-json-contract (2.0 is the default) or pass '2.0'."
     )
 
 

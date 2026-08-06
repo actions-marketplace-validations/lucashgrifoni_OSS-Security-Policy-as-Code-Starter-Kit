@@ -18,6 +18,7 @@ does **not** change any ``evaluate`` gate (symmetric with ``ingest-insights``). 
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from datetime import UTC, datetime
 from pathlib import Path
@@ -31,7 +32,7 @@ from oss_policy_kit.application.scorecard_ingest import (
     ScorecardIngestReport,
     ingest_scorecard,
 )
-from oss_policy_kit.cli.common import app, stderr_console, write_stdout_text
+from oss_policy_kit.cli.common import app, markup_safe, stderr_console, write_stdout_text
 from oss_policy_kit.cli.help_text import CMD_PANEL_EXPORT
 from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
 
@@ -57,15 +58,37 @@ def _resolve_input(target: Path, input_path: Path | None) -> Path | None:
         return _discover(target)
     chosen = input_path if input_path.is_absolute() else target / input_path
     if not chosen.is_file():
-        raise InvalidInputError(f"--input {chosen} is not a file.")
+        # Echo the user-supplied string, never the resolved candidate: joining a
+        # relative --input onto the resolved --target produces an absolute path that
+        # leaks the auditor's home directory / OS username (M-002). Mirrors
+        # ``export-evidence --report``.
+        raise InvalidInputError(f"--input {input_path} is not a file.")
     return chosen
 
 
-def _not_found_payload(target: Path) -> dict[str, Any]:
+def _display_path(chosen: Path, root: Path, typed: Path | None) -> str:
+    """The path to print and to record in the JSON report — never an absolute one (M-002).
+
+    Echoes the ``--input`` string the user typed while it is relative; otherwise cites the
+    file's location relative to ``--target``, falling back to the bare name for a file
+    outside the target tree.
+    """
+
+    if typed is not None and not typed.is_absolute():
+        return typed.as_posix()
+    try:
+        return chosen.resolve().relative_to(root).as_posix()
+    except (OSError, ValueError):
+        return chosen.name
+
+
+def _not_found_payload(searched: str) -> dict[str, Any]:
+    """Not-found payload; *searched* is the ``--target`` string the user typed (M-002)."""
+
     return {
         "tool": _TOOL_NAME,
         "found": False,
-        "searched_root": str(target),
+        "searched_root": searched,
         "input_path": None,
         "result_date": None,
         "freshness": "n/a",
@@ -75,10 +98,10 @@ def _not_found_payload(target: Path) -> dict[str, Any]:
     }
 
 
-def _render_not_found(target: Path) -> None:
+def _render_not_found(searched: str) -> None:
     lines = [
         "OpenSSF Scorecard - none found",
-        f"  Searched under: {target}",
+        f"  Searched under: {searched}",
         "  No scorecard-result.json found (e.g. scorecard --format json > "
         ".oss-policy-kit/evidence/scorecard-result.json), or pass --input.",
     ]
@@ -134,32 +157,38 @@ def _run_ingest_scorecard(target: Path, input_path: Path | None, output_format: 
         # path leaks the auditor's home directory / username (M-002).
         raise InvalidInputError(f"--target {target} is not a directory.")
 
+    # The JSON report is shareable; cite the typed --target, not its resolved form (M-002).
+    searched = str(target)
     chosen = _resolve_input(target_path, input_path)
     if chosen is None:
         if fmt == "json":
-            write_stdout_text(json.dumps(_not_found_payload(target_path), indent=2, sort_keys=True) + "\n")
+            write_stdout_text(json.dumps(_not_found_payload(searched), indent=2, sort_keys=True) + "\n")
         else:
-            _render_not_found(target_path)
+            _render_not_found(searched)
         return
 
     r = oversize_reason(chosen, MAX_EVIDENCE_BYTES, label="Scorecard JSON")
     if r:
         raise InvalidInputError(r)
 
+    display = _display_path(chosen, target_path, input_path)
     try:
         report = ingest_scorecard(chosen, now=datetime.now(UTC))
     except Exception as exc:  # noqa: BLE001 - a file that exists but cannot be parsed is an honest exit 1
         msg = f"Scorecard result {chosen.name} could not be parsed: {exc}"
         if fmt == "json":
-            payload = _not_found_payload(target_path)
+            payload = _not_found_payload(searched)
             payload["found"] = True
-            payload["input_path"] = str(chosen)
+            payload["input_path"] = display
             payload["error"] = msg
             write_stdout_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
         else:
-            write_stdout_text(f"OpenSSF Scorecard - INVALID\n  File: {chosen}\n  ERROR: {msg}\n")
+            write_stdout_text(f"OpenSSF Scorecard - INVALID\n  File: {display}\n  ERROR: {msg}\n")
         raise typer.Exit(code=1) from exc
 
+    # ``ingest_scorecard`` records the path it was handed, which is absolute; swap in the
+    # display form so neither the "File:" line nor the JSON report carries it (M-002).
+    report = dataclasses.replace(report, input_path=display)
     if fmt == "json":
         payload = report.to_dict()
         payload["tool"] = _TOOL_NAME
@@ -203,10 +232,10 @@ def ingest_scorecard_cmd(
     try:
         _run_ingest_scorecard(target, input_path, output_format)
     except OssPolicyKitError as exc:
-        stderr_console().print(f"[red]Error:[/red] {exc.message}")
+        stderr_console().print(f"[red]Error:[/red] {markup_safe(exc.message)}")
         raise typer.Exit(code=2) from exc
     except typer.Exit:
         raise
     except Exception as exc:  # noqa: BLE001 - last-resort user message, no traceback leak
-        stderr_console().print(f"[red]Unexpected error:[/red] {exc}")
+        stderr_console().print(f"[red]Unexpected error:[/red] {markup_safe(exc)}")
         raise typer.Exit(code=3) from exc

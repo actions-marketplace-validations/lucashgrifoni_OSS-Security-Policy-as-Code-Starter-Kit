@@ -21,8 +21,7 @@ import dataclasses
 from pathlib import Path
 from typing import Any
 
-import yaml
-
+from oss_policy_kit.application.input_limits import MAX_EVIDENCE_BYTES, load_capped_document
 from oss_policy_kit.application.loader import ControlSpec, load_catalog
 from oss_policy_kit.domain.errors import InvalidInputError, LoadError
 
@@ -148,10 +147,17 @@ def _load_profiles(profiles_dir: Path) -> dict[str, tuple[str, ...]]:
         profile_file = child / "profile.yaml"
         if not profile_file.is_file():
             continue
+        # A snapshot is user-supplied: `--from` can point at any directory on disk, so
+        # this file is as untrusted as any other input. Catching only OSError/YAMLError
+        # let a RecursionError from a deeply nested profile escape as exit 3, and left
+        # the read uncapped. `load_capped_document` is the same one defensive read the
+        # scorecard, config and Insights readers use, so the refusal, the budget and the
+        # wording are identical here -- and it names the file without its directory,
+        # which the old message leaked (M-002).
         try:
-            raw = yaml.safe_load(profile_file.read_text(encoding="utf-8"))
-        except (OSError, yaml.YAMLError) as exc:
-            raise LoadError(f"Could not read profile {profile_file}: {exc}") from exc
+            raw = load_capped_document(profile_file, MAX_EVIDENCE_BYTES, label="Profile")
+        except InvalidInputError as exc:
+            raise LoadError(str(exc)) from exc
         if not isinstance(raw, dict):
             continue
         pid = str(raw.get("id", "")).strip() or child.name

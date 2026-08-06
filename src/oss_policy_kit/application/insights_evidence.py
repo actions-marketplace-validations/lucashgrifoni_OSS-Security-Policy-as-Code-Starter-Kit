@@ -23,10 +23,20 @@ from typing import Any
 
 import yaml
 
-from oss_policy_kit.application.input_limits import MAX_EVIDENCE_BYTES, read_text_capped
+from oss_policy_kit.application.input_limits import (
+    BAD_INPUT_ERRORS,
+    MAX_EVIDENCE_BYTES,
+    bad_input_reason,
+    read_text_capped,
+    too_deep_reason,
+)
 
 #: Supported OpenSSF Security Insights schema version (the shape the kit knows).
 INSIGHTS_SCHEMA_VERSION = "1.0.0"
+
+#: Label for every refusal message about the ingested file, so one problem reads as one
+#: explanation across ``ingest-insights`` and the ``--use-insights-evidence`` wiring.
+_INPUT_LABEL = "Security Insights file"
 
 #: Conventional locations for an OpenSSF Security Insights file, in lookup order.
 #: Covers the spec-canonical ``SECURITY-INSIGHTS.yml`` (root and ``.github/``) and
@@ -55,21 +65,36 @@ def discover_insights_file(root: Path) -> Path | None:
 
 
 def load_insights_file(path: Path) -> tuple[dict[str, Any] | None, str | None]:
-    """Read + parse a Security Insights YAML file.
+    """Read + parse a Security Insights YAML file, refusing hostile input instead of crashing.
 
     Returns ``(doc, None)`` on success, or ``(None, error_message)`` when the file
-    is unreadable, not valid YAML, or not a YAML mapping. Oversize files raise
-    ``InvalidInputError`` (CLI exit 2) via ``read_text_capped``.
+    is unreadable, too deeply nested, not valid YAML, or not a YAML mapping. Oversize
+    files raise ``InvalidInputError`` (CLI exit 2) via ``read_text_capped``.
+
+    The nesting budget is checked explicitly, before parsing, exactly as the Scorecard
+    reader does it (see ``input_limits.MAX_JSON_DEPTH``). Leaving it to ``RecursionError``
+    is not enough and the difference is not theoretical here: the file is discovered
+    *inside the repository under evaluation*, so a ~500-level ``SECURITY-INSIGHTS.yml``
+    in an untrusted clone crashed ``evaluate --use-insights-evidence`` with exit 3 — a
+    one-file denial of service against the gate, at a depth that depended on the
+    interpreter's stack rather than on any documented limit. ``RecursionError`` stays in
+    ``BAD_INPUT_ERRORS`` as the backstop for block-style YAML, whose depth is expressed
+    by indentation and so carries no brackets for the scanner to count.
     """
 
     try:
         raw = read_text_capped(path, MAX_EVIDENCE_BYTES, label="Security Insights", errors="replace")
     except OSError as exc:
-        return None, f"Security Insights file is unreadable: {exc}"
+        # ``str(OSError)`` embeds the absolute filename; bad_input_reason cites the
+        # bare name and the OS error text only (M-002).
+        return None, bad_input_reason(exc, label=_INPUT_LABEL, name=path.name)
+    too_deep = too_deep_reason(raw, label=f"{_INPUT_LABEL} '{path.name}'")
+    if too_deep is not None:
+        return None, too_deep
     try:
         doc = yaml.safe_load(raw)
-    except yaml.YAMLError as exc:
-        return None, f"Security Insights file is not valid YAML: {exc}"
+    except BAD_INPUT_ERRORS as exc:
+        return None, bad_input_reason(exc, label=_INPUT_LABEL, name=path.name)
     if not isinstance(doc, dict):
         return None, "Security Insights file root must be a YAML mapping (object)."
     return doc, None
