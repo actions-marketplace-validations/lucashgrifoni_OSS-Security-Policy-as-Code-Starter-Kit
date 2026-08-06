@@ -40,7 +40,7 @@ import typer
 import yaml
 
 from oss_policy_kit.application.insights_evidence import INSIGHTS_SCHEMA_VERSION as _INSIGHTS_SCHEMA_VERSION
-from oss_policy_kit.cli.common import app, stderr_console, write_stdout_text
+from oss_policy_kit.cli.common import app, markup_safe, stderr_console, write_stdout_text
 from oss_policy_kit.cli.help_text import CMD_PANEL_EXPORT
 from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
 from oss_policy_kit.domain.models import utc_now
@@ -320,13 +320,15 @@ def emit_insights_cmd(
     try:
         _run_emit_insights(target, output, validate, merge)
     except OssPolicyKitError as exc:
-        stderr_console().print(f"[red]Error:[/red] {exc.message}")
+        stderr_console().print(f"[red]Error:[/red] {markup_safe(exc.message)}")
         raise typer.Exit(code=2) from exc
     except typer.Exit:
         raise
     except OSError as exc:
-        stderr_console().print(f"[red]Error:[/red] cannot write output ({exc.strerror or 'filesystem error'}).")
+        stderr_console().print(
+            f"[red]Error:[/red] cannot write output ({markup_safe(exc.strerror or 'filesystem error')})."
+        )
         raise typer.Exit(code=2) from exc
     except Exception as exc:  # noqa: BLE001 - last-resort user message, no traceback leak
-        stderr_console().print(f"[red]Unexpected error:[/red] {exc}")
+        stderr_console().print(f"[red]Unexpected error:[/red] {markup_safe(exc)}")
         raise typer.Exit(code=3) from exc

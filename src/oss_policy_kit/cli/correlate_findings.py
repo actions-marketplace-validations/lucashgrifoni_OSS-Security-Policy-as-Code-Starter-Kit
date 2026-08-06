@@ -30,7 +30,7 @@ from oss_policy_kit.application.finding_normalization import NORMALIZED_SEVERITI
 from oss_policy_kit.application.findings_report import build_findings_report
 from oss_policy_kit.application.findings_sarif_export import render_findings_sarif
 from oss_policy_kit.application.input_limits import MAX_EVIDENCE_BYTES, oversize_reason
-from oss_policy_kit.cli.common import app, stderr_console, write_stdout_text
+from oss_policy_kit.cli.common import app, markup_safe, stderr_console, write_stdout_text
 from oss_policy_kit.cli.help_text import CMD_PANEL_EXPORT
 from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
 
@@ -186,7 +186,7 @@ def _run_correlate_findings(
         enrichment_path=enrichment_path,
     )
     for w in report.get("extensions", {}).get("waiver_warnings", []):
-        stderr_console().print(f"[yellow]Waivers:[/yellow] {w}")
+        stderr_console().print(f"[yellow]Waivers:[/yellow] {markup_safe(w)}")
     _write_artifact(report, output_path)
 
     if fmt == "json":
@@ -198,7 +198,7 @@ def _run_correlate_findings(
 
     message = _gate_tripped(report, sev, fail_on_kev)
     if message is not None:
-        stderr_console().print(f"[yellow]Gate:[/yellow] {message}")
+        stderr_console().print(f"[yellow]Gate:[/yellow] {markup_safe(message)}")
         raise typer.Exit(code=1)
 
 
@@ -284,10 +284,10 @@ def correlate_findings_cmd(
             enrichment_file,
         )
     except OssPolicyKitError as exc:
-        stderr_console().print(f"[red]Error:[/red] {exc.message}")
+        stderr_console().print(f"[red]Error:[/red] {markup_safe(exc.message)}")
         raise typer.Exit(code=2) from exc
     except typer.Exit:
         raise
     except Exception as exc:  # noqa: BLE001 - last-resort user message, no traceback leak
-        stderr_console().print(f"[red]Unexpected error:[/red] {exc}")
+        stderr_console().print(f"[red]Unexpected error:[/red] {markup_safe(exc)}")
         raise typer.Exit(code=3) from exc

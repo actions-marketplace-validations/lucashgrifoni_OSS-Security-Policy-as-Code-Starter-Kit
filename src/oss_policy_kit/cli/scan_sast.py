@@ -26,6 +26,7 @@ import typer
 from oss_policy_kit.adapters.local_paths import resolve_existing_dir
 from oss_policy_kit.cli.common import (
     app,
+    markup_safe,
     stderr_console,
     write_stdout_text,
 )
@@ -130,13 +131,13 @@ def scan_sast_cmd(
                 )
 
     except OssPolicyKitError as exc:
-        stderr_console().print(f"[red]Error:[/red] {exc.message}")
+        stderr_console().print(f"[red]Error:[/red] {markup_safe(exc.message)}")
         raise typer.Exit(code=2) from exc
     except typer.Exit:
         raise
     except OSError as exc:
-        stderr_console().print(f"[red]Error:[/red] {exc}")
+        stderr_console().print(f"[red]Error:[/red] {markup_safe(exc)}")
         raise typer.Exit(code=2) from exc
     except Exception as exc:  # noqa: BLE001 - last-resort user message
-        stderr_console().print(f"[red]Unexpected error:[/red] {exc}")
+        stderr_console().print(f"[red]Unexpected error:[/red] {markup_safe(exc)}")
         raise typer.Exit(code=3) from exc

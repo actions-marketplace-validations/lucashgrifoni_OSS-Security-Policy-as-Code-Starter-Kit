@@ -16,6 +16,7 @@ from oss_policy_kit.application.evidence_scaffold import scaffold_evidence_files
 from oss_policy_kit.cli import terminal_ui
 from oss_policy_kit.cli.common import (
     app,
+    markup_safe,
     stderr_console,
     write_wrapped_stdout_block,
 )
@@ -109,24 +110,29 @@ def _print_collect_dry_run_preview(
         detected_slug = read_github_repo_slug_from_git_config(target)
     effective_slug = (repo_slug or "").strip() or detected_slug
     console = terminal_ui.build_stdout_console()
-    console.print(f"\n[bold cyan]collect-evidence dry-run[/bold cyan] -- platform: [bold]{platform}[/bold]")
-    console.print(f"  Target:     {target.resolve()}")
-    console.print(f"  Output dir: {out}")
+    console.print(
+        f"\n[bold cyan]collect-evidence dry-run[/bold cyan] -- platform: [bold]{markup_safe(platform)}[/bold]"
+    )
+    console.print(f"  Target:     {markup_safe(target.resolve())}")
+    console.print(f"  Output dir: {markup_safe(out)}")
+    # The placeholder is bracketed, so it must be escaped like any other interpolation:
+    # unescaped, Rich read ``[not detected ...]`` as a style tag and printed an empty
+    # "Repo slug:" line, hiding the one instruction the operator needed.
     slug_display = effective_slug if effective_slug else "[not detected -- pass --repo where needed]"
-    console.print(f"  Repo slug:  {slug_display}")
+    console.print(f"  Repo slug:  {markup_safe(slug_display)}")
     env_vars = _COLLECT_REQUIRED_ENV.get(platform, [])
-    console.print(f"  Credentials (needed without --dry-run): {', '.join(env_vars)}")
+    console.print(f"  Credentials (needed without --dry-run): {markup_safe(', '.join(env_vars))}")
     probes = _COLLECT_ENV_PROBES.get(platform, ())
     if probes:
         console.print("  Environment probe (values are not printed):")
         for name in probes:
-            console.print(f"    - {name}: {_env_probe_status(name)}")
+            console.print(f"    - {markup_safe(name)}: {_env_probe_status(name)}")
     entries = _COLLECT_PREVIEW.get(platform, [])
     if entries:
         console.print("\n[bold]Would create:[/bold]")
         for fname, endpoint in entries:
-            console.print(f"  [green]+[/green] {out / fname}")
-            console.print(f"    [dim]via {endpoint}[/dim]")
+            console.print(f"  [green]+[/green] {markup_safe(out / fname)}")
+            console.print(f"    [dim]via {markup_safe(endpoint)}[/dim]")
     console.print("\n[dim]Run without --dry-run to execute (credentials required).[/dim]")
 
 
@@ -169,7 +175,9 @@ def scaffold_evidence_cmd(
                 candidate.mkdir(parents=True, exist_ok=True)
             except OSError as exc:
                 raise InvalidInputError(f"Could not create --target directory {candidate}: {exc}") from exc
-            stderr_console().print(f"[yellow]Note:[/yellow] created missing --target directory: {candidate.resolve()}")
+            stderr_console().print(
+                f"[yellow]Note:[/yellow] created missing --target directory: {markup_safe(candidate.resolve())}"
+            )
         repo = resolve_existing_dir(target)
         outcome = scaffold_evidence_files(repo, platform, force=force)
         sys.stdout.write("scaffold-evidence summary:\n")
@@ -191,11 +199,11 @@ def scaffold_evidence_cmd(
         )
         wrapped = terminal_ui.human_wrap_lines(tail, stream=sys.stderr, subtract=2)
         lines = wrapped.split("\n")
-        stderr_console().print(f"[green]Scaffold complete.[/green] {lines[0]}")
+        stderr_console().print(f"[green]Scaffold complete.[/green] {markup_safe(lines[0])}")
         for ln in lines[1:]:
-            stderr_console().print(ln)
+            stderr_console().print(markup_safe(ln))
     except OssPolicyKitError as exc:
-        stderr_console().print(f"[red]Error:[/red] {exc.message}")
+        stderr_console().print(f"[red]Error:[/red] {markup_safe(exc.message)}")
         raise typer.Exit(code=2) from exc
     except typer.Exit:
         raise
@@ -203,10 +211,11 @@ def scaffold_evidence_cmd(
         # A filesystem error on a user-supplied --target (e.g. .oss-policy-kit
         # pre-exists as a file so mkdir fails) is a usage error, not internal.
         # Use exc.strerror so the absolute path / username is never echoed.
-        stderr_console().print(f"[red]Error:[/red] cannot write output ({exc.strerror or 'filesystem error'}).")
+        detail = markup_safe(exc.strerror or "filesystem error")
+        stderr_console().print(f"[red]Error:[/red] cannot write output ({markup_safe(detail)}).")
         raise typer.Exit(code=2) from exc
     except Exception as exc:  # noqa: BLE001 - last-resort user message, no traceback leak
-        stderr_console().print(f"[red]Unexpected error:[/red] {exc}")
+        stderr_console().print(f"[red]Unexpected error:[/red] {markup_safe(exc)}")
         raise typer.Exit(code=3) from exc
 
 
@@ -299,7 +308,7 @@ def _write_collected_evidence(rows: list[Any], *, plat: str, output_dir: Path | 
         out_path.write_text(json.dumps(row.data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         table.add_row(str(out_path.name), row.source_url)
     stderr_console().print(table)
-    stderr_console().print(f"[green]Wrote[/green] {len(rows)} file(s) under {dest}")
+    stderr_console().print(f"[green]Wrote[/green] {len(rows)} file(s) under {markup_safe(dest)}")
 
 
 @app.command("collect-evidence", rich_help_panel=CMD_PANEL_COLLECT)
@@ -357,15 +366,27 @@ def collect_evidence_cmd(
             rows = collector.collect(slug)
         except ValueError as exc:
             raise InvalidInputError(str(exc)) from exc
+        except RuntimeError as exc:
+            if not isinstance(exc.__cause__, ImportError):
+                raise
+            # Every collector signals "my optional extra is not installed" as
+            # ``RuntimeError(...) from ImportError``. That is a user-correctable
+            # environment state carrying its own fix (`pip install 'oss-policy-kit[...]'`),
+            # exactly like the missing-token checks above, so it exits 2 as a plain
+            # "Error:" instead of exit 3 "Unexpected error:" — exit 3 means the kit
+            # misbehaved, and nothing here did. The sibling scanners agree in spirit:
+            # scan-iac and scan-sast both stay off the internal-error path when their
+            # optional tool is absent.
+            raise InvalidInputError(str(exc)) from exc
         _write_collected_evidence(rows, plat=plat, output_dir=output_dir, repo=repo)
     except OSError as exc:
-        stderr_console().print(f"[red]Error:[/red] {exc}")
+        stderr_console().print(f"[red]Error:[/red] {markup_safe(exc)}")
         raise typer.Exit(code=2) from exc
     except OssPolicyKitError as exc:
-        stderr_console().print(f"[red]Error:[/red] {exc.message}")
+        stderr_console().print(f"[red]Error:[/red] {markup_safe(exc.message)}")
         raise typer.Exit(code=2) from exc
     except typer.Exit:
         raise
     except Exception as exc:  # noqa: BLE001
-        stderr_console().print(f"[red]Unexpected error:[/red] {exc}")
+        stderr_console().print(f"[red]Unexpected error:[/red] {markup_safe(exc)}")
         raise typer.Exit(code=3) from exc

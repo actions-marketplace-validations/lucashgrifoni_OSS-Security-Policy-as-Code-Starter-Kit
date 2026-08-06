@@ -13,6 +13,7 @@ from oss_policy_kit.cli.common import (
     app,
     enable_debug_logging,
     execute_evaluate,
+    markup_safe,
     stderr_console,
 )
 from oss_policy_kit.cli.help_text import (
@@ -265,7 +266,7 @@ def cli_root(
         try:
             _print_profiles_table(detailed=True, compact_layout=False)
         except LoadError as exc:
-            stderr_console().print(f"[red]Error:[/red] {exc.message}")
+            stderr_console().print(f"[red]Error:[/red] {markup_safe(exc.message)}")
             raise typer.Exit(code=2) from exc
         raise typer.Exit(0)
     if ctx.invoked_subcommand is not None:

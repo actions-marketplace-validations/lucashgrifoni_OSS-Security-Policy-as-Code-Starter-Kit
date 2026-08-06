@@ -31,6 +31,7 @@ from oss_policy_kit.application.init_writer import (
 )
 from oss_policy_kit.cli.common import (
     app,
+    markup_safe,
     stderr_console,
     write_stdout_text,
 )
@@ -306,8 +307,10 @@ def init_cmd(
                 dry_run=True,
             )
             recommended = preview_plan.profile
-            stderr_console().print(f"\n[cyan]Detected platform:[/cyan] {preview_plan.platform or 'unknown'}")
-            stderr_console().print(f"[cyan]Recommended profile:[/cyan] {recommended}")
+            stderr_console().print(
+                f"\n[cyan]Detected platform:[/cyan] {markup_safe(preview_plan.platform or 'unknown')}"
+            )
+            stderr_console().print(f"[cyan]Recommended profile:[/cyan] {markup_safe(recommended)}")
             response = typer.prompt(
                 "Use this profile (press Enter to accept, or type a different profile id)",
                 default=recommended,
@@ -346,13 +349,13 @@ def init_cmd(
             _print_human_summary(plan=plan, outcome=outcome, dry_run=dry_run)
 
     except OssPolicyKitError as exc:
-        stderr_console().print(f"[red]Error:[/red] {exc.message}")
+        stderr_console().print(f"[red]Error:[/red] {markup_safe(exc.message)}")
         raise typer.Exit(code=2) from exc
     except OSError as exc:
-        stderr_console().print(f"[red]Error:[/red] {exc}")
+        stderr_console().print(f"[red]Error:[/red] {markup_safe(exc)}")
         raise typer.Exit(code=2) from exc
     except typer.Exit:
         raise
     except Exception as exc:  # noqa: BLE001 - last-resort user message
-        stderr_console().print(f"[red]Unexpected error:[/red] {exc}")
+        stderr_console().print(f"[red]Unexpected error:[/red] {markup_safe(exc)}")
         raise typer.Exit(code=3) from exc

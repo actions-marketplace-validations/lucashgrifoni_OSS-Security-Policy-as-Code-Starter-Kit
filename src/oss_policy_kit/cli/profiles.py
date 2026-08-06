@@ -22,6 +22,7 @@ from oss_policy_kit.application.loader import (
 from oss_policy_kit.cli import terminal_ui
 from oss_policy_kit.cli.common import (
     app,
+    markup_safe,
     normalize_profiles_format,
     stderr_console,
 )
@@ -596,13 +597,13 @@ def profiles_cmd(
                 # fmt == "table": full grid lines, default column balance (not density-compact).
                 _print_profiles_table(detailed=False, compact_layout=False, rows=filtered)
     except LoadError as exc:
-        stderr_console().print(f"[red]Error:[/red] {exc.message}")
+        stderr_console().print(f"[red]Error:[/red] {markup_safe(exc.message)}")
         raise typer.Exit(code=2) from exc
     except OssPolicyKitError as exc:
-        stderr_console().print(f"[red]Error:[/red] {exc.message}")
+        stderr_console().print(f"[red]Error:[/red] {markup_safe(exc.message)}")
         raise typer.Exit(code=2) from exc
     except typer.Exit:
         raise
     except Exception as exc:  # noqa: BLE001 - last-resort user message, no traceback leak
-        stderr_console().print(f"[red]Unexpected error:[/red] {exc}")
+        stderr_console().print(f"[red]Unexpected error:[/red] {markup_safe(exc)}")
         raise typer.Exit(code=3) from exc
