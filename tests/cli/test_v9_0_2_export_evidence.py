@@ -92,18 +92,27 @@ def test_contentless_report_validate_exits_2(tmp_path: Path, fmt: str) -> None:
 
 
 def test_sarif_reads_state_and_message_and_populates_rules() -> None:
+    """Bug C's original point -- message.text and a populated rules[] -- still holds.
+
+    What changed in v10.0.7 is which controls become results. The PASS assertion this
+    test carried (``levels["GOV-SEC-001"] == "note"``) described the defect that turned
+    every passing control into a code-scanning alert, so it now asserts the opposite.
+    """
+
     doc = ee._render_sarif(_REPORT_2_0)
     run = doc["runs"][0]
     results = run["results"]
+
     # message.text comes from reports/2.0 ``message`` (not the absent ``reason``).
     texts = {r["ruleId"]: r["message"]["text"] for r in results}
-    assert texts["GOV-SEC-001"] == "policy file present"
     assert texts["CI-PIN-008"] == "actions pinned to mutable refs"
-    # FAIL state maps to an actionable level (error), PASS to note.
+    assert "GOV-SEC-001" not in texts, "the passing control was emitted as a result"
+
+    # FAIL is the only actionable state here, and it maps to error.
     levels = {r["ruleId"]: r["level"] for r in results}
     assert levels["CI-PIN-008"] == "error"
-    assert levels["GOV-SEC-001"] == "note"
-    # tool.driver.rules is populated: one rule per emitted ruleId.
+
+    # rules[] still declares BOTH controls, so omitting the result loses no record.
     rules = run["tool"]["driver"]["rules"]
     assert [rule["id"] for rule in rules] == ["GOV-SEC-001", "CI-PIN-008"]
     assert ee._validate(doc, "sarif") == []

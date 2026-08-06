@@ -67,13 +67,27 @@ def test_render_chainloop_validation_catches_missing_fields() -> None:
     assert any("predicate" in e for e in errs)
 
 
-def test_render_sarif_synthesises_from_controls() -> None:
+def test_render_sarif_synthesises_only_actionable_controls() -> None:
+    """A SARIF result is an alert; a control that passed is not one.
+
+    This test used to assert the opposite -- that a PASS control produced a result at
+    level ``note`` -- which is how a 14/14 repository ended up opening 14 code-scanning
+    alerts. Passing controls stay in ``tool.driver.rules``, so the record survives; the
+    complete per-control export is what the spdx/oscal/gemara formats are for.
+    """
+
     out = _render_sarif(_sample_report())
     assert out["version"] == "2.1.0"
     assert isinstance(out["runs"], list) and len(out["runs"]) == 1
-    results = out["runs"][0]["results"]
-    assert len(results) == 2
-    assert any(r["ruleId"] == "GOV-SEC-001" for r in results)
+    run = out["runs"][0]
+
+    emitted = {r["ruleId"] for r in run["results"]}
+    assert "GOV-SEC-001" not in emitted, "a passing control was emitted as a SARIF result"
+    assert "GH-PROV-023" in emitted, "a control needing review must still be reported"
+
+    declared = {rule["id"] for rule in run["tool"]["driver"]["rules"]}
+    assert "GOV-SEC-001" in declared, "the passing control vanished from the run entirely"
+
     assert _validate(out, "sarif") == []
 
 

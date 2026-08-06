@@ -27,6 +27,7 @@ This subcommand intentionally does **not**:
 from __future__ import annotations
 
 import json
+from itertools import islice
 from pathlib import Path
 from typing import Any
 
@@ -36,7 +37,12 @@ import typer
 # reads the same vulnerability_ids-keyed entries. Aliased to the historical private
 # names so behavior and existing test hooks stay byte-identical.
 from oss_policy_kit.application import vuln_waivers as _vuln_waivers_mod
-from oss_policy_kit.application.input_limits import MAX_SARIF_BYTES, oversize_reason
+from oss_policy_kit.application.input_limits import (
+    MAX_SARIF_BYTES,
+    bad_input_detail,
+    oversize_reason,
+    too_deep_reason,
+)
 from oss_policy_kit.application.vuln_waivers import (
     CDX_JUSTIFICATIONS as _CDX_JUSTIFICATIONS,
 )
@@ -46,7 +52,7 @@ from oss_policy_kit.application.vuln_waivers import (
 from oss_policy_kit.application.vuln_waivers import (
     load_vuln_waivers as _load_vuln_waivers,
 )
-from oss_policy_kit.cli.common import app, stderr_console, write_stdout_text
+from oss_policy_kit.cli.common import app, markup_safe, stderr_console, write_stdout_text
 from oss_policy_kit.cli.help_text import CMD_PANEL_EXPORT
 from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
 from oss_policy_kit.domain.models import utc_now
@@ -145,6 +151,78 @@ def _collect_sarif_result_ids(run: dict[str, Any], ids: set[str]) -> None:
                 ids.add(rid.strip())
 
 
+_UTF16_SARIF_REASON = (
+    "Could not read SARIF: file is not valid UTF-8 (looks like UTF-16 or "
+    "binary). Re-encode the SARIF as UTF-8; on Windows PowerShell use "
+    "`osv-scanner ... | Out-File -Encoding utf8 osv-scanner.sarif.json` "
+    "instead of `>` (which writes UTF-16)."
+)
+
+
+def _read_sarif_document(sarif_path: Path) -> tuple[dict[str, Any], str | None]:
+    """Return (parsed SARIF document, error_or_None); ``{}`` whenever an error is returned.
+
+    Every failure an ordinary bad file can produce — oversized, unreadable,
+    wrongly encoded, unparseable, nested past the parser's stack — becomes a
+    message the caller turns into exit 2. None of them is a defect in the kit, so
+    none of them may reach the CLI's exit-3 handler.
+    """
+
+    oversize = oversize_reason(sarif_path, MAX_SARIF_BYTES, label="OSV-Scanner SARIF")
+    if oversize is not None:
+        return {}, oversize
+    try:
+        raw = sarif_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        # bad_input_detail, never str(exc): the OSError repr carries the absolute
+        # filename, which would ship the cwd / home directory / OS account name to
+        # whoever the operator pastes the message to (M-002).
+        return {}, f"Could not read SARIF '{sarif_path.name}': {bad_input_detail(exc)}."
+    except UnicodeDecodeError:
+        # UTF-16/UTF-32/binary input (e.g. Windows PowerShell `>` writes UTF-16).
+        # UnicodeDecodeError is a ValueError, not an OSError, so it would escape to
+        # the exit-3 handler; return a clean validation message instead (exit 2),
+        # mirroring the UTF-8-BOM case which json.loads already reports cleanly.
+        return {}, _UTF16_SARIF_REASON
+    # Depth is checked before parsing, not left to RecursionError: CPython's C JSON
+    # scanner exhausts the interpreter stack on a deeply nested document, and that
+    # RecursionError is a RuntimeError — no `except` here caught it, so it escaped as
+    # an exit-3 "Unexpected error". Shared with every other loader in the kit so one
+    # problem has one explanation (input_limits.MAX_JSON_DEPTH).
+    too_deep = too_deep_reason(raw, label=f"OSV-Scanner SARIF '{sarif_path.name}'")
+    if too_deep is not None:
+        return {}, too_deep
+    try:
+        doc = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        return {}, f"Could not parse SARIF JSON: {exc}"
+    if not isinstance(doc, dict) or "runs" not in doc:
+        return {}, "SARIF missing top-level 'runs' array."
+    if not isinstance(doc.get("runs"), list):
+        return {}, "SARIF 'runs' is not an array."
+    return doc, None
+
+
+def _collect_sarif_data(doc: dict[str, Any]) -> tuple[list[str], dict[str, list[str]]]:
+    """Return (sorted unique vulnerability IDs, ID→advisory_url list) from a parsed SARIF.
+
+    Deliberately tolerant: entries it cannot understand are skipped rather than
+    refused, so a caller that only wants the IDs it *can* read still gets them.
+    The strict gate lives in :func:`_validate_sarif_structure`, which the CLI runs
+    first — tolerance here must never become silent acceptance there.
+    """
+
+    ids: set[str] = set()
+    refs: dict[str, set[str]] = {}
+    runs = doc.get("runs")
+    for run in runs if isinstance(runs, list) else []:
+        if not isinstance(run, dict):
+            continue
+        _collect_sarif_rule_ids(run, ids, refs)
+        _collect_sarif_result_ids(run, ids)
+    return sorted(ids), {rid: sorted(s) for rid, s in refs.items()}
+
+
 def _extract_sarif_data(
     sarif_path: Path,
 ) -> tuple[list[str], dict[str, list[str]], str | None]:
@@ -155,44 +233,124 @@ def _extract_sarif_data(
     We collect both per ID for ``--include-references``.
     """
 
-    oversize = oversize_reason(sarif_path, MAX_SARIF_BYTES, label="OSV-Scanner SARIF")
-    if oversize is not None:
-        return [], {}, oversize
-    try:
-        raw = sarif_path.read_text(encoding="utf-8")
-    except OSError as exc:
-        return [], {}, f"Could not read SARIF: {exc}"
-    except UnicodeDecodeError:
-        # UTF-16/UTF-32/binary input (e.g. Windows PowerShell `>` writes UTF-16).
-        # UnicodeDecodeError is a ValueError, not an OSError, so it would escape to
-        # the exit-3 handler; return a clean validation message instead (exit 2),
-        # mirroring the UTF-8-BOM case which json.loads already reports cleanly.
-        return (
-            [],
-            {},
-            "Could not read SARIF: file is not valid UTF-8 (looks like UTF-16 or "
-            "binary). Re-encode the SARIF as UTF-8; on Windows PowerShell use "
-            "`osv-scanner ... | Out-File -Encoding utf8 osv-scanner.sarif.json` "
-            "instead of `>` (which writes UTF-16).",
-        )
-    try:
-        doc = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        return [], {}, f"Could not parse SARIF JSON: {exc}"
-    if not isinstance(doc, dict) or "runs" not in doc:
-        return [], {}, "SARIF missing top-level 'runs' array."
-    runs = doc.get("runs") or []
+    doc, err = _read_sarif_document(sarif_path)
+    if err is not None:
+        return [], {}, err
+    ids, refs = _collect_sarif_data(doc)
+    return ids, refs, None
+
+
+# --- Structural validation of the INPUT SARIF -------------------------------
+# Parallel to _validate_vex_structure / _validate_openvex_structure, which check the
+# documents this command writes; this one checks the document it reads.
+#
+# Why it exists: `{"runs": [1, 2, 3]}` and `{"runs": [{"results": null}]}` are not
+# SARIF, but the tolerant reader above skipped them silently and emit-vex published
+# an empty VEX document at exit 0 — which a consumer reads as "the manufacturer
+# scanned and has nothing to declare". A malformed scan must fail loudly instead.
+
+#: Cap on the structural messages collected (and shown) for one document. A hostile
+#: 20 MiB SARIF can hold millions of bad entries; naming ten of them is already
+#: enough to fix the file, and collection stops there rather than building a list
+#: proportional to the input.
+_MAX_SARIF_STRUCTURE_ERRORS = 10
+
+
+def _json_type_name(value: Any) -> str:
+    """Name *value*'s JSON type the way the author of the SARIF would recognise it."""
+
+    if isinstance(value, bool):  # bool is an int subclass; check it first
+        return "a boolean"
+    names: dict[type, str] = {
+        type(None): "null",
+        int: "a number",
+        float: "a number",
+        str: "a string",
+        list: "an array",
+        dict: "an object",
+    }
+    return names.get(type(value), "an unsupported value")
+
+
+def _bad_element_errors(prefix: str, items: list[Any], budget: int) -> list[str]:
+    """Up to *budget* messages naming the entries of *items* that are not objects."""
+
+    if budget <= 0:
+        return []
+    bad = (
+        f"{prefix}[{k}] must be an object, not {_json_type_name(item)}"
+        for k, item in enumerate(items)
+        if not isinstance(item, dict)
+    )
+    return list(islice(bad, budget))
+
+
+def _validate_sarif_tool(i: int, run: dict[str, Any], budget: int) -> list[str]:
+    """Structural messages for ``runs[i].tool``.
+
+    An absent ``tool`` / ``driver`` / ``rules`` is accepted (OSV-Scanner always
+    writes them, but a trimmed fixture legitimately may not). A field that is
+    *present* with the wrong JSON type is not: that is a value the reader would
+    silently drop.
+    """
+
+    node: Any = run
+    for field, label in (("tool", f"runs[{i}].tool"), ("driver", f"runs[{i}].tool.driver")):
+        if field not in node:
+            return []
+        node = node[field]
+        if not isinstance(node, dict):
+            return [f"{label} must be an object, not {_json_type_name(node)}"]
+    if "rules" not in node:
+        return []
+    rules = node["rules"]
+    if not isinstance(rules, list):
+        return [f"runs[{i}].tool.driver.rules must be an array, not {_json_type_name(rules)}"]
+    return _bad_element_errors(f"runs[{i}].tool.driver.rules", rules, budget)
+
+
+def _validate_sarif_run(i: int, run: Any, budget: int) -> list[str]:
+    """Structural messages for one ``runs[i]`` entry (empty when it is well formed)."""
+
+    if not isinstance(run, dict):
+        return [f"runs[{i}] must be an object, not {_json_type_name(run)}"]
+    errs = _validate_sarif_tool(i, run, budget)
+    if "results" not in run:
+        return errs
+    results = run["results"]
+    if not isinstance(results, list):
+        # Includes the explicit `"results": null` case: `run.get("results") or []`
+        # read it as "this run found nothing", which is not what the file says.
+        errs.append(f"runs[{i}].results must be an array, not {_json_type_name(results)}")
+        return errs
+    errs.extend(_bad_element_errors(f"runs[{i}].results", results, budget - len(errs)))
+    return errs
+
+
+def _validate_sarif_structure(doc: dict[str, Any], *, limit: int = _MAX_SARIF_STRUCTURE_ERRORS) -> list[str]:
+    """Return up to *limit* structural-validation messages for a parsed SARIF document."""
+
+    runs = doc.get("runs")
     if not isinstance(runs, list):
-        return [], {}, "SARIF 'runs' is not an array."
-    ids: set[str] = set()
-    refs: dict[str, set[str]] = {}
-    for run in runs:
-        if not isinstance(run, dict):
-            continue
-        _collect_sarif_rule_ids(run, ids, refs)
-        _collect_sarif_result_ids(run, ids)
-    refs_sorted = {rid: sorted(s) for rid, s in refs.items()}
-    return sorted(ids), refs_sorted, None
+        return ["'runs' must be an array"]
+    errs: list[str] = []
+    for i, run in enumerate(runs):
+        errs.extend(_validate_sarif_run(i, run, limit - len(errs)))
+        if len(errs) >= limit:
+            return errs[:limit]
+    return errs
+
+
+def _sarif_structure_error(sarif_path: Path, errors: list[str]) -> str:
+    """Render the refusal for a structurally invalid input SARIF (basename only, M-002)."""
+
+    return (
+        f"OSV-Scanner SARIF '{markup_safe(sarif_path.name)}' is not a structurally valid SARIF document:\n  - "
+        + "\n  - ".join(errors)
+        + "\nRefusing to emit a VEX document from it: an empty or partial VEX reads to a "
+        "consumer as 'the manufacturer has nothing to declare'. Re-run "
+        "`osv-scanner --format sarif --recursive .` and keep its output verbatim."
+    )
 
 
 # Backwards-compatible shim retained for callers (and tests) that loaded
@@ -517,6 +675,81 @@ def _write_vex_output(
         )
 
 
+def _explicit_waivers_warning(waivers: Path) -> str | None:
+    """Warn when a user-supplied ``--waivers`` path cannot be a waivers file.
+
+    An absent DEFAULT ``waivers/waivers.yaml`` is an ordinary repository state, so it
+    stays silent. A path the operator typed is different: a one-character typo (or a
+    directory) was indistinguishable from "this project has no waivers", and the
+    command still exited 0 having published a document in which every waived finding
+    silently reverted to ``in_triage`` / ``under_investigation``. Every *other*
+    bad-waivers case already warns; this was the one silent branch.
+
+    The path is echoed exactly as typed and never resolved, so a relative argument
+    cannot become an absolute one that ships the operator's home directory or account
+    name to whoever the message is pasted to (M-002).
+    """
+
+    if waivers.is_file():
+        return None
+    what = "is a directory, not a file" if waivers.is_dir() else "does not exist"
+    # markup_safe: the path is printed inside a Rich markup string, and Rich silently
+    # drops anything shaped like `[tag]` -- the one token the operator has to compare
+    # against what they typed is exactly the token that must survive rendering.
+    return (
+        f"--waivers path '{markup_safe(waivers)}' {what}; no waivers were applied, so every "
+        "finding is emitted as unanalyzed (CycloneDX state 'in_triage' / OpenVEX "
+        "status 'under_investigation'). Check the path for a typo."
+    )
+
+
+def _read_validated_sarif(osv_sarif: Path) -> tuple[list[str], dict[str, list[str]]]:
+    """Read ``--osv-sarif`` and refuse (exit 2) anything that is not a valid SARIF document.
+
+    Structure is checked BEFORE the IDs are collected, because the tolerant reader
+    turns a malformed scan into an empty ID list, and an empty VEX document at exit 0
+    reads to a downstream consumer as a clean bill of health.
+    """
+
+    if not osv_sarif.is_file():
+        raise InvalidInputError(
+            f"OSV-Scanner SARIF not found at {osv_sarif}. Run "
+            "`osv-scanner --format sarif --recursive . > "
+            f"{osv_sarif.as_posix()}` first."
+        )
+    sarif_doc, err = _read_sarif_document(osv_sarif)
+    if err is not None:
+        raise InvalidInputError(err)
+    structure_errors = _validate_sarif_structure(sarif_doc)
+    if structure_errors:
+        raise InvalidInputError(_sarif_structure_error(osv_sarif, structure_errors))
+    return _collect_sarif_data(sarif_doc)
+
+
+def _load_and_report_waivers(waivers: Path, *, explicit: bool) -> dict[str, _VulnWaiver]:
+    """Load vulnerability-keyed waivers, printing every reason none of them applied."""
+
+    path_warning = _explicit_waivers_warning(waivers) if explicit else None
+    if path_warning is not None:
+        # Warned, not refused -- deliberately, and this is the weaker of the two remedies.
+        #
+        # `evaluate` and `correlate-findings` exit 2 for an unusable explicit --waivers,
+        # and this surface publishes its output, so exit 2 is the better end state. It is
+        # not a patch-release change: turning exit 0 into exit 2 breaks anyone who points
+        # --waivers at a path that does not exist as a way of saying "no waivers", and
+        # this repository's own test suite does exactly that in four places, which is as
+        # clear a signal as there is that adopters do too.
+        #
+        # The defect was the SILENCE: a one-character typo flipped every waived finding
+        # back to in_triage with nothing on stdout or stderr. That is fixed here. The exit
+        # code belongs in the next minor, with a note in the migration guide.
+        stderr_console().print(f"[yellow]Waiver warning:[/yellow] {markup_safe(path_warning)}")
+    vuln_waivers, waiver_warnings = _load_vuln_waivers(waivers)
+    for w in waiver_warnings:
+        stderr_console().print(f"[yellow]Waiver warning:[/yellow] {markup_safe(w)}")
+    return vuln_waivers
+
+
 def _run_emit_vex(
     osv_sarif: Path,
     output: Path | None,
@@ -526,25 +759,20 @@ def _run_emit_vex(
     include_references: bool,
     output_format: str = "cyclonedx",
     product: str | None = None,
+    waivers_explicit: bool = False,
 ) -> None:
-    """Core emit-vex flow shared by the Typer command (raises OssPolicyKitError on bad input)."""
+    """Core emit-vex flow shared by the Typer command (raises OssPolicyKitError on bad input).
+
+    ``waivers_explicit`` says the operator typed ``--waivers`` rather than falling back
+    to the default location; it is what makes a missing file worth a warning.
+    """
 
     if output_format not in _SUPPORTED_VEX_FORMATS:
         raise InvalidInputError(
             f"Unknown --format {output_format!r}; expected one of {sorted(_SUPPORTED_VEX_FORMATS)}."
         )
-    if not osv_sarif.is_file():
-        raise InvalidInputError(
-            f"OSV-Scanner SARIF not found at {osv_sarif}. Run "
-            "`osv-scanner --format sarif --recursive . > "
-            f"{osv_sarif.as_posix()}` first."
-        )
-    vuln_ids, refs, err = _extract_sarif_data(osv_sarif)
-    if err is not None:
-        raise InvalidInputError(err)
-    vuln_waivers, waiver_warnings = _load_vuln_waivers(waivers)
-    for w in waiver_warnings:
-        stderr_console().print(f"[yellow]Waiver warning:[/yellow] {w}")
+    vuln_ids, refs = _read_validated_sarif(osv_sarif)
+    vuln_waivers = _load_and_report_waivers(waivers, explicit=waivers_explicit)
     refs_arg = refs if include_references else None
 
     if output_format == "openvex":
@@ -577,8 +805,26 @@ def _run_emit_vex(
         _write_vex_output(payload, output, vuln_ids, vuln_waivers, doc_label=doc_label)
 
 
+def _flag_was_provided(ctx: typer.Context, name: str) -> bool:
+    """Return True when the operator passed CLI option *name* (not the typer default).
+
+    Twin of ``cli.evaluate._flag_was_provided``; kept local because importing that
+    module here would register its commands ahead of this one and reorder ``--help``.
+    Compared by enum ``name`` rather than by importing ``ParameterSource``: Typer
+    vendors its own Click, so the class imported from top-level ``click`` can be a
+    different object than the one the runtime returns.
+    """
+
+    try:
+        source = ctx.get_parameter_source(name)
+    except Exception:  # noqa: BLE001 - provenance is best-effort; never crash the CLI
+        return False
+    return source is not None and getattr(source, "name", "") != "DEFAULT"
+
+
 @app.command("emit-vex", rich_help_panel=CMD_PANEL_EXPORT)
 def emit_vex_cmd(
+    ctx: typer.Context,
     osv_sarif: Path = typer.Option(
         _DEFAULT_OSV_SARIF,
         "--osv-sarif",
@@ -655,12 +901,13 @@ def emit_vex_cmd(
             include_references=include_references,
             output_format=output_format,
             product=product,
+            waivers_explicit=_flag_was_provided(ctx, "waivers"),
         )
     except OssPolicyKitError as exc:
-        stderr_console().print(f"[red]Error:[/red] {exc.message}")
+        stderr_console().print(f"[red]Error:[/red] {markup_safe(exc.message)}")
         raise typer.Exit(code=2) from exc
     except typer.Exit:
         raise
     except Exception as exc:  # noqa: BLE001
-        stderr_console().print(f"[red]Unexpected error:[/red] {exc}")
+        stderr_console().print(f"[red]Unexpected error:[/red] {markup_safe(exc)}")
         raise typer.Exit(code=3) from exc

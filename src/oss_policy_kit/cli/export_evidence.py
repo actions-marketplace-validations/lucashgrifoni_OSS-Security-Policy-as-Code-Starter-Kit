@@ -39,7 +39,12 @@ from typing import Any
 
 import typer
 
-from oss_policy_kit.cli.common import app, stderr_console, write_stdout_text
+from oss_policy_kit.application.input_limits import (
+    BAD_INPUT_ERRORS,
+    bad_input_reason,
+    too_deep_reason,
+)
+from oss_policy_kit.cli.common import app, markup_safe, stderr_console, write_stdout_text
 from oss_policy_kit.cli.help_text import CMD_PANEL_EXPORT
 from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
 from oss_policy_kit.domain.models import utc_now
@@ -208,10 +213,26 @@ def _read_report(path: Path) -> dict[str, Any]:
             f"Evaluation report {label} is empty. Re-run "
             "`oss-policy-kit evaluate --target <repo>` to produce a report with results."
         )
+    # A hostile document is bad input, not a defect in the kit, so it must exit 2 with
+    # the same wording every other reader in the kit uses -- never the exit 3 the
+    # contract reserves for a crash. Depth is checked *before* parsing, not left to
+    # RecursionError: CPython's C JSON scanner blows its stack around 3000 levels on
+    # Windows' 1 MB stack and parses the same document happily on Linux' 8 MB one, so
+    # an exception-only guard is no guard at all (see input_limits.MAX_JSON_DEPTH).
+    too_deep = too_deep_reason(raw, label=f"Evaluation report {label}")
+    if too_deep is not None:
+        raise InvalidInputError(too_deep)
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise InvalidInputError(f"Failed to parse {label}: {exc}") from exc
+    except BAD_INPUT_ERRORS as exc:
+        # Everything else an ordinary bad file throws while being parsed: an integer
+        # literal past CPython's 4300-digit conversion limit (whose own message tells
+        # the user to call sys.set_int_max_str_digits(), advice about the interpreter
+        # rather than about the file), or a RecursionError backstop. ``bad_input_reason``
+        # names the basename only (M-002) and speaks the kit's one error vocabulary.
+        raise InvalidInputError(bad_input_reason(exc, label="Evaluation report", name=label)) from exc
     if not isinstance(parsed, dict):
         raise InvalidInputError(
             f"Evaluation report {label} must be a JSON object, got {type(parsed).__name__}. "
@@ -290,17 +311,59 @@ def _render_chainloop(report: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-# reports/2.0 state (normalized upper-case, hyphens -> underscores) -> SARIF level.
-# FAIL and MANUAL_REVIEW_REQUIRED are actionable (error/warning); everything else is a note.
+# reports/2.0 state (normalized upper-case, hyphens -> underscores) -> SARIF level, for
+# the states that become a SARIF *result*. Anything a human must look at is a result;
+# see _sarif_result_level for the (larger) set that produces no result at all.
 _SARIF_LEVEL_MAP: dict[str, str] = {
     "FAIL": "error",
     "MANUAL_REVIEW_REQUIRED": "warning",
 }
 
+#: reports/2.0 states that are not findings: the control held, was attested, or does
+#: not apply to this target. Emitting them as SARIF results is what turned a 14/14
+#: PASS repository into 14 code-scanning alerts.
+_SARIF_NON_FINDING_STATES: frozenset[str] = frozenset({"PASS", "ATTESTED", "SELF_ATTESTED", "NOT_APPLICABLE"})
 
-def _sarif_level(state: str) -> str:
-    """Map a normalized control state to a SARIF result level (default ``note``)."""
-    return _SARIF_LEVEL_MAP.get(state, "note")
+#: reports/2.0 ``reason`` discriminators under state ``UNKNOWN`` that are not findings
+#: either: somebody already decided not to act on this control. Every other UNKNOWN
+#: (manual-review-required, evaluator-error, or an unqualified one) still needs a human,
+#: so it stays a warning-level result rather than disappearing.
+_SARIF_SILENT_UNKNOWN_REASONS: frozenset[str] = frozenset({"waived", "skipped-by-flag"})
+
+#: Recorded in the SARIF run's ``properties`` so the omission is documented in the
+#: artifact itself rather than being a silent difference between two exports.
+_SARIF_RESULTS_POLICY = (
+    "Only controls that need human action are emitted as SARIF results (fail -> error, "
+    "needs-review -> warning), matching `evaluate --sarif-output`. Passing, attested, "
+    "not-applicable, waived and skipped controls are listed in tool.driver.rules but "
+    "produce no result: a SARIF result is an alert to its consumer (SARIF 2.1.0 3.27.9 "
+    "defaults result.kind to 'fail', and GitHub code scanning does not implement kind), "
+    "so emitting them opens an alert per passing control. The full per-control record is "
+    "what the spdx, oscal, gemara, in-toto-bundle and chainloop formats carry."
+)
+
+
+def _control_state(control: dict[str, Any]) -> str:
+    """Normalized reports/2.0 state of *control* (upper-case, hyphens -> underscores)."""
+    return str(control.get("state") or "unknown").strip().upper().replace("-", "_")
+
+
+def _sarif_result_level(control: dict[str, Any]) -> str | None:
+    """SARIF level for a control that must become a result, or ``None`` to omit it.
+
+    ``None`` is the whole point of this function: a SARIF result is a finding, and every
+    consumer of the format -- GitHub code scanning above all -- turns one into an alert.
+    A control that passed is not a finding, so it must not be a result.
+    """
+    state = _control_state(control)
+    if state in _SARIF_NON_FINDING_STATES:
+        return None
+    if state == "UNKNOWN":
+        reason = str(control.get("reason") or "").strip().lower().replace("_", "-")
+        return None if reason in _SARIF_SILENT_UNKNOWN_REASONS else "warning"
+    # FAIL -> error, MANUAL_REVIEW_REQUIRED -> warning, and an unrecognized state stays
+    # visible as a warning rather than being silently dropped.
+    return _SARIF_LEVEL_MAP.get(state, "warning")
 
 
 def _render_sarif(report: dict[str, Any]) -> dict[str, Any]:
@@ -310,6 +373,12 @@ def _render_sarif(report: dict[str, Any]) -> dict[str, Any]:
     For exports, we synthesize a minimal SARIF run if no SARIF is already
     in the report, so the registry is honest about always producing the
     requested format.
+
+    The synthesized run reports **findings only**, exactly as ``evaluate
+    --sarif-output`` does. Every evaluated control is still catalogued under
+    ``tool.driver.rules`` and the omission is counted in the run's ``properties``, so
+    nothing about *which* controls ran is lost -- but a control that passed no longer
+    arrives at a SARIF consumer as an alert. See :data:`_SARIF_RESULTS_POLICY`.
     """
     runs = report.get("sarif_runs") if isinstance(report.get("sarif_runs"), list) else None
     if runs:
@@ -322,23 +391,31 @@ def _render_sarif(report: dict[str, Any]) -> dict[str, Any]:
     results = []
     rule_ids: list[str] = []
     seen_rules: set[str] = set()
+    omitted_by_state: dict[str, int] = {}
     for c in report.get("controls", []) or []:
         if not isinstance(c, dict):
             continue
-        state = str(c.get("state") or "unknown").strip().upper().replace("-", "_")
-        level = _sarif_level(state)
         rule_id = str(c.get("id", "UNKNOWN"))
-        text = c.get("message") or ""
-        results.append(
-            {
-                "ruleId": rule_id,
-                "level": level,
-                "message": {"text": str(text)},
-            }
-        )
+        # The rule catalog covers every evaluated control, findings or not: a rule
+        # advertises what the tool checked, while a result asserts something is wrong.
         if rule_id not in seen_rules:
             seen_rules.add(rule_id)
             rule_ids.append(rule_id)
+        level = _sarif_result_level(c)
+        if level is None:
+            state = _control_state(c)
+            omitted_by_state[state] = omitted_by_state.get(state, 0) + 1
+            continue
+        results.append(
+            {
+                "ruleId": rule_id,
+                # Explicit even though "fail" is the SARIF default: it states that
+                # everything emitted here is a finding, and everything absent is not.
+                "kind": "fail",
+                "level": level,
+                "message": {"text": str(c.get("message") or "")},
+            }
+        )
     return {
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
         "version": "2.1.0",
@@ -352,6 +429,12 @@ def _render_sarif(report: dict[str, Any]) -> dict[str, Any]:
                     }
                 },
                 "results": results,
+                "properties": {
+                    "kit_non_finding_controls_omitted": sum(omitted_by_state.values()),
+                    # Sorted so two renders of one report stay byte-identical.
+                    "kit_non_finding_states": dict(sorted(omitted_by_state.items())),
+                    "kit_results_policy": _SARIF_RESULTS_POLICY,
+                },
             }
         ],
     }
@@ -841,12 +924,12 @@ def export_evidence_cmd(
     try:
         _run_export_evidence(target, fmt, output, report, validate)
     except OssPolicyKitError as exc:
-        stderr_console().print(f"[red]Error:[/red] {exc.message}")
+        stderr_console().print(f"[red]Error:[/red] {markup_safe(exc.message)}")
         raise typer.Exit(code=2) from exc
     except typer.Exit:
         raise
     except Exception as exc:  # noqa: BLE001 - last-resort user message, no traceback leak
-        stderr_console().print(f"[red]Unexpected error:[/red] {exc}")
+        stderr_console().print(f"[red]Unexpected error:[/red] {markup_safe(exc)}")
         raise typer.Exit(code=3) from exc
 
 
