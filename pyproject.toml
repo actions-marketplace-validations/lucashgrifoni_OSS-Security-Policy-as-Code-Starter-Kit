@@ -79,8 +79,14 @@ where = ["src"]
 # `py.typed` (PEP 561) must ship too: the package exposes a typed extension contract
 # (`domain/plugin_contract.py`, the `oss_policy_kit.evaluators` entry-point group), and
 # without this marker a plugin author's type checker treats the whole package as untyped.
+#
+# `data/**/*.yml` is NOT redundant with `*.yaml`: the workflow templates `init
+# --with-workflow` writes are `.yml`, and leaving that extension out shipped a wheel
+# with no templates at all. The documented quickstart then exited 2 with "Workflow
+# template not found" on every install, while the test suite stayed green because it
+# runs from the repo root, where the source-tree fallback exists.
 [tool.setuptools.package-data]
-oss_policy_kit = ["py.typed", "data/**/*.yaml", "data/**/*.json"]
+oss_policy_kit = ["py.typed", "data/**/*.yaml", "data/**/*.yml", "data/**/*.json"]
 
 [tool.setuptools.exclude-package-data]
 oss_policy_kit = [

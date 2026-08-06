@@ -1,0 +1,54 @@
+# OSS Security Policy as Code Starter Kit — CI Check Template
+# Copy this file to .github/workflows/oss-policy-check.yml in your repository.
+# Customize --profile and --fail-on to match your desired strictness.
+#
+# Actions are pinned to immutable commit SHAs (release tag in the trailing
+# comment) because `CI-PIN-008` in the profile this job runs requires it —
+# a tag pin would make this template fail the baseline it evaluates.
+name: OSS Policy Check
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  oss-policy-check:
+    name: Evaluate OSS security baseline
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Install oss-policy-kit
+        run: pip install oss-policy-kit
+
+      - name: Evaluate OSS policy baseline
+        run: |
+          python -m oss_policy_kit evaluate \
+            --target . \
+            --profile github-level-1 \
+            --fail-on fail \
+            --output-dir ./oss-policy-reports
+        continue-on-error: false
+
+      - name: Upload policy reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: oss-policy-reports
+          path: ./oss-policy-reports/
+          retention-days: 30

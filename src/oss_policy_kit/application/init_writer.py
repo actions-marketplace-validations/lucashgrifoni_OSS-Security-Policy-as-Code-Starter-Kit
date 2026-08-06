@@ -259,6 +259,16 @@ def execute_init_plan(plan: InitPlan) -> InitOutcome:
         outcome.next_steps = _build_next_steps(plan)
         return outcome
 
+    # Resolve the workflow template BEFORE writing anything. It is the only step that can
+    # fail on something the caller cannot see coming -- the template ships with the
+    # package, so its absence is a packaging fault, not bad input -- and it used to fail
+    # last, after the config and seven evidence files were already on disk. The adopter
+    # was left with a half-initialised repository and an error about a file they never
+    # named. Resolving first makes `init` all-or-nothing for that failure.
+    workflow_body: str | None = None
+    if plan.write_workflow:
+        _, workflow_body = _resolve_workflow_template(plan.workflow_filename)
+
     if plan.write_config:
         _write_text_idempotent(
             path=config_path,
@@ -288,11 +298,11 @@ def execute_init_plan(plan: InitPlan) -> InitOutcome:
         outcome.overwritten.extend(_reported_path(p, plan.target) for p in scaffold.overwritten)
 
     if plan.write_workflow:
-        _, body = _resolve_workflow_template(plan.workflow_filename)
+        assert workflow_body is not None  # resolved above, before any write
         _write_text_idempotent(
             path=workflow_path,
             root=plan.target,
-            body=body,
+            body=workflow_body,
             force=plan.force,
             outcome=outcome,
         )
