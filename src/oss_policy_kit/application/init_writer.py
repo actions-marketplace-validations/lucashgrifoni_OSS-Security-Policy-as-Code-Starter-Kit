@@ -54,8 +54,16 @@ _WORKFLOW_SOURCE_BY_DEST: dict[str, str] = {
 class InitOutcome:
     """Summary of every filesystem action the writer took.
 
-    Each list contains absolute :class:`Path` objects so the renderer can
-    print stable, copy/paste-friendly locations regardless of CWD.
+    Each list holds paths **relative to the init target** (M-002). They used to be
+    absolute, which meant ``init --target .`` answered a relative argument with a dozen
+    fully-qualified paths -- home directory, account name and all -- in ``--format
+    json``, the output most likely to be pasted into a PR, a CI log, or an issue.
+    ``evaluate`` already answers relative, and these paths are more useful relative
+    anyway: ``.github/workflows/oss-policy-check.yml`` is what the adopter commits,
+    whatever machine ran ``init``.
+
+    The target itself is printed alongside the list by the renderer, so nothing about
+    which directory was touched is lost.
     """
 
     created: list[Path] = field(default_factory=list)
@@ -178,21 +186,36 @@ def _resolve_workflow_template(dest_filename: str) -> tuple[str, str]:
     )
 
 
-def _record_dry_run_action(path: Path, force: bool, outcome: InitOutcome) -> None:
+def _reported_path(path: Path, root: Path) -> Path:
+    """Render an artifact path the way the outcome reports it: relative to *root* (M-002).
+
+    A path that somehow lands outside the target degrades to its bare name rather than
+    to the absolute path: the point of the relativization is that no host directory or
+    OS account name reaches stdout, and the fallback has to hold that line too.
+    """
+
+    try:
+        return path.resolve().relative_to(root.resolve())
+    except (OSError, ValueError):
+        return Path(path.name)
+
+
+def _record_dry_run_action(path: Path, root: Path, force: bool, outcome: InitOutcome) -> None:
     """Append ``path`` to the matching outcome bucket for a dry-run."""
 
-    resolved = path.resolve()
+    reported = _reported_path(path, root)
     if not path.exists():
-        outcome.created.append(resolved)
+        outcome.created.append(reported)
     elif force:
-        outcome.overwritten.append(resolved)
+        outcome.overwritten.append(reported)
     else:
-        outcome.skipped.append(resolved)
+        outcome.skipped.append(reported)
 
 
 def _write_text_idempotent(
     *,
     path: Path,
+    root: Path,
     body: str,
     force: bool,
     outcome: InitOutcome,
@@ -200,17 +223,18 @@ def _write_text_idempotent(
     """Write ``body`` to ``path`` honoring ``force``; updates ``outcome``."""
 
     path.parent.mkdir(parents=True, exist_ok=True)
+    reported = _reported_path(path, root)
     if path.exists() and not force:
-        outcome.skipped.append(path.resolve())
+        outcome.skipped.append(reported)
         return
     existed = path.exists()
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(body, encoding="utf-8")
     tmp.replace(path)
     if existed:
-        outcome.overwritten.append(path.resolve())
+        outcome.overwritten.append(reported)
     else:
-        outcome.created.append(path.resolve())
+        outcome.created.append(reported)
 
 
 def execute_init_plan(plan: InitPlan) -> InitOutcome:
@@ -225,19 +249,20 @@ def execute_init_plan(plan: InitPlan) -> InitOutcome:
 
     if plan.dry_run:
         if plan.write_config:
-            _record_dry_run_action(config_path, plan.force, outcome)
+            _record_dry_run_action(config_path, plan.target, plan.force, outcome)
         if plan.write_waivers:
-            _record_dry_run_action(waivers_path, plan.force, outcome)
+            _record_dry_run_action(waivers_path, plan.target, plan.force, outcome)
         if plan.scaffold_evidence:
-            outcome.created.append(evidence_dir.resolve())
+            outcome.created.append(_reported_path(evidence_dir, plan.target))
         if plan.write_workflow:
-            _record_dry_run_action(workflow_path, plan.force, outcome)
+            _record_dry_run_action(workflow_path, plan.target, plan.force, outcome)
         outcome.next_steps = _build_next_steps(plan)
         return outcome
 
     if plan.write_config:
         _write_text_idempotent(
             path=config_path,
+            root=plan.target,
             body=_render_config_yaml(plan),
             force=plan.force,
             outcome=outcome,
@@ -246,6 +271,7 @@ def execute_init_plan(plan: InitPlan) -> InitOutcome:
     if plan.write_waivers:
         _write_text_idempotent(
             path=waivers_path,
+            root=plan.target,
             body=_render_waivers_stub(),
             force=plan.force,
             outcome=outcome,
@@ -253,15 +279,19 @@ def execute_init_plan(plan: InitPlan) -> InitOutcome:
 
     if plan.scaffold_evidence and plan.platform in EVIDENCE_PLATFORMS:
         scaffold = scaffold_evidence_files(plan.target, plan.platform, force=plan.force)
+        # ``scaffold_evidence_files`` reports absolute paths to its own CLI command; they
+        # are relativized here rather than there so ``scaffold-evidence``'s own output
+        # contract is untouched by this change.
         outcome.evidence_outcome = scaffold
-        outcome.created.extend(scaffold.created)
-        outcome.skipped.extend(scaffold.skipped)
-        outcome.overwritten.extend(scaffold.overwritten)
+        outcome.created.extend(_reported_path(p, plan.target) for p in scaffold.created)
+        outcome.skipped.extend(_reported_path(p, plan.target) for p in scaffold.skipped)
+        outcome.overwritten.extend(_reported_path(p, plan.target) for p in scaffold.overwritten)
 
     if plan.write_workflow:
         _, body = _resolve_workflow_template(plan.workflow_filename)
         _write_text_idempotent(
             path=workflow_path,
+            root=plan.target,
             body=body,
             force=plan.force,
             outcome=outcome,

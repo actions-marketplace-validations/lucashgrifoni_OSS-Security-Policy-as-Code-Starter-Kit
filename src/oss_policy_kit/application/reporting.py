@@ -5,7 +5,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import time
 import uuid
+from collections.abc import Callable, Sequence
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -42,6 +44,77 @@ REPORTS_V2_STATUS_MAP: dict[str, tuple[str, str | None]] = {
 # a portable rule keeps the shrink branch reachable on every platform's test run.
 _MAX_TEMP_PATH = 259
 
+# Windows refuses a rename onto a destination another process is renaming onto at the
+# same instant -- and a create over a name whose previous file is still delete-pending --
+# with ERROR_ACCESS_DENIED (5) or ERROR_SHARING_VIOLATION (32). Neither describes the
+# caller's rights; both clear as soon as the other handle closes.
+_SHARING_CONFLICT_WINERRORS = frozenset({5, 32})
+
+# Retry budget for exactly those conflicts: six waits, ~0.3s in total, then one final
+# attempt. Eight concurrent `evaluate` runs sharing one ``--output-dir`` failed ~6% of
+# their report writes without it (measured cross-process; ~19% with in-process threads),
+# every failure an ``os.replace`` that would have succeeded a millisecond later.
+#
+# A retry must not launder a real denial, and it does not: a read-only output directory
+# or an ACL that forbids writing fails every attempt, and the LAST attempt is made
+# outside the loop so its own exception -- same type, same errno, same message -- is what
+# reaches the caller. All the retry costs that case is a third of a second.
+_CONTENTION_RETRY_DELAYS: tuple[float, ...] = (0.005, 0.01, 0.02, 0.04, 0.08, 0.16)
+
+
+def _is_sharing_conflict(exc: OSError) -> bool:
+    """True when *exc* is another process holding the file, not a standing denial.
+
+    Deliberately not ``os.name``-gated, like the temp-path budget above: on POSIX
+    ``winerror`` is ``None`` and the test falls back to ``PermissionError``, which keeps
+    the retry branch reachable in every platform's test run. POSIX ``rename`` is atomic
+    against a concurrent rename, so that fallback only ever meets a genuine ``EACCES``,
+    and a genuine ``EACCES`` still surfaces -- just after the bounded backoff.
+    """
+
+    winerror = getattr(exc, "winerror", None)
+    if winerror is not None:
+        return winerror in _SHARING_CONFLICT_WINERRORS
+    return isinstance(exc, PermissionError)
+
+
+def _retry_on_sharing_conflict(operation: Callable[[], None]) -> None:
+    """Run *operation*, re-running it only while a sharing conflict is what fails it.
+
+    Any other ``OSError`` -- no such directory, no space, a name too long for the
+    filesystem -- is raised on the first attempt, so a caller that reads the error to
+    decide what to do next still sees it immediately.
+    """
+
+    for delay in _CONTENTION_RETRY_DELAYS:
+        try:
+            operation()
+            return
+        except OSError as exc:
+            if not _is_sharing_conflict(exc):
+                raise
+            time.sleep(delay)
+    operation()
+
+
+def _create_temp_exclusive(tmp: Path, text: str) -> None:
+    """Exclusively create *tmp* and write *text*, leaving nothing behind on failure."""
+
+    try:
+        with tmp.open("x", encoding="utf-8") as handle:
+            handle.write(text)
+    except FileExistsError:
+        # Either a token collision or something planted at the temp path. Both are
+        # reasons to stop, never to write the destination by another route -- and never
+        # to retry, because that name will not free itself.
+        raise
+    except OSError:
+        # A write that got partway leaves the temp file behind, and the next attempt
+        # would then collide with its own leftovers. Clean up before letting the error
+        # out, whether it is about to be retried or reported.
+        tmp.unlink(missing_ok=True)
+        raise
+
 
 def _atomic_write_text(path: Path, text: str) -> None:
     """Publish ``text`` at ``path`` through a sibling temp file and a single rename.
@@ -65,6 +138,16 @@ def _atomic_write_text(path: Path, text: str) -> None:
     token when the descriptive form would overrun, and a destination that still has
     no room for any sibling falls back to writing in place: no path that could be
     written before this function existed loses the ability to be written now.
+
+    Neither step is retried by the operating system. Two evaluations sharing one
+    ``--output-dir`` both rename onto ``evaluation-report.json``, and on Windows the
+    loser of that instant gets ERROR_ACCESS_DENIED -- an error about a handle held for a
+    millisecond, reported to the adopter as "Cannot write to --output-dir". So both steps
+    go through :func:`_retry_on_sharing_conflict`, which re-runs them for the sharing
+    conflicts alone and lets every other error out on the first attempt. In particular
+    the in-place fallback below stays reserved for the path-length case it was written
+    for: a transient conflict is retried, never quietly downgraded to a non-atomic write
+    that could interleave with the very process it was contending with.
     """
 
     token = uuid.uuid4().hex[:8]
@@ -76,16 +159,14 @@ def _atomic_write_text(path: Path, text: str) -> None:
         # The check is not gated on Windows so the branch is exercised everywhere.
         tmp = path.with_name(f".{token}.tmp")
     try:
-        with tmp.open("x", encoding="utf-8") as handle:
-            handle.write(text)
+        _retry_on_sharing_conflict(lambda: _create_temp_exclusive(tmp, text))
     except FileExistsError:
-        # Either a token collision or something planted at the temp path. Both are
-        # reasons to stop, never to write the destination by another route.
+        # Load-bearing despite looking like a no-op: ``FileExistsError`` is an
+        # ``OSError``, so without this clause a blocked temp name would fall into the
+        # path-length fallback below and write the destination in place -- the exact
+        # bypass the exclusive create exists to refuse.
         raise
     except OSError:
-        # A write that got partway leaves the temp file behind; clean up before
-        # deciding what to do about the error.
-        tmp.unlink(missing_ok=True)
         if len(str(tmp)) <= len(str(path)):
             raise
         # The temp path is the longer one, so a failure here can be the extra
@@ -98,7 +179,7 @@ def _atomic_write_text(path: Path, text: str) -> None:
         tmp.unlink(missing_ok=True)
         raise
     try:
-        os.replace(tmp, path)
+        _retry_on_sharing_conflict(lambda: os.replace(tmp, path))
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
@@ -373,8 +454,53 @@ def compute_priority_insights(report: ExecutionReport) -> dict[str, Any]:
     }
 
 
-def _result_to_dict_v2_0(r: ControlResult) -> dict[str, Any]:
+def _take_matching_source(remaining: list[str], ref: dict[str, Any]) -> str | None:
+    """Pop the first source in *remaining* that classifies to *ref*, or return ``None``.
+
+    Consuming the list as it matches keeps two identical references (the same file cited
+    by two controls' worth of sources) mapped to distinct entries in order.
+    """
+
+    for index, source in enumerate(remaining):
+        if classify_reference(source) == ref:
+            del remaining[: index + 1]
+            return source
+    return None
+
+
+def _references_with_raw_sources(evidence: dict[str, Any], sources: Sequence[str]) -> dict[str, Any]:
+    """Undo the evidence-reference redaction for ``--include-absolute-path``.
+
+    The Markdown report has always restored the raw evidence path under that flag while
+    the JSON kept ``<redacted-absolute>/...``, so one flag exposed two different amounts
+    depending on which file the reader opened. The JSON now matches the Markdown; the
+    default -- no flag -- still redacts in both, which is the case M-002 is about.
+
+    Each projected reference is mapped back to the source that produced it by re-running
+    :func:`classify_reference`, rather than by re-deriving which sources survived
+    ``project_evidence``'s placeholder filter: a second copy of that rule would drift
+    from the first one and silently mis-pair references with paths.
+    """
+
+    references = evidence.get("references")
+    if not isinstance(references, list) or not references:
+        return evidence
+    remaining = list(sources)
+    restored: list[Any] = []
+    for ref in references:
+        if not isinstance(ref, dict) or not ref.get("redacted"):
+            restored.append(ref)
+            continue
+        raw = _take_matching_source(remaining, ref)
+        restored.append(ref if raw is None else {**ref, "value": raw, "redacted": False})
+    return {**evidence, "references": restored}
+
+
+def _result_to_dict_v2_0(r: ControlResult, *, include_absolute_path: bool = False) -> dict[str, Any]:
     state, reason = _map_status_to_reports_v2(r.status.value)
+    evidence = project_evidence(r)
+    if include_absolute_path:
+        evidence = _references_with_raw_sources(evidence, r.evidence_sources)
     payload: dict[str, Any] = {
         "id": r.control_id,
         "title": r.title,
@@ -387,7 +513,7 @@ def _result_to_dict_v2_0(r: ControlResult) -> dict[str, Any]:
         "weight": r.weight,
         "message": r.reason,
         "remediation": r.remediation,
-        "evidence": project_evidence(r),
+        "evidence": evidence,
         "owner": r.owner,
         "expires_at": r.expires_at.isoformat() if r.expires_at else None,
         "waiver": None,
@@ -445,7 +571,7 @@ def report_to_dict_v2_0(
             "percent": report.weighted_score.percent,
         }
 
-    controls = [_result_to_dict_v2_0(r) for r in report.results]
+    controls = [_result_to_dict_v2_0(r, include_absolute_path=include_absolute_path) for r in report.results]
     return {
         "schema_version": REPORT_JSON_SCHEMA_URL_V2_0,
         "contract_version": "reports/2.0",
@@ -502,8 +628,11 @@ def report_to_dict(
     for signature compatibility but no longer selects a legacy shape (contract validation now
     happens upstream in :func:`engine.report_json_schema_url`).
 
-    ``include_absolute_path`` controls whether ``target_path`` in the payload is sanitized to a
-    basename (default, privacy-by-default) or kept as the full absolute path.
+    ``include_absolute_path`` controls whether the host paths in the payload -- ``target_path``,
+    the scorecard and external-waiver paths, and the per-control evidence references -- are
+    sanitized (default, privacy-by-default) or kept whole. It governs exactly the same set of
+    fields the Markdown report exposes under the same flag, so the two files never disclose
+    different amounts about the same run.
     """
 
     return report_to_dict_v2_0(report, include_absolute_path=include_absolute_path, extensions=extensions)
@@ -682,8 +811,10 @@ def _md_evidence_display(source: str, *, include_absolute_path: bool) -> str:
     applies (:func:`classify_reference` -> ``<redacted-absolute>/...``) so a
     shareable ``.md`` never leaks an absolute path / username that the JSON path
     already scrubs. URLs and already-relative repo paths pass through unchanged.
-    When ``include_absolute_path`` is True the raw source is preserved, matching
-    the JSON path's opt-in behavior.
+    When ``include_absolute_path`` is True the raw source is preserved; the JSON
+    report restores the same references under the same flag
+    (:func:`_references_with_raw_sources`), so neither format shows more than the
+    other.
     """
 
     if include_absolute_path:
@@ -731,9 +862,9 @@ def write_reports(
 ) -> tuple[Path, Path]:
     """Write JSON and Markdown reports; return paths.
 
-    ``include_absolute_path`` is forwarded to both writers so the on-disk
-    payload either sanitizes ``target_path`` (default, privacy-by-default) or
-    keeps the full absolute path the operator passed in.
+    ``include_absolute_path`` is forwarded to both writers, and both honour it over the
+    same set of host paths -- the target, the scorecard and waiver files, and every
+    evidence reference. Default is privacy-by-default: sanitized in both files.
     """
 
     json_path = output_dir / "evaluation-report.json"
