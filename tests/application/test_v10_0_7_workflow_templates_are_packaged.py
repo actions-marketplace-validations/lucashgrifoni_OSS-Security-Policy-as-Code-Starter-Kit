@@ -61,13 +61,28 @@ def test_template_resolves_with_no_repository_on_disk(
     assert "oss-policy-kit" in body
 
 
+def _text_without_eol(path: Path) -> list[str]:
+    """Return the file's lines with the line terminator discarded.
+
+    Content equality is the property these copies must hold; the byte used to end a line
+    is not part of it. Comparing raw bytes made the verdict depend on the checkout instead:
+    `.gitattributes` declares `*.yml text eol=lf` and both blobs are LF in the repository,
+    but a Windows working tree carried over from an older checkout keeps CRLF in
+    `templates/workflows/` while `src/` holds LF. The assertion then failed on every local
+    run and passed in CI, where the clone is fresh -- the same environment-dependent verdict
+    this suite keeps having to remove.
+    """
+
+    return path.read_text(encoding="utf-8").splitlines()
+
+
 @pytest.mark.parametrize("dest", sorted(_WORKFLOW_SOURCE_BY_DEST))
 def test_packaged_copy_matches_the_adopter_facing_copy(dest: str) -> None:
     """The two copies must not drift.
 
     `templates/workflows/` stays at the repository root because eight documents link to
     it and adopters read it on GitHub; the packaged copy under `src/` is what ships. Two
-    files, one meaning -- so this compares them byte for byte rather than trusting that
+    files, one meaning -- so this compares them line for line rather than trusting that
     whoever edits one remembers the other.
     """
 
@@ -77,9 +92,27 @@ def test_packaged_copy_matches_the_adopter_facing_copy(dest: str) -> None:
 
     assert packaged.is_file(), f"{source} is missing from the packaged templates"
     assert adopter_facing.is_file(), f"{source} is missing from templates/workflows/"
-    assert packaged.read_bytes() == adopter_facing.read_bytes(), (
+    assert _text_without_eol(packaged) == _text_without_eol(adopter_facing), (
         f"{source} differs between the packaged copy and templates/workflows/ -- "
         "edit both, or the wheel ships something the documentation does not describe"
+    )
+
+
+@pytest.mark.parametrize("dest", sorted(_WORKFLOW_SOURCE_BY_DEST))
+def test_packaged_template_has_no_carriage_returns(dest: str) -> None:
+    """The shipped copy is LF, whatever the working tree looks like.
+
+    Dropping the terminator above answers "did the content drift"; it cannot answer "does
+    the wheel ship CRLF". That second question still matters -- the templates land in a
+    consumer's `.github/workflows/` -- so it gets its own assertion against the packaged
+    copy alone, which is the file that actually ships.
+    """
+
+    packaged = _PACKAGED_TEMPLATES / _WORKFLOW_SOURCE_BY_DEST[dest]
+
+    assert b"\r\n" not in packaged.read_bytes(), (
+        f"{packaged.name} carries CRLF in the packaged copy; `.gitattributes` declares "
+        "`*.yml text eol=lf`, so this means the file was staged with the attribute bypassed"
     )
 
 
