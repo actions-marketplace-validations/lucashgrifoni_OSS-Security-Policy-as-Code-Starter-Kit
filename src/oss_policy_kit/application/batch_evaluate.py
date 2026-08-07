@@ -239,6 +239,12 @@ class BatchResult:
     batch_json: Path
     batch_md: Path
     gate_violated: bool
+    #: Targets that ARE repositories and could not be evaluated. Distinct from a skipped
+    #: directory, which is a child the batch was never asked to evaluate. A batch that
+    #: could not evaluate what it queued is incomplete, and reporting a gate result over
+    #: the remainder as though it covered everything is the silent-success this field
+    #: exists to prevent.
+    failed_count: int = 0
 
 
 def discover_batch_targets(
@@ -394,6 +400,11 @@ class _BatchRunOutcome:
     consolidated_reports: list[dict[str, Any]]
     summaries_for_gate: list[dict[str, int]]
     skipped: list[dict[str, str]]
+    #: Queued targets that raised during evaluation. Kept apart from ``skipped``: one
+    #: means "not a repository", the other means "a repository we failed on", and
+    #: merging them let a batch where EVERY repository failed report the gate as PASSED
+    #: over zero runs.
+    failed: list[dict[str, str]]
 
 
 def _execute_batch_runs(
@@ -421,7 +432,7 @@ def _execute_batch_runs(
     aborts with exit 2 instead of being filed as a per-target skip.
     """
 
-    outcome = _BatchRunOutcome(rows=[], consolidated_reports=[], summaries_for_gate=[], skipped=[])
+    outcome = _BatchRunOutcome(rows=[], consolidated_reports=[], summaries_for_gate=[], skipped=[], failed=[])
     total_runs = len(eval_queue) * len(profile_ids)
     run_index = 0
     for target, likely_repo in eval_queue:
@@ -444,7 +455,7 @@ def _execute_batch_runs(
                     include_absolute_path=include_absolute_path,
                 )
             except OSError as exc:
-                outcome.skipped.append(_unreadable_target_record(target, pid, exc, include_absolute_path))
+                outcome.failed.append(_unreadable_target_record(target, pid, exc, include_absolute_path))
                 continue
             outcome.rows.append(row)
             outcome.consolidated_reports.append(payload)
@@ -522,6 +533,7 @@ def run_batch_evaluation(  # noqa: C901
     rows = outcome.rows
     consolidated_reports = outcome.consolidated_reports
     skipped_dirs.extend(outcome.skipped)
+    failed_dirs = outcome.failed
 
     generated_at = report_generated_at()
     gate_violated = _gate_violated_for_batch(policy, outcome.summaries_for_gate)
@@ -544,6 +556,11 @@ def run_batch_evaluation(  # noqa: C901
     }
     if skipped_dirs:
         batch_payload["skipped_directories"] = skipped_dirs
+    if failed_dirs:
+        # Deliberately a separate key from ``skipped_directories``. A consumer reading
+        # only ``gate_violated`` would otherwise conclude the batch covered everything.
+        batch_payload["failed_directories"] = failed_dirs
+        batch_payload["batch_complete"] = False
 
     batch_json = output_dir / "evaluation-batch.json"
     batch_json.write_text(json.dumps(batch_payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -565,7 +582,12 @@ def run_batch_evaluation(  # noqa: C901
         ),
         encoding="utf-8",
     )
-    return BatchResult(batch_json=batch_json, batch_md=batch_md, gate_violated=gate_violated)
+    return BatchResult(
+        batch_json=batch_json,
+        batch_md=batch_md,
+        gate_violated=gate_violated,
+        failed_count=len(failed_dirs),
+    )
 
 
 @dataclass(slots=True)

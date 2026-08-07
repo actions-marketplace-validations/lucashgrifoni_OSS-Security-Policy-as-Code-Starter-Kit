@@ -180,6 +180,31 @@ def _atomic_write_text(path: Path, text: str) -> None:
         raise
     try:
         _retry_on_sharing_conflict(lambda: os.replace(tmp, path))
+    except OSError as exc:
+        if not _is_sharing_conflict(exc):
+            tmp.unlink(missing_ok=True)
+            raise
+        # The conflict outlived the retry budget, so it is not another rename -- those
+        # clear in milliseconds. It is a handle somebody is holding open on the
+        # destination, and on Windows that blocks a rename for as long as they hold it:
+        # a dashboard, a CI artifact-upload step, an editor, a backup agent, OneDrive or
+        # an antivirus scanner. Measured: one reader holding the report for 50ms failed
+        # 12 of 12 sequential, non-concurrent `evaluate` runs -- the retry turned a
+        # transient-contention fix into a hard failure for the exact case this function's
+        # docstring cites as its motivation.
+        #
+        # An in-place write demonstrably succeeds while that handle is open. It costs the
+        # reader a torn read; refusing costs the operator their build. Between a
+        # dashboard rendering a half-written report for one refresh and a CI gate failing
+        # for no reason the operator can see, the dashboard loses.
+        #
+        # This is NOT the competing-writer case the atomic swap exists for: a second
+        # `evaluate` renaming onto the same name is resolved inside the budget above and
+        # never reaches here.
+        try:
+            path.write_text(text, encoding="utf-8")
+        finally:
+            tmp.unlink(missing_ok=True)
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise

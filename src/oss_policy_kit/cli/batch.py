@@ -127,6 +127,19 @@ def evaluate_many_cmd(
         stderr_console().print(f"[green]Wrote[/green] {markup_safe(batch.batch_md.resolve())}")
         if not quiet:
             warn_if_batch_skipped_directories(batch.batch_json)
+        if batch.failed_count:
+            # A repository the batch was asked to evaluate and could not is an incomplete
+            # run, not a policy outcome, so it exits 2 rather than 1 -- and it is checked
+            # BEFORE the gate, because reporting a gate verdict computed over the targets
+            # that happened to succeed is the failure this replaces. `evaluate-many`
+            # previously printed "CI gate: PASSED" over zero runs when every repository
+            # had failed.
+            noun = "repository" if batch.failed_count == 1 else "repositories"
+            stderr_console().print(
+                f"[red]Error:[/red] {batch.failed_count} {noun} could not be evaluated; "
+                "the batch is incomplete. See failed_directories in the batch report."
+            )
+            raise typer.Exit(code=2)
         if batch.gate_violated:
             raise typer.Exit(code=1)
     except OssPolicyKitError as exc:

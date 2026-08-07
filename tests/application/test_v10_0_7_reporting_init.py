@@ -111,12 +111,26 @@ def test_a_sharing_conflict_on_the_final_rename_is_retried_until_it_clears(
 def test_a_standing_permission_denial_is_reported_not_retried_away(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A read-only output directory must still fail -- with its own error, not a swallowed one."""
+    """A read-only output directory must still fail -- with its own error, not a swallowed one.
 
-    # More failures than the retry budget: this denial never clears, which is exactly how
-    # a genuine one behaves.
+    This test previously simulated the denial by failing ``os.replace`` alone, and that
+    was not a read-only directory: it was a held handle, where the rename is refused and
+    an in-place write succeeds. The distinction is the whole of the fix this file also
+    covers, so the denial is made real here -- both routes to the destination refuse,
+    exactly as a read-only directory or a hostile ACL behaves.
+    """
+
     calls = _replace_failing_n_times(monkeypatch, failures=999)
     dest = tmp_path / "evaluation-report.json"
+
+    real_write_text = Path.write_text
+
+    def denied(self: Path, *args: Any, **kwargs: Any) -> int:
+        if self == dest:
+            raise _sharing_conflict(self)
+        return real_write_text(self, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(Path, "write_text", denied)
 
     with pytest.raises(PermissionError) as caught:
         rp._atomic_write_text(dest, "payload\n")
@@ -126,6 +140,34 @@ def test_a_standing_permission_denial_is_reported_not_retried_away(
     assert calls[0] == len(rp._CONTENTION_RETRY_DELAYS) + 1, "the retry budget is not the documented one"
     assert not dest.exists(), "a failed write must leave the previous report untouched"
     assert list(tmp_path.iterdir()) == [], "a failed write orphaned its temp file"
+
+
+def test_a_handle_held_open_on_the_report_does_not_fail_the_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The counterpart: a conflict that outlives the budget falls back to writing in place.
+
+    On Windows any open handle on the destination blocks a rename for as long as the
+    holder keeps it -- a dashboard, a CI artifact-upload step, an editor, a backup agent,
+    OneDrive, an antivirus scanner. Measured before this fallback existed: one reader
+    holding the report for 50 ms failed 12 of 12 sequential, non-concurrent ``evaluate``
+    runs. That is a hard failure for the exact case the atomic write was written to
+    protect.
+
+    The reader pays a torn read; the operator would have paid their build. Note the
+    denial test above is what keeps this from becoming a way to launder a real refusal:
+    there, the in-place route is refused too, and the error surfaces.
+    """
+
+    calls = _replace_failing_n_times(monkeypatch, failures=999)
+    dest = tmp_path / "evaluation-report.json"
+    dest.write_text('{"previous": true}\n', encoding="utf-8")
+
+    rp._atomic_write_text(dest, '{"contract_version": "reports/2.0"}\n')
+
+    assert calls[0] == len(rp._CONTENTION_RETRY_DELAYS) + 1, "the budget was not spent before falling back"
+    assert json.loads(dest.read_text(encoding="utf-8")) == {"contract_version": "reports/2.0"}
+    assert [p.name for p in tmp_path.iterdir()] == [dest.name], "the fallback orphaned its temp file"
 
 
 def test_an_error_that_is_not_contention_is_raised_on_the_first_attempt(

@@ -341,9 +341,16 @@ def test_batch_records_an_unreadable_target_and_keeps_going(tmp_path: Path, monk
 
     payload = json.loads((out / "evaluation-batch.json").read_text(encoding="utf-8"))
     assert sorted(r["target_name"] for r in payload["runs"]) == ["a-repo", "c-repo"]
-    skipped = {s["name"]: s for s in payload.get("skipped_directories", [])}
-    assert "b-repo" in skipped
-    assert "Permission denied" in skipped["b-repo"]["reason"]
+
+    # `failed_directories`, not `skipped_directories`. This test asserted the latter, and
+    # merging the two is what let a batch where EVERY repository failed report the gate
+    # as PASSED over zero runs: a skip means "not a repository", a failure means "a
+    # repository we could not evaluate", and only the second makes the batch incomplete.
+    failed = {s["name"]: s for s in payload.get("failed_directories", [])}
+    assert "b-repo" in failed
+    assert "Permission denied" in failed["b-repo"]["reason"]
+    assert "b-repo" not in {s["name"] for s in payload.get("skipped_directories", [])}
+    assert payload.get("batch_complete") is False
     # json.dumps doubles every backslash, so a Windows needle can never be a substring
     # of the serialized text and this guard would be vacuous on the platform it is
     # written and mutation-tested on. Collapsing the escaping first is a no-op on Linux
@@ -407,8 +414,15 @@ def test_batch_cli_exits_cleanly_when_one_target_cannot_be_read(
         ),
     )
 
-    assert result.exit_code == 0, result.output
+    # Exit 2, not 0. The original point of this test still holds and is asserted below:
+    # the batch FINISHES and reports rather than dying mid-run at exit 3. What changed is
+    # that finishing with a repository it could not evaluate is no longer reported as
+    # success -- `evaluate-many` used to print "CI gate: PASSED" over zero runs when
+    # every repository had failed.
+    assert result.exit_code == 2, result.output
     assert "Unexpected error" not in result.output
+    assert "incomplete" in result.output
+    assert (tmp_path / "out" / "evaluation-batch.json").is_file(), "the batch did not finish and report"
 
 
 def test_batch_still_evaluates_a_healthy_monorepo(tmp_path: Path) -> None:
