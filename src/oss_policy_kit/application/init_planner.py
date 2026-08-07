@@ -28,6 +28,7 @@ from oss_policy_kit.application.loader import (
     resolve_profile_file,
 )
 from oss_policy_kit.application.profile_hints import (
+    STACK_LABEL_BY_SIGNAL_ID,
     ProfileRecommendation,
     build_profile_recommendation,
 )
@@ -277,24 +278,18 @@ def _detect_platform_from_signals(signals: list[dict[str, str]]) -> str:
 
 
 def _detect_primary_stack_from_signals(signals: list[dict[str, str]]) -> str | None:
-    """Map tech-stack signal IDs to a friendly stack label."""
+    """Map tech-stack signal IDs to a friendly stack label.
 
-    mapping = {
-        "node_js": "Node.js",
-        "python_pyproject": "Python",
-        "python_requirements": "Python",
-        "python_setup": "Python",
-        "go_module": "Go",
-        "java_maven": "Java/Maven",
-        "java_gradle": "Java/Kotlin (Gradle)",
-        "rust_cargo": "Rust",
-        "dotnet_csproj": "C#/.NET",
-        "container_docker": "Container (Docker)",
-    }
+    The labels come from `profile_hints`, which is the module that emits these signals in the
+    first place. This function used to keep its own copy of the dict, and the two had already
+    drifted: this one knew `container_docker` while `profile_hints` knew `node_lockfile`, so the
+    stack a repository was said to use depended on which module you asked.
+    """
+
     for sig in signals:
-        sid = sig.get("id", "")
-        if sid in mapping:
-            return mapping[sid]
+        label = STACK_LABEL_BY_SIGNAL_ID.get(sig.get("id", ""))
+        if label is not None:
+            return label
     return None
 
 

@@ -323,6 +323,19 @@ _STACK_SIGNAL_LABELS: dict[str, str] = {
 #: Signals that qualify a stack without identifying it; they trail their own stack.
 _STACK_QUALIFIER_SIGNALS: dict[str, str] = {"node_lockfile": "Node.js"}
 
+#: Public: signal id -> human label, for consumers that need to *name* the detected stack
+#: rather than rank it. Composed from the two definitions above so there is one place to edit.
+#:
+#: `_STACK_SIGNAL_LABELS` deliberately excludes the container signal, which `_rank_stack_signals`
+#: handles separately as packaging rather than a language. A caller that only wants a label still
+#: needs it, and `init_planner` used to carry its own copy of this dict to get one -- which had
+#: already drifted: it knew `container_docker` while this module knew `node_lockfile`, so the two
+#: answers disagreed depending on which one you asked.
+STACK_LABEL_BY_SIGNAL_ID: dict[str, str] = {
+    **_STACK_SIGNAL_LABELS,
+    _CONTAINER_SIGNAL_ID: "Container (Docker)",
+}
+
 
 def _detect_node_stack(
     repo_root: Path, found: list[dict[str, str]], weights: dict[str, int] | None = None
