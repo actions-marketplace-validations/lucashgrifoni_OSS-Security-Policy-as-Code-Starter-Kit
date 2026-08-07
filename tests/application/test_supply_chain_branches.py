@@ -150,7 +150,12 @@ def _osv(tmp_path: Path, results: list[dict]) -> None:
 
 
 def test_sca_kev_pass_and_fail(tmp_path: Path) -> None:
+    # `"properties": {}` used to PASS here. It carries no `kev` field, so the scan cannot
+    # tell "enrichment ran, nothing flagged" from "no enrichment present" -- and PASS
+    # asserts the first. It is manual review now; PASS needs `kev` to be there and false.
     _osv(tmp_path, [{"ruleId": "CVE-OK", "properties": {}}])
+    assert sc.eval_sca_kev_001(_ctx(tmp_path)).status == ControlStatus.MANUAL_REVIEW_REQUIRED
+    _osv(tmp_path, [{"ruleId": "CVE-OK", "properties": {"kev": False}}])
     assert sc.eval_sca_kev_001(_ctx(tmp_path)).status == ControlStatus.PASS
     _osv(tmp_path, [{"ruleId": "CVE-KEV", "properties": {"kev": True}}])
     assert sc.eval_sca_kev_001(_ctx(tmp_path)).status == ControlStatus.FAIL

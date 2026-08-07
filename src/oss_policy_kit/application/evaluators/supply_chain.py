@@ -556,7 +556,8 @@ def eval_sca_kev_001(ctx: EvalContext) -> EvalOutcome:
             evidence_sources=[],
             confidence="medium",
         )
-    kev, _, err = _scan_sarif_epss_kev(evidence)
+    scan = _scan_sarif_epss_kev(evidence)
+    kev, err = scan.kev, scan.error
     if err is not None:
         return EvalOutcome(
             status=ControlStatus.MANUAL_REVIEW_REQUIRED,
@@ -576,6 +577,26 @@ def eval_sca_kev_001(ctx: EvalContext) -> EvalOutcome:
             evidence_sources=[str(evidence.resolve())],
             confidence="high",
             evidence_collection_method=EvidenceCollectionMethod.MANUAL,
+        )
+    if not scan.saw_kev_property:
+        # No result in this SARIF carries a `kev` property, so the scan cannot tell
+        # "enrichment ran and flagged nothing" from "there is no KEV data here". It used
+        # to answer the first at confidence=high, assurance=evidence-backed -- on a file
+        # containing Log4Shell, because plain `osv-scanner --format sarif` emits no such
+        # property and this control's own remediation says so. A policy kit asserting a
+        # security fact it did not check is the one thing it must never do.
+        return EvalOutcome(
+            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
+            reason=(
+                "The OSV-Scanner SARIF carries no KEV enrichment (no result has a "
+                "`properties.kev` field), so KEV status cannot be verified."
+            ),
+            remediation=(
+                "Re-run OSV-Scanner v2+ with KEV enrichment so each result carries "
+                "`properties.kev`. See docs/triage-cvss-epss-kev.md."
+            ),
+            evidence_sources=[str(evidence.resolve())],
+            confidence="medium",
         )
     return EvalOutcome(
         status=ControlStatus.PASS,
@@ -598,7 +619,8 @@ def eval_sca_epss_001(ctx: EvalContext) -> EvalOutcome:
             evidence_sources=[],
             confidence="medium",
         )
-    _, high_epss, err = _scan_sarif_epss_kev(evidence)
+    scan = _scan_sarif_epss_kev(evidence)
+    high_epss, err = scan.high_epss, scan.error
     if err is not None:
         return EvalOutcome(
             status=ControlStatus.MANUAL_REVIEW_REQUIRED,
@@ -618,6 +640,22 @@ def eval_sca_epss_001(ctx: EvalContext) -> EvalOutcome:
             evidence_sources=[str(evidence.resolve())],
             confidence="high",
             evidence_collection_method=EvidenceCollectionMethod.MANUAL,
+        )
+    if not scan.saw_epss_property:
+        # Same reasoning as SCA-KEV-001: an empty high-EPSS list over a SARIF with no
+        # EPSS data at all is not evidence that exploit probability is low.
+        return EvalOutcome(
+            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
+            reason=(
+                "The OSV-Scanner SARIF carries no EPSS enrichment (no result has a "
+                "`properties.epss_score` field), so exploit probability cannot be verified."
+            ),
+            remediation=(
+                "Re-run OSV-Scanner v2+ with EPSS enrichment so each result carries "
+                "`properties.epss_score`. See docs/triage-cvss-epss-kev.md."
+            ),
+            evidence_sources=[str(evidence.resolve())],
+            confidence="medium",
         )
     return EvalOutcome(
         status=ControlStatus.PASS,

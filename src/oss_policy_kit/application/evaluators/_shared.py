@@ -16,7 +16,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
@@ -43,8 +43,10 @@ from oss_policy_kit.application.evaluators_common import (
 from oss_policy_kit.application.evidence_loading import load_evidence_schema
 from oss_policy_kit.application.evidence_placeholders import has_placeholder_values, is_placeholder_digest
 from oss_policy_kit.application.input_limits import (
+    BAD_INPUT_ERRORS,
     MAX_JSON_DEPTH,
     MAX_SARIF_BYTES,
+    bad_input_detail,
     max_json_nesting_depth,
     oversize_reason,
 )
@@ -1815,27 +1817,61 @@ def _classify_epss_kev_result(
     return (ident if is_kev else None), (ident if is_high_epss else None)
 
 
+class SarifEpssKevScan(NamedTuple):
+    """What one pass over an OSV SARIF could establish about KEV / EPSS.
+
+    ``saw_kev_property`` and ``saw_epss_property`` exist because an empty ``kev`` list
+    has two completely different meanings, and the caller was reading both as the
+    reassuring one: "enrichment ran and flagged nothing" versus "this SARIF carries no
+    enrichment at all". Plain ``osv-scanner --format sarif`` emits no ``properties.kev``,
+    so the second case is the common one -- and the kit was answering it with
+    PASS / confidence=high / assurance=evidence-backed on a file containing Log4Shell.
+
+    Errors keep index 2 so ``scan(...)[2]`` still reads the error.
+    """
+
+    kev: list[str]
+    high_epss: list[str]
+    error: str | None
+    saw_kev_property: bool = False
+    saw_epss_property: bool = False
+
+
+def _result_carries_enrichment(result: Any) -> tuple[bool, bool]:
+    """Whether one SARIF result carries a KEV / an EPSS property at all, any value."""
+
+    if not isinstance(result, dict):
+        return False, False
+    props = result.get("properties")
+    if not isinstance(props, dict):
+        return False, False
+    return "kev" in props, ("epss_score" in props or "epss" in props)
+
+
 def _scan_sarif_epss_kev(
     sarif_path: Path, *, epss_threshold: float = 0.5, cvss_threshold: float = 7.0
-) -> tuple[list[str], list[str], str | None]:
-    """Return ``(kev_ids, high_epss_ids, error)`` from SARIF result.properties."""
+) -> SarifEpssKevScan:
+    """Scan SARIF ``result.properties`` for KEV flags and high-EPSS findings."""
     try:
         doc = json.loads(sarif_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError) as exc:
-        return [], [], f"Could not read SARIF: {exc}"
-    except json.JSONDecodeError as exc:
-        return [], [], f"Could not parse SARIF JSON: {exc}"
+    except BAD_INPUT_ERRORS as exc:
+        return SarifEpssKevScan([], [], f"Could not read SARIF: {bad_input_detail(exc)}")
     if not isinstance(doc, dict):
-        return [], [], "SARIF top-level is not an object."
+        return SarifEpssKevScan([], [], "SARIF top-level is not an object.")
     kev: list[str] = []
     high_epss: list[str] = []
+    saw_kev = False
+    saw_epss = False
     for result in _iter_sarif_results(doc):
+        has_kev, has_epss = _result_carries_enrichment(result)
+        saw_kev = saw_kev or has_kev
+        saw_epss = saw_epss or has_epss
         kev_id, high_id = _classify_epss_kev_result(result, epss_threshold, cvss_threshold)
         if kev_id is not None:
             kev.append(kev_id)
         if high_id is not None:
             high_epss.append(high_id)
-    return kev, high_epss, None
+    return SarifEpssKevScan(kev, high_epss, None, saw_kev, saw_epss)
 
 
 def _branch_protection_evidence(ctx: EvalContext) -> tuple[dict[str, Any] | None, Path]:

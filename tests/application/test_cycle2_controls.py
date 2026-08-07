@@ -222,10 +222,26 @@ def test_sca_kev_fails_on_kev_finding(tmp_path: Path) -> None:
     assert out.status is ControlStatus.FAIL
 
 
-def test_sca_kev_passes_without_kev(tmp_path: Path) -> None:
-    _write_osv_sarif(tmp_path, [{"ruleId": "CVE-2025-0002", "properties": {"epss_score": 0.1}}])
+def test_sca_kev_passes_when_enrichment_ran_and_flagged_nothing(tmp_path: Path) -> None:
+    """PASS requires the enrichment to have actually run -- a `kev` field must be present."""
+
+    _write_osv_sarif(tmp_path, [{"ruleId": "CVE-2025-0002", "properties": {"kev": False, "epss_score": 0.1}}])
     out = eval_sca_kev_001(SimpleNamespace(repo_root=tmp_path))
     assert out.status is ControlStatus.PASS
+
+
+def test_sca_kev_is_manual_review_when_the_sarif_carries_no_kev_data(tmp_path: Path) -> None:
+    """This test asserted PASS, which was the defect.
+
+    A SARIF with no `properties.kev` anywhere -- what plain `osv-scanner --format sarif`
+    emits -- cannot support "no dependency CVE is KEV-listed". The kit was making that
+    claim at confidence=high over a file containing Log4Shell.
+    """
+
+    _write_osv_sarif(tmp_path, [{"ruleId": "CVE-2021-44228", "properties": {"epss_score": 0.1}}])
+    out = eval_sca_kev_001(SimpleNamespace(repo_root=tmp_path))
+    assert out.status is ControlStatus.MANUAL_REVIEW_REQUIRED
+    assert "no KEV enrichment" in out.reason
 
 
 def test_sca_epss_fails_on_high_epss(tmp_path: Path) -> None:

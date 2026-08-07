@@ -535,8 +535,11 @@ def test_scan_sarif_epss_kev(tmp_path: Path) -> None:
         ]
     }
     p.write_text(json.dumps(doc), encoding="utf-8")
-    kev, high, err = s._scan_sarif_epss_kev(p)
-    assert err is None and kev == ["CVE-A"] and high == ["CVE-B"]
+    scan = s._scan_sarif_epss_kev(p)
+    assert scan.error is None and scan.kev == ["CVE-A"] and scan.high_epss == ["CVE-B"]
+    # The fields that let a caller tell "enrichment ran and found nothing" apart from
+    # "there is no enrichment here" -- the distinction SCA-KEV-001 was missing.
+    assert scan.saw_kev_property and scan.saw_epss_property
 
 
 def test_scan_sarif_epss_kev_errors(tmp_path: Path) -> None:
