@@ -11,8 +11,9 @@ findings-surface ``--fail-on-*`` gates.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -90,6 +91,110 @@ def _unrecognised_expiry_keys(item: dict[str, Any]) -> list[str]:
     return sorted(key for key in item if key not in EXPIRY_KEYS and _looks_like_expiry_key(key))
 
 
+def expiry_date_from_text(text: str) -> date | None:
+    """Parse a whole expiry string as a date; None when the value is not one.
+
+    Accepts a plain ISO-8601 date (``2099-12-31``, or the basic ``20991231``) and a
+    full ISO-8601 timestamp (``2099-12-31T00:00:00Z`` — the spelling the tutorial
+    teaches, and what YAML hands back as a string when the value is quoted), and
+    nothing else: **the whole value must be consumed**.
+
+    Both loaders used to parse ``text[:10]``, so everything after a valid date
+    prefix was thrown away without a word: ``"2099-01-01-NOT-A-DATE"`` and
+    ``"2099-01-01 please ignore"`` both became 2099-01-01. That is fail-open in the
+    common case — the junk is usually a note ("2026-01-01 pending re-review") or a
+    second date, and the operator has no way to tell the value was not read whole.
+    """
+
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        pass
+    try:
+        return datetime.fromisoformat(text).date()
+    except ValueError:
+        return None
+
+
+def iso_date_prefix(text: str) -> date | None:
+    """The ``YYYY-MM-DD`` the value STARTS with, when the rest of it is junk.
+
+    Only used to phrase the rejection: telling the operator which date was found
+    is what turns "unparseable" into an edit they can make.
+    """
+
+    try:
+        return date.fromisoformat(text[:10])
+    except ValueError:
+        return None
+
+
+def _pinned_today() -> date | None:
+    """The date ``SOURCE_DATE_EPOCH`` pins the kit to, or None when it changes nothing.
+
+    None means the pinned clock cannot have altered an expiry decision: either the
+    variable is unset, or it resolves to the current date anyway.
+    """
+
+    if not os.environ.get("SOURCE_DATE_EPOCH"):
+        return None
+    pinned = utc_today()
+    return pinned if pinned != datetime.now(UTC).date() else None
+
+
+def _real_today() -> date:
+    """The wall-clock date, deliberately NOT honouring ``SOURCE_DATE_EPOCH``.
+
+    The only place in the kit that reads the unpinned clock, and it reads it to answer
+    one question: is this waiver dead in reality? Every outcome-affecting read goes
+    through :func:`domain.models.utc_now` and stays pinned, which is what keeps artifacts
+    reproducible; this one exists so a pinned clock cannot disarm a gate *silently*.
+
+    It is a named function rather than an inline ``datetime.now`` so a test can pin it.
+    The suite pins ``SOURCE_DATE_EPOCH`` and forbids tests from reading the wall clock
+    (``tests/test_suite_clock_hygiene.py``), so without this seam the "pinned to the real
+    date" case could not be expressed at all.
+    """
+
+    return datetime.now(UTC).date()
+
+
+def pinned_expiry_clock_note(expires_at: date | None, today: date) -> str | None:
+    """Warn when the pinned clock — and only the pinned clock — kept a waiver alive.
+
+    ``SOURCE_DATE_EPOCH`` deliberately drives every outcome-affecting clock read
+    (:func:`domain.models.utc_now`): that is what makes an artifact reproducible and
+    the test suite calendar-immune, and moving expiry off it would resurrect the
+    date-rot class v9.0.3 killed. So the expiry comparison stays on the pinned
+    clock — but a pinned clock must never DISARM a gate silently. With
+    ``SOURCE_DATE_EPOCH`` set to a date before the expiry, a waiver that lapsed in
+    2020 applies again: exit 0 instead of 1, and ``"state": "not_affected"`` in the
+    VEX document. Returns the note to attach in exactly that case (the waiver is
+    live against the pinned date and dead against the real one), else None.
+
+    The real date is deliberately kept out of the text so the artifact stays
+    byte-identical from one day to the next once the waiver has lapsed.
+    """
+
+    if expires_at is None:
+        return None
+    pinned = _pinned_today()
+    if pinned is None or today != pinned:
+        return None  # this comparison did not use the pinned clock
+    if expires_at < today:
+        # Dead against the pinned clock too, so the pin kept nothing alive -- the waiver
+        # is simply expired and the caller already dropped it. Reachable only through the
+        # public helper, but a note claiming SOURCE_DATE_EPOCH disarmed a gate that was
+        # never armed would send the reader to unset a variable that changes nothing.
+        return None
+    if expires_at >= _real_today():
+        return None  # live on both clocks; nothing was disarmed
+    return (
+        f"it expired at {expires_at.isoformat()} and still applies only because SOURCE_DATE_EPOCH "
+        f"pins the evaluation date to {pinned.isoformat()}; unset SOURCE_DATE_EPOCH to enforce the expiry."
+    )
+
+
 def parse_waiver_expiry(idx: int, item: dict[str, Any], today: date, warnings: list[str]) -> tuple[date | None, bool]:
     """Return ``(expires_at, ok)``; ``ok`` is False when the entry should be skipped (bad/expired).
 
@@ -138,6 +243,9 @@ def parse_waiver_expiry(idx: int, item: dict[str, Any], today: date, warnings: l
     if expires_at < today:
         warnings.append(f"Waiver entry {idx} ignored: expired at {expires_at.isoformat()}.")
         return None, False
+    note = pinned_expiry_clock_note(expires_at, today)
+    if note is not None:
+        warnings.append(f"Waiver entry {idx} still applies, but {note}")
     return expires_at, True
 
 
@@ -158,17 +266,30 @@ def _expiry_from_value(idx: int, key: str, raw: Any, warnings: list[str]) -> dat
 
 
 def _expiry_from_text(idx: int, key: str, raw: str, warnings: list[str]) -> date | None:
-    """Parse a textual expiry; None (with a warning) when it is blank or unparseable."""
+    """Parse a textual expiry; None (with a warning) when it is blank or unparseable.
+
+    The value must parse whole. A date followed by anything else is rejected with the
+    date it found named, because the trailing text is exactly where the operator's
+    real intent hides — and dropping it silently is how an entry that reads
+    ``"2026-01-01 renewed to 2030"`` became a waiver nobody re-checked.
+    """
 
     text = raw.strip()
     if not text:
         warnings.append(f"Waiver entry {idx} ignored: {key} is blank; use a date or drop the field.")
         return None
-    try:
-        return date.fromisoformat(text[:10])
-    except ValueError:
-        warnings.append(f"Waiver entry {idx} has unparseable {key}={raw!r}; ignored.")
+    parsed = expiry_date_from_text(text)
+    if parsed is not None:
+        return parsed
+    prefix = iso_date_prefix(text)
+    if prefix is not None:
+        warnings.append(
+            f"Waiver entry {idx} ignored: {key}={raw!r} has trailing text after {prefix.isoformat()}; "
+            'use exactly "YYYY-MM-DD" (the text after the date is not dropped silently).'
+        )
         return None
+    warnings.append(f"Waiver entry {idx} has unparseable {key}={raw!r}; ignored.")
+    return None
 
 
 def parse_waiver_status(idx: int, item: dict[str, Any], warnings: list[str]) -> str | None:

@@ -8,6 +8,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from rich.markup import escape as _markup_escape
+
 import oss_policy_kit
 from oss_policy_kit.adapters.scorecard_json import ScorecardBundle
 from oss_policy_kit.application.applicability import resolve_applicability
@@ -321,6 +323,10 @@ def _evaluate_control(
     When *applicability_engine* is enabled (ADR-028, opt-in) and the control declares a
     precondition, an unmet precondition resolves to ``NOT_APPLICABLE`` consistently and the
     evaluator is not run. Default off → unchanged behavior.
+
+    ``verbose_emit`` receives Rich markup, so every value interpolated into one of those
+    lines is escaped: a reason naming ``[bold]unsafe.yml`` otherwise reached the operator
+    as ``unsafe.yml``, silently, while the JSON report held the real name.
     """
 
     if cid not in catalog:
@@ -330,13 +336,16 @@ def _evaluate_control(
         applicable, na_reason = resolve_applicability(spec.applicability, ctx.repo_root)
         if not applicable:
             if ctx.verbose_emit is not None:
-                ctx.verbose_emit(f"[dim]→ {cid} ({spec.title}) — not applicable (precondition unmet)[/dim]")
+                ctx.verbose_emit(
+                    f"[dim]→ {_markup_escape(cid)} ({_markup_escape(spec.title)}) "
+                    f"— not applicable (precondition unmet)[/dim]"
+                )
             return _not_applicable_result(cid, spec, profile, na_reason or "Not applicable.")
     evaluator = EVALUATOR_REGISTRY.get(cid)
     if evaluator is None:
         raise LoadError(f"No evaluator implemented for control '{cid}'")
     if ctx.verbose_emit is not None:
-        ctx.verbose_emit(f"[dim]→ {cid} ({spec.title})[/dim]")
+        ctx.verbose_emit(f"[dim]→ {_markup_escape(cid)} ({_markup_escape(spec.title)})[/dim]")
     logger.debug("evaluating %s (%s)", cid, spec.title)
     outcome = evaluator(ctx)
     operational_warnings.extend(outcome.operational_warnings)
@@ -352,7 +361,8 @@ def _evaluate_control(
         reason_one = outcome.reason.replace("\n", " ").strip()
         if len(reason_one) > 220:
             reason_one = reason_one[:217].rstrip() + "..."
-        ctx.verbose_emit(f"[dim]  Result: {outcome.status.value} — {reason_one}[/dim]")
+        # Truncate first, escape second, so the cut never lands inside a ``\[`` we added.
+        ctx.verbose_emit(f"[dim]  Result: {_markup_escape(outcome.status.value)} — {_markup_escape(reason_one)}[/dim]")
     final_status, applied_waiver = _apply_waiver(outcome.status, waivers.get(cid))
     return ControlResult(
         control_id=cid,

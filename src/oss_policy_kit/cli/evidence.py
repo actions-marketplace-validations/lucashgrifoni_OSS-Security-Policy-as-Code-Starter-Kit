@@ -16,6 +16,7 @@ from oss_policy_kit.application.evidence_scaffold import scaffold_evidence_files
 from oss_policy_kit.cli import terminal_ui
 from oss_policy_kit.cli.common import (
     app,
+    display_path,
     exit_for_unexpected,
     markup_safe,
     stderr_console,
@@ -86,6 +87,16 @@ _COLLECT_ENV_PROBES: dict[str, tuple[str, ...]] = {
 }
 
 
+#: Where both evidence commands put their files when ``--output-dir`` is not given.
+_EVIDENCE_SUBDIR = Path(".oss-policy-kit") / "evidence"
+
+
+def _evidence_dir_display(target_display: str) -> str:
+    """Name the default evidence directory under the target as the operator wrote it."""
+
+    return display_path(Path(target_display) / _EVIDENCE_SUBDIR)
+
+
 def _env_probe_status(name: str) -> str:
     """Return ``set`` / ``not set`` for *name* without ever echoing the variable value."""
 
@@ -96,6 +107,7 @@ def _env_probe_status(name: str) -> str:
 def _print_collect_dry_run_preview(
     *,
     target: Path,
+    target_display: str,
     platform: str,
     repo_slug: str | None,
     output_dir: Path | None,
@@ -103,9 +115,14 @@ def _print_collect_dry_run_preview(
     """Print what ``collect-evidence`` would collect without API calls or credentials.
 
     Never prints secret values; only whether each known credential-related variable is populated.
+
+    ``target`` is the resolved path the preview reads from (the git config lives there);
+    ``target_display`` is what the operator typed, and it is the only one that reaches the
+    screen. Answering ``--target .`` with the full host path is the M-002 leak this
+    preview used to commit eight times in a row.
     """
 
-    out = (output_dir or (target / ".oss-policy-kit" / "evidence")).resolve()
+    out_display = display_path(output_dir) if output_dir is not None else _evidence_dir_display(target_display)
     detected_slug: str | None = None
     if repo_slug is None and platform == "github":
         detected_slug = read_github_repo_slug_from_git_config(target)
@@ -114,8 +131,8 @@ def _print_collect_dry_run_preview(
     console.print(
         f"\n[bold cyan]collect-evidence dry-run[/bold cyan] -- platform: [bold]{markup_safe(platform)}[/bold]"
     )
-    console.print(f"  Target:     {markup_safe(target.resolve())}")
-    console.print(f"  Output dir: {markup_safe(out)}")
+    console.print(f"  Target:     {markup_safe(display_path(target_display))}")
+    console.print(f"  Output dir: {markup_safe(out_display)}")
     # The placeholder is bracketed, so it must be escaped like any other interpolation:
     # unescaped, Rich read ``[not detected ...]`` as a style tag and printed an empty
     # "Repo slug:" line, hiding the one instruction the operator needed.
@@ -132,7 +149,7 @@ def _print_collect_dry_run_preview(
     if entries:
         console.print("\n[bold]Would create:[/bold]")
         for fname, endpoint in entries:
-            console.print(f"  [green]+[/green] {markup_safe(out / fname)}")
+            console.print(f"  [green]+[/green] {markup_safe(display_path(Path(out_display) / fname))}")
             console.print(f"    [dim]via {markup_safe(endpoint)}[/dim]")
     console.print("\n[dim]Run without --dry-run to execute (credentials required).[/dim]")
 
@@ -175,9 +192,17 @@ def scaffold_evidence_cmd(
             try:
                 candidate.mkdir(parents=True, exist_ok=True)
             except OSError as exc:
-                raise InvalidInputError(f"Could not create --target directory {candidate}: {exc}") from exc
+                # ``str(OSError)`` renders the offending filename through repr, so
+                # interpolating ``exc`` put the resolved path -- home directory and OS
+                # account name -- into the message. ``strerror`` carries the reason
+                # without the path, the same idiom the handler at the end of this
+                # function already uses (M-002).
+                raise InvalidInputError(
+                    f"Could not create --target directory {display_path(candidate)}: "
+                    f"{exc.strerror or 'filesystem error'}"
+                ) from exc
             stderr_console().print(
-                f"[yellow]Note:[/yellow] created missing --target directory: {markup_safe(candidate.resolve())}"
+                f"[yellow]Note:[/yellow] created missing --target directory: {markup_safe(display_path(candidate))}"
             )
         repo = resolve_existing_dir(target)
         outcome = scaffold_evidence_files(repo, platform, force=force)
@@ -185,12 +210,15 @@ def scaffold_evidence_cmd(
         sys.stdout.write(f"  created: {len(outcome.created)}\n")
         sys.stdout.write(f"  skipped (existing): {len(outcome.skipped)}\n")
         sys.stdout.write(f"  overwritten: {len(outcome.overwritten)}\n")
+        # Each of the eight lines is named relative to the current directory, falling back
+        # to relative-to-target: `--target .` used to answer with eight fully-qualified
+        # paths carrying the home directory and the OS account name (M-002).
         for p in outcome.created:
-            write_wrapped_stdout_block("  + ", str(p.resolve()), "    ")
+            write_wrapped_stdout_block("  + ", display_path(p, root=repo), "    ")
         for p in outcome.skipped:
-            write_wrapped_stdout_block("  = ", f"{p.resolve()} (unchanged)", "    ")
+            write_wrapped_stdout_block("  = ", f"{display_path(p, root=repo)} (unchanged)", "    ")
         for p in outcome.overwritten:
-            write_wrapped_stdout_block("  ! ", f"{p.resolve()} (replaced)", "    ")
+            write_wrapped_stdout_block("  ! ", f"{display_path(p, root=repo)} (replaced)", "    ")
         if not force and outcome.skipped:
             sys.stdout.write("  (re-run with --force to replace existing files)\n")
         tail = (
@@ -212,7 +240,12 @@ def scaffold_evidence_cmd(
         # A filesystem error on a user-supplied --target (e.g. .oss-policy-kit
         # pre-exists as a file so mkdir fails) is a usage error, not internal.
         # Use exc.strerror so the absolute path / username is never echoed.
-        detail = markup_safe(exc.strerror or "filesystem error")
+        #
+        # Escaped exactly once, at the interpolation. It used to be escaped into ``detail``
+        # and then escaped again on the way in, so a strerror carrying a bracket reached
+        # the operator with a literal backslash in front of it -- a character they never
+        # typed, in the one line they are being asked to read.
+        detail = exc.strerror or "filesystem error"
         stderr_console().print(f"[red]Error:[/red] cannot write output ({markup_safe(detail)}).")
         raise typer.Exit(code=2) from exc
     except Exception as exc:  # noqa: BLE001 - last-resort user message, no traceback leak
@@ -295,20 +328,23 @@ def _aws_collector(repo_slug: str | None) -> tuple[AWSEvidenceCollector, str]:
     return AWSEvidenceCollector(), (repo_slug or "").strip()
 
 
-def _write_collected_evidence(rows: list[Any], *, plat: str, output_dir: Path | None, repo: Path) -> None:
+def _write_collected_evidence(
+    rows: list[Any], *, plat: str, output_dir: Path | None, repo: Path, target_display: str
+) -> None:
     """Write each collected evidence row to disk and print a summary table."""
 
     table = Table(title=f"collect-evidence ({plat})", show_lines=True)
     table.add_column("Evidence file", style="cyan", no_wrap=True)
     table.add_column("Source", style="dim")
     dest = (output_dir or (repo / ".oss-policy-kit" / "evidence")).resolve()
+    dest_display = display_path(output_dir) if output_dir is not None else _evidence_dir_display(target_display)
     dest.mkdir(parents=True, exist_ok=True)
     for row in rows:
         out_path = dest / f"{row.evidence_key}.json"
         out_path.write_text(json.dumps(row.data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         table.add_row(str(out_path.name), row.source_url)
     stderr_console().print(table)
-    stderr_console().print(f"[green]Wrote[/green] {len(rows)} file(s) under {markup_safe(dest)}")
+    stderr_console().print(f"[green]Wrote[/green] {len(rows)} file(s) under {markup_safe(dest_display)}")
 
 
 @app.command("collect-evidence", rich_help_panel=CMD_PANEL_COLLECT)
@@ -355,6 +391,7 @@ def collect_evidence_cmd(
             preview_target = Path(str(target)).expanduser().resolve()
             _print_collect_dry_run_preview(
                 target=preview_target,
+                target_display=str(target),
                 platform=plat,
                 repo_slug=repo_slug,
                 output_dir=output_dir,
@@ -378,7 +415,7 @@ def collect_evidence_cmd(
             # scan-iac and scan-sast both stay off the internal-error path when their
             # optional tool is absent.
             raise InvalidInputError(str(exc)) from exc
-        _write_collected_evidence(rows, plat=plat, output_dir=output_dir, repo=repo)
+        _write_collected_evidence(rows, plat=plat, output_dir=output_dir, repo=repo, target_display=str(target))
     except OSError as exc:
         stderr_console().print(f"[red]Error:[/red] {markup_safe(exc)}")
         raise typer.Exit(code=2) from exc

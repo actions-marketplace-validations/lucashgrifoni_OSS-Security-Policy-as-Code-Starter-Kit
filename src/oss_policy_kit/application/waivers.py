@@ -7,7 +7,13 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-from oss_policy_kit.application.vuln_waivers import ACTIVE_WAIVER_STATUSES, DEFAULT_WAIVER_STATUS
+from oss_policy_kit.application.vuln_waivers import (
+    ACTIVE_WAIVER_STATUSES,
+    DEFAULT_WAIVER_STATUS,
+    expiry_date_from_text,
+    iso_date_prefix,
+    pinned_expiry_clock_note,
+)
 from oss_policy_kit.domain.errors import LoadError
 from oss_policy_kit.domain.models import WaiverRecord, utc_today
 from oss_policy_kit.infrastructure.yaml_io import load_yaml_file
@@ -24,6 +30,13 @@ class WaiverParseOutcome:
 
 
 def _parse_date(value: Any) -> date | None:
+    """Coerce a waiver expiry to a date; raise ``ValueError`` when the text is not one.
+
+    A string must parse WHOLE (see :func:`vuln_waivers.expiry_date_from_text`). This
+    used to read ``value[:10]``, so ``"2099-01-01-NOT-A-DATE"`` silently became
+    2099-01-01 and the waiver kept suppressing its control with nothing on screen.
+    """
+
     if value is None:
         return None
     if isinstance(value, date) and not isinstance(value, datetime):
@@ -31,7 +44,17 @@ def _parse_date(value: Any) -> date | None:
     if isinstance(value, datetime):
         return value.date()
     if isinstance(value, str):
-        return date.fromisoformat(value.strip()[:10])
+        text = value.strip()
+        parsed = expiry_date_from_text(text)
+        if parsed is not None:
+            return parsed
+        prefix = iso_date_prefix(text)
+        if prefix is not None:
+            raise ValueError(
+                f"trailing text after {prefix.isoformat()} in {value!r}; "
+                'use exactly "YYYY-MM-DD" (the text after the date is not dropped silently)'
+            )
+        raise ValueError(f"not an ISO-8601 date: {value!r}")
     return None
 
 
@@ -163,6 +186,9 @@ def _parse_waiver_record(idx: int, item: object, today: date, warnings: list[str
     if expires_at is not None and expires_at < today:
         warnings.append(f"Waiver for {cid} ignored: expired at {expires_at.isoformat()}")
         return None
+    note = pinned_expiry_clock_note(expires_at, today)
+    if note is not None:
+        warnings.append(f"Waiver for {cid} still applies, but {note}")
     return WaiverRecord(
         control_id=cid,
         justification=justification,

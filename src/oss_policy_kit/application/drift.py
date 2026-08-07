@@ -51,6 +51,15 @@ class DriftReport:
     profile_mismatch: bool = False
     before_profile_id: str | None = None
     after_profile_id: str | None = None
+    #: Identity of the repository each side was evaluated against — the report's own
+    #: ``target_path``, reduced to a basename (M-002). ``None`` when the report does not
+    #: say, or says something that cannot identify a repository (``"."``, ``"unknown"``).
+    before_target: str | None = None
+    after_target: str | None = None
+    #: True only when BOTH sides name a repository and the two names differ. Drift is
+    #: the posture change of one target over time; across two targets every difference
+    #: between the repositories is reported as if the posture had moved.
+    target_mismatch: bool = False
 
 
 def _extract_profile_id(report: dict[str, Any]) -> str | None:
@@ -78,6 +87,45 @@ def _extract_profile_id(report: dict[str, Any]) -> str | None:
         if coerced:
             return coerced
     return None
+
+
+#: ``target_path`` values that name no particular repository. ``"."`` is what
+#: :func:`reporting._sanitize_target_path_for_payload` writes when the target *was* the
+#: working directory, so two reports produced from inside their own clones both say
+#: ``"."`` — it can neither prove a match nor prove a mismatch.
+_ANONYMOUS_TARGETS = frozenset({"", ".", "..", "unknown"})
+
+
+def _basename(value: str) -> str:
+    """Last path segment of *value*, treating ``/`` and ``\\`` as separators.
+
+    :class:`~pathlib.Path` only understands the separators of the *running* OS, so a
+    report written on Windows and read on Linux would keep a backslash-separated home
+    path whole — and a message quoting it would publish the auditor's home directory and
+    account name (M-002). Splitting on both separators makes the reduction hold
+    whichever platform wrote the report and whichever one reads it.
+    """
+
+    token = value.strip().replace("\\", "/").rstrip("/")
+    return token.rsplit("/", 1)[-1] if "/" in token else token
+
+
+def target_identity(report: dict[str, Any]) -> str | None:
+    """Name of the repository *report* was produced against, or ``None`` when unknowable.
+
+    Reduced to a basename for two reasons: it is the only form that is safe to echo
+    (M-002), and it is the only form that compares reliably — the same clone evaluated
+    from a different working directory, or with ``--include-absolute-path``, records a
+    different string for the same repository. Comparing basenames can therefore miss a
+    mismatch (``/a/repo`` vs ``/b/repo``), which is the safe direction: a missed warning
+    costs an operator a second look, a false refusal breaks a legitimate CI comparison.
+    """
+
+    raw = report.get("target_path")
+    if not isinstance(raw, str):
+        return None
+    name = _basename(raw)
+    return None if name.casefold() in _ANONYMOUS_TARGETS else name
 
 
 def _result_map(report: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -161,6 +209,9 @@ def compute_drift(
 
     Returns:
         :class:`DriftReport` describing posture changes, regressions, and improvements.
+        It also records what each side was evaluated *against* (``before_target`` /
+        ``after_target`` / ``target_mismatch``): a drift number is only meaningful
+        between two runs of the same target, so the caller has to be able to tell.
     """
 
     before_path = _display_path(str(before.get("_path", "")), include_absolute=include_absolute_path)
@@ -175,6 +226,14 @@ def compute_drift(
         and after_pid is not None
         and after_pid != ""
         and before_pid != after_pid
+    )
+    before_target = target_identity(before)
+    after_target = target_identity(after)
+    # Case-insensitive: on Windows ``Repo`` and ``repo`` are the same directory, and
+    # refusing to diff a repository against itself would be a worse failure than the one
+    # this flag exists to catch.
+    target_mismatch = bool(
+        before_target is not None and after_target is not None and before_target.casefold() != after_target.casefold()
     )
     bm = _result_map(before)
     am = _result_map(after)
@@ -241,6 +300,9 @@ def compute_drift(
         profile_mismatch=profile_mismatch,
         before_profile_id=before_pid,
         after_profile_id=after_pid,
+        before_target=before_target,
+        after_target=after_target,
+        target_mismatch=target_mismatch,
     )
 
 

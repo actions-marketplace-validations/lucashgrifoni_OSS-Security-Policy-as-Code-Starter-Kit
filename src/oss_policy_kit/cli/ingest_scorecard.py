@@ -18,7 +18,6 @@ does **not** change any ``evaluate`` gate (symmetric with ``ingest-insights``). 
 
 from __future__ import annotations
 
-import dataclasses
 import json
 from datetime import UTC, datetime
 from pathlib import Path
@@ -26,11 +25,12 @@ from typing import Any
 
 import typer
 
+from oss_policy_kit.adapters.scorecard_json import ScorecardBundle, load_scorecard_auto
 from oss_policy_kit.application.input_limits import MAX_EVIDENCE_BYTES, oversize_reason
 from oss_policy_kit.application.scorecard_ingest import (
     EVIDENCE_MAX_AGE_DAYS,
     ScorecardIngestReport,
-    ingest_scorecard,
+    build_report,
 )
 from oss_policy_kit.cli.common import app, exit_for_unexpected, markup_safe, stderr_console, write_stdout_text
 from oss_policy_kit.cli.help_text import CMD_PANEL_EXPORT
@@ -147,6 +147,43 @@ def _render_human(report: ScorecardIngestReport) -> None:
     write_stdout_text("\n".join(lines) + "\n")
 
 
+def _unrecognized_scorecard_reason(bundle: ScorecardBundle, name: str) -> str | None:
+    """Refuse a document that parsed but carries nothing of a Scorecard result.
+
+    Any JSON the reader could not recognise degrades field by field — unknown keys yield
+    no checks, no aggregate score, no date — so an arbitrary document was announced as
+    "OpenSSF Scorecard - ingested", with "Aggregate score: (not reported)", "Result date:
+    (undated)" and every mapped check "(not in result)", and exit 0. Nothing had been
+    ingested; the headline said otherwise.
+
+    The test is deliberately the whole-document one: a real ``scorecard --format json``
+    export always carries ``date`` and ``score``, and any one check, score or date is
+    enough to keep the lenient reporting for a partial or hand-trimmed export. Only a file
+    with none of the three — the exact "everything empty" state — is refused.
+    """
+
+    if bundle.checks or bundle.aggregate_score is not None or bundle.result_date is not None:
+        return None
+    return (
+        f"Scorecard result {name} is not an OpenSSF Scorecard result: it carries no checks, "
+        "no aggregate score and no result date. Produce one with "
+        "'scorecard --repo <url> --format json'."
+    )
+
+
+def _render_invalid(msg: str, display: str, searched: str, fmt: str) -> None:
+    """Report a found-but-unusable result, in whichever format was requested."""
+
+    if fmt == "json":
+        payload = _not_found_payload(searched)
+        payload["found"] = True
+        payload["input_path"] = display
+        payload["error"] = msg
+        write_stdout_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    else:
+        write_stdout_text(f"OpenSSF Scorecard - INVALID\n  File: {display}\n  ERROR: {msg}\n")
+
+
 def _run_ingest_scorecard(target: Path, input_path: Path | None, output_format: str) -> None:
     fmt = output_format.lower().strip()
     if fmt not in {"human", "json"}:
@@ -173,22 +210,20 @@ def _run_ingest_scorecard(target: Path, input_path: Path | None, output_format: 
 
     display = _display_path(chosen, target_path, input_path)
     try:
-        report = ingest_scorecard(chosen, now=datetime.now(UTC))
+        bundle = load_scorecard_auto(chosen)
     except Exception as exc:  # noqa: BLE001 - a file that exists but cannot be parsed is an honest exit 1
-        msg = f"Scorecard result {chosen.name} could not be parsed: {exc}"
-        if fmt == "json":
-            payload = _not_found_payload(searched)
-            payload["found"] = True
-            payload["input_path"] = display
-            payload["error"] = msg
-            write_stdout_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
-        else:
-            write_stdout_text(f"OpenSSF Scorecard - INVALID\n  File: {display}\n  ERROR: {msg}\n")
+        _render_invalid(f"Scorecard result {chosen.name} could not be parsed: {exc}", display, searched, fmt)
         raise typer.Exit(code=1) from exc
 
-    # ``ingest_scorecard`` records the path it was handed, which is absolute; swap in the
-    # display form so neither the "File:" line nor the JSON report carries it (M-002).
-    report = dataclasses.replace(report, input_path=display)
+    unusable = _unrecognized_scorecard_reason(bundle, chosen.name)
+    if unusable is not None:
+        _render_invalid(unusable, display, searched, fmt)
+        raise typer.Exit(code=1)
+
+    # ``input_path`` is the display form from the start: the loaded bundle knows only the
+    # absolute path it was handed, and neither the "File:" line nor the JSON report may
+    # carry it (M-002).
+    report = build_report(bundle, input_path=display, now=datetime.now(UTC))
     if fmt == "json":
         payload = report.to_dict()
         payload["tool"] = _TOOL_NAME
@@ -225,7 +260,8 @@ def ingest_scorecard_cmd(
     control's assurance grade). Records Scorecard's own scores verbatim; never recomputes a
     check and changes no ``evaluate`` verdict. See docs/scorecard-mapping.md.
 
-    Exit codes: 0 found-and-parsed or not-found (informational); 1 found-but-unparseable;
+    Exit codes: 0 found-and-parsed or not-found (informational); 1 a file was found but is
+    not a usable Scorecard result (unparseable, or carrying no checks, score or date);
     2 usage error; 3 unexpected internal error.
     """
 

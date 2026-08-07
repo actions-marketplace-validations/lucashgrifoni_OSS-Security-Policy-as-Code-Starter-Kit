@@ -18,6 +18,12 @@ from typing import TYPE_CHECKING, Any, TextIO
 from rich import box
 from rich.align import Align
 from rich.console import Console
+
+# ``cli.common.markup_safe`` is the package-wide name for this escape, but ``cli.common``
+# imports this module, so importing it back would be a cycle. This is the same Rich
+# primitive it wraps. Apply it once and only once: a value escaped twice renders the
+# backslash the operator never typed.
+from rich.markup import escape as _markup_escape
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -258,6 +264,11 @@ def render_eval_results_table(report: ExecutionReport, *, unicode_icons: bool = 
 
     One row per evaluated control, colored by status (pass / self-attested green, fail red,
     not-applicable dim, manual-review-required yellow, waived cyan, others neutral).
+
+    Every cell and both title values are escaped. Rich renders a ``str`` cell as markup, so
+    a control whose reason names a workflow called ``[bold]unsafe.yml`` printed
+    ``pull_request_target detected in: unsafe.yml`` — the operator went looking for a file
+    that does not exist, while ``evaluation-report.json`` held the real name all along.
     """
 
     status_colors: dict[str, str] = {
@@ -296,9 +307,10 @@ def render_eval_results_table(report: ExecutionReport, *, unicode_icons: bool = 
             "manual-review-required": "!",
             "waived": "W",
         }
-    target_name = Path(report.target_path).name
+    target_name = _markup_escape(Path(report.target_path).name)
+    profile_id = _markup_escape(report.profile_id)
     table = Table(
-        title=f"[bold cyan]Profile: {report.profile_id}[/bold cyan]  [dim]|[/dim]  Target: [dim]{target_name}[/dim]",
+        title=f"[bold cyan]Profile: {profile_id}[/bold cyan]  [dim]|[/dim]  Target: [dim]{target_name}[/dim]",
         show_lines=False,
         expand=False,
         box=box.ROUNDED,
@@ -317,11 +329,13 @@ def render_eval_results_table(report: ExecutionReport, *, unicode_icons: bool = 
         reason = result.reason or ""
         if len(reason) > 90:
             reason = reason[:87] + "..."
+        # Truncate first, escape second: escaping first could cut a ``\[`` in half, and the
+        # 90-character budget is about the operator's text, not about our escape bytes.
         table.add_row(
-            result.control_id,
-            f"[{color}]{icon} {status}[/{color}]",
-            result.confidence or "",
-            reason,
+            _markup_escape(result.control_id),
+            f"[{color}]{icon} {_markup_escape(status)}[/{color}]",
+            _markup_escape(result.confidence or ""),
+            _markup_escape(reason),
         )
     return table
 

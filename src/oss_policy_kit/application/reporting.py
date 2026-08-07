@@ -8,6 +8,7 @@ import os
 import time
 import uuid
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -116,38 +117,17 @@ def _create_temp_exclusive(tmp: Path, text: str) -> None:
         raise
 
 
-def _atomic_write_text(path: Path, text: str) -> None:
-    """Publish ``text`` at ``path`` through a sibling temp file and a single rename.
+def _stage_text(path: Path, text: str) -> Path | None:
+    """Write *text* into a sibling temp file for *path* and return that temp file.
 
-    Truncating the destination in place meant two evaluations sharing one
-    ``--output-dir`` could interleave into a corrupt ``evaluation-report.json`` while
-    both processes still exited 0, and any reader racing a write (a CI step, a
-    dashboard) could parse a half-written file. Swapping the finished file in with
-    ``os.replace`` leaves a reader with either the previous report or the new one,
-    whole, and a failed write leaves the previous report untouched.
+    First half of :func:`_atomic_write_text`. Split out so a caller publishing more than
+    one file can get every byte onto disk before any destination changes -- see
+    :func:`write_reports`, where Markdown text that will not encode, or an output
+    directory with no room for it, must not leave a freshly written JSON behind.
 
-    The temp file is a sibling so the rename stays on one filesystem, and it is opened
-    with ``"x"`` (exclusive create, umask-derived mode) rather than ``tempfile.mkstemp``:
-    that refuses to follow a planted symlink while still producing exactly the
-    permissions and newline translation ``Path.write_text`` produced before.
-
-    Atomicity must not cost reach. A sibling temp file makes the path longer than the
-    destination, and on Windows a destination already near the 260-char limit then
-    fails to create a temp file it could have written directly -- turning an
-    ``--output-dir`` that used to work into exit 2. So the name shrinks to a bare
-    token when the descriptive form would overrun, and a destination that still has
-    no room for any sibling falls back to writing in place: no path that could be
-    written before this function existed loses the ability to be written now.
-
-    Neither step is retried by the operating system. Two evaluations sharing one
-    ``--output-dir`` both rename onto ``evaluation-report.json``, and on Windows the
-    loser of that instant gets ERROR_ACCESS_DENIED -- an error about a handle held for a
-    millisecond, reported to the adopter as "Cannot write to --output-dir". So both steps
-    go through :func:`_retry_on_sharing_conflict`, which re-runs them for the sharing
-    conflicts alone and lets every other error out on the first attempt. In particular
-    the in-place fallback below stays reserved for the path-length case it was written
-    for: a transient conflict is retried, never quietly downgraded to a non-atomic write
-    that could interleave with the very process it was contending with.
+    Returns ``None`` in exactly one case: the path-length fallback described in
+    :func:`_atomic_write_text` already wrote the destination in place, so there is
+    nothing left to publish.
     """
 
     token = uuid.uuid4().hex[:8]
@@ -174,10 +154,22 @@ def _atomic_write_text(path: Path, text: str) -> None:
         # non-atomic, but it is strictly what the caller had before. A genuine
         # ENOSPC / EACCES simply fails again here, and surfaces as it should.
         path.write_text(text, encoding="utf-8")
-        return
+        return None
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
+    return tmp
+
+
+def _publish_staged(tmp: Path | None, path: Path, text: str) -> None:
+    """Swap a file staged by :func:`_stage_text` into place at *path*.
+
+    ``tmp is None`` means the path-length fallback already wrote the destination, so
+    there is nothing to swap.
+    """
+
+    if tmp is None:
+        return
     try:
         _retry_on_sharing_conflict(lambda: os.replace(tmp, path))
     except OSError as exc:
@@ -208,6 +200,132 @@ def _atomic_write_text(path: Path, text: str) -> None:
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
+
+
+def _discard_staged(tmp: Path | None) -> None:
+    """Remove a staged temp file that will never be published (no-op once published)."""
+
+    if tmp is not None:
+        tmp.unlink(missing_ok=True)
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Publish ``text`` at ``path`` through a sibling temp file and a single rename.
+
+    Truncating the destination in place meant two evaluations sharing one
+    ``--output-dir`` could interleave into a corrupt ``evaluation-report.json`` while
+    both processes still exited 0, and any reader racing a write (a CI step, a
+    dashboard) could parse a half-written file. Swapping the finished file in with
+    ``os.replace`` leaves a reader with either the previous report or the new one,
+    whole, and a failed write leaves the previous report untouched.
+
+    The temp file is a sibling so the rename stays on one filesystem, and it is opened
+    with ``"x"`` (exclusive create, umask-derived mode) rather than ``tempfile.mkstemp``:
+    that refuses to follow a planted symlink while still producing exactly the
+    permissions and newline translation ``Path.write_text`` produced before.
+
+    Atomicity must not cost reach. A sibling temp file makes the path longer than the
+    destination, and on Windows a destination already near the 260-char limit then
+    fails to create a temp file it could have written directly -- turning an
+    ``--output-dir`` that used to work into exit 2. So the name shrinks to a bare
+    token when the descriptive form would overrun, and a destination that still has
+    no room for any sibling falls back to writing in place: no path that could be
+    written before this function existed loses the ability to be written now.
+
+    Neither step is retried by the operating system. Two evaluations sharing one
+    ``--output-dir`` both rename onto ``evaluation-report.json``, and on Windows the
+    loser of that instant gets ERROR_ACCESS_DENIED -- an error about a handle held for a
+    millisecond, reported to the adopter as "Cannot write to --output-dir". So both steps
+    go through :func:`_retry_on_sharing_conflict`, which re-runs them for the sharing
+    conflicts alone and lets every other error out on the first attempt. In particular
+    the in-place fallback in :func:`_stage_text` stays reserved for the path-length case
+    it was written for: a transient conflict is retried, never quietly downgraded to a
+    non-atomic write that could interleave with the very process it was contending with.
+
+    The two halves live in :func:`_stage_text` and :func:`_publish_staged` so that
+    :func:`write_reports`, which has two destinations to keep consistent with each
+    other, can stage both before publishing either.
+    """
+
+    _publish_staged(_stage_text(path, text), path, text)
+
+
+@dataclass(frozen=True, slots=True)
+class _PriorContent:
+    """What a report file held before this run touched it, when that is knowable.
+
+    ``data is None`` with ``restorable`` set means the file did not exist yet, so
+    "put it back" means "delete it".
+    """
+
+    restorable: bool
+    data: bytes | None
+
+
+def _capture_prior_content(path: Path) -> _PriorContent:
+    """Read *path* as bytes so a half-published run can be undone.
+
+    Bytes, not text: a report directory can hold a file this kit did not write, and a
+    rollback that re-encoded it -- or refused because it did not decode -- would damage
+    or block something it was only supposed to preserve.
+    """
+
+    try:
+        return _PriorContent(restorable=True, data=path.read_bytes())
+    except FileNotFoundError:
+        return _PriorContent(restorable=True, data=None)
+    except OSError:
+        # Present but unreadable (a lock, an ACL). Rolling back would mean either
+        # inventing its contents or deleting a file we could not read. Both are worse
+        # than telling the operator the pair no longer describes one run.
+        return _PriorContent(restorable=False, data=None)
+
+
+def _restore_prior_content(path: Path, prior: _PriorContent) -> bool:
+    """Put *path* back the way :func:`_capture_prior_content` found it; ``True`` on success.
+
+    Best effort by construction: this only runs when the surrounding write has already
+    failed and is about to raise. It still publishes through a temp file and a rename,
+    so a rollback that is itself interrupted cannot leave a torn report behind -- the
+    failure mode the atomic write exists to prevent.
+    """
+
+    if not prior.restorable:
+        return False
+    if prior.data is None:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            return False
+        return True
+    # A bare token keeps the temp name short, so a destination that only just fits
+    # inside the path budget can still be rolled back.
+    tmp = path.with_name(f".{uuid.uuid4().hex[:8]}.bak")
+    try:
+        tmp.write_bytes(prior.data)
+        _retry_on_sharing_conflict(lambda: os.replace(tmp, path))
+    except OSError:
+        tmp.unlink(missing_ok=True)
+        return False
+    return True
+
+
+def _mixed_report_pair_error(exc: OSError) -> OSError:
+    """Re-word *exc* for the case where the JSON published and the Markdown did not.
+
+    Reached only when the rollback in :func:`write_reports` also failed, which is the
+    one path that genuinely leaves two files describing different runs. The CLI renders
+    ``strerror``, so the explanation has to live there; no path is interpolated, because
+    that string reaches the user (M-002).
+    """
+
+    detail = exc.strerror or "filesystem error"
+    return OSError(
+        exc.errno,
+        f"{detail} -- evaluation-report.json was replaced but evaluation-report.md was not, "
+        "and the previous JSON could not be restored. The two files in the output directory "
+        "now describe different runs: delete both and re-run before reading either.",
+    )
 
 
 def _md_cell(value: str) -> str:
@@ -663,6 +781,24 @@ def report_to_dict(
     return report_to_dict_v2_0(report, include_absolute_path=include_absolute_path, extensions=extensions)
 
 
+def _json_report_text(
+    report: ExecutionReport,
+    *,
+    schema_version_override: str | None = None,
+    include_absolute_path: bool = False,
+    extensions: dict[str, Any] | None = None,
+) -> str:
+    """Render the exact bytes-to-be of ``evaluation-report.json`` without writing anything."""
+
+    payload = report_to_dict(
+        report,
+        schema_version_override=schema_version_override,
+        include_absolute_path=include_absolute_path,
+        extensions=extensions,
+    )
+    return json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+
+
 def write_json_report(
     report: ExecutionReport,
     path: Path,
@@ -674,16 +810,18 @@ def write_json_report(
     """Write evaluation-report.json."""
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = report_to_dict(
-        report,
-        schema_version_override=schema_version_override,
-        include_absolute_path=include_absolute_path,
-        extensions=extensions,
+    _atomic_write_text(
+        path,
+        _json_report_text(
+            report,
+            schema_version_override=schema_version_override,
+            include_absolute_path=include_absolute_path,
+            extensions=extensions,
+        ),
     )
-    _atomic_write_text(path, json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
 
 
-def write_markdown_report(  # noqa: C901
+def write_markdown_report(
     report: ExecutionReport,
     path: Path,
     *,
@@ -692,6 +830,16 @@ def write_markdown_report(  # noqa: C901
     """Write evaluation-report.md."""
 
     path.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_write_text(path, _markdown_report_text(report, include_absolute_path=include_absolute_path))
+
+
+def _markdown_report_text(  # noqa: C901
+    report: ExecutionReport,
+    *,
+    include_absolute_path: bool = False,
+) -> str:
+    """Render the exact text of ``evaluation-report.md`` without writing anything."""
+
     lines: list[str] = []
     lines.append("# OSS Policy Kit - evaluation report")
     lines.append("")
@@ -758,7 +906,7 @@ def write_markdown_report(  # noqa: C901
     lines.extend(_md_scorecard_supplemental_lines(report, include_absolute_path=include_absolute_path))
     lines.extend(_md_controls_table_lines(report))
     lines.extend(_md_control_detail_lines(report, include_absolute_path=include_absolute_path))
-    _atomic_write_text(path, "\n".join(lines))
+    return "\n".join(lines)
 
 
 def _md_prioritization_lines(report: ExecutionReport) -> list[str]:
@@ -890,19 +1038,86 @@ def write_reports(
     ``include_absolute_path`` is forwarded to both writers, and both honour it over the
     same set of host paths -- the target, the scorecard and waiver files, and every
     evidence reference. Default is privacy-by-default: sanitized in both files.
+
+    The two files are one run's answer, so they are published as a pair: **both land or
+    neither does.** Writing them as two independent calls meant a Markdown write that
+    failed left the NEW JSON sitting beside the STALE Markdown, with nothing in either
+    file saying so. Measured: seed an ``--output-dir`` from one target, hold only
+    ``evaluation-report.md`` open, evaluate a different target -- the JSON was replaced,
+    the Markdown was not, and the directory then described two different repositories.
+    Whoever reads that pair reads a run that never happened.
+
+    Three steps buy that guarantee:
+
+    1. Both files are rendered before either destination is touched, so a renderer that
+       raises leaves both artifacts still describing the previous run.
+    2. Both are staged into sibling temp files, so text that cannot be UTF-8 encoded (a
+       lone surrogate reaching ``reason`` from a malformed source file), a full disk, or
+       a read-only output directory all fail before anything is published.
+    3. If the Markdown still fails to publish -- a handle held on it in a mode that
+       blocks the rename *and* the in-place fallback -- the JSON is rolled back to what
+       it held before this run. Only when that rollback is itself impossible does a
+       mixed pair survive, and then the error says so in as many words
+       (:func:`_mixed_report_pair_error`) rather than reporting a generic write failure
+       and leaving the operator to compare timestamps.
+
+    The one seam left open is the path-length fallback in :func:`_stage_text`: a
+    destination with no room for any sibling temp file is written in place, which lands
+    the JSON at step 2. That case is still covered by the step-3 rollback; it just loses
+    the "nothing was touched" guarantee on the way there.
     """
 
     json_path = output_dir / "evaluation-report.json"
     md_path = output_dir / "evaluation-report.md"
-    write_json_report(
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    json_text = _json_report_text(
         report,
-        json_path,
         schema_version_override=schema_version_override,
         include_absolute_path=include_absolute_path,
         extensions=extensions,
     )
-    write_markdown_report(report, md_path, include_absolute_path=include_absolute_path)
+    md_text = _markdown_report_text(report, include_absolute_path=include_absolute_path)
+    prior_json = _capture_prior_content(json_path)
+
+    staged_json: Path | None = None
+    staged_md: Path | None = None
+    # Two distinct states, and conflating them would mis-report one of them:
+    #  * the JSON destination may already differ from ``prior_json``, so it has to be put
+    #    back on any failure from here on;
+    #  * the JSON is published and only the Markdown is outstanding, which is the one
+    #    state in which a failed rollback leaves a genuinely mixed pair.
+    json_may_have_changed = False
+    markdown_outstanding = False
+    try:
+        staged_json = _stage_text(json_path, json_text)
+        json_may_have_changed = staged_json is None  # the path-length fallback wrote it in place
+        staged_md = _stage_text(md_path, md_text)
+        json_may_have_changed = True
+        _publish_staged(staged_json, json_path, json_text)
+        markdown_outstanding = True
+        _publish_staged(staged_md, md_path, md_text)
+    except OSError as exc:
+        restored = _rewind_json(json_path, prior_json, json_may_have_changed)
+        _discard_staged(staged_json)
+        _discard_staged(staged_md)
+        if restored or not markdown_outstanding:
+            raise
+        raise _mixed_report_pair_error(exc) from exc
+    except BaseException:
+        _rewind_json(json_path, prior_json, json_may_have_changed)
+        _discard_staged(staged_json)
+        _discard_staged(staged_md)
+        raise
     return json_path, md_path
+
+
+def _rewind_json(json_path: Path, prior: _PriorContent, needed: bool) -> bool:
+    """Undo a JSON publish when one happened; report whether the file is back as it was."""
+
+    if not needed:
+        return True
+    return _restore_prior_content(json_path, prior)
 
 
 def _control_delta_dict(d: ControlDelta) -> dict[str, Any]:
@@ -1004,7 +1219,22 @@ def _drift_markdown(report: DriftReport) -> str:
 
 
 def _drift_table(report: DriftReport, color: bool) -> str:
-    """Render a drift report as a Rich table (with trailing platform notes)."""
+    """Render a drift report as a Rich table (with trailing platform notes).
+
+    Every value below comes from whatever two report files the caller diffed, and Rich
+    reads ``[word]`` in a cell or a printed line as a style tag and deletes it: a control
+    id ``[bold]GOV-SEC-001`` reached the operator as ``GOV-SEC-001``, naming a different
+    control than the one that regressed. ``--format markdown`` and ``--format json``
+    both keep the id whole, so the table was the only view that lied. Each interpolated
+    value therefore goes through ``markup_safe``; the fixed ``[red]``/``[green]`` labels
+    are ours and stay live.
+
+    ``markup_safe`` is imported here rather than at module scope because
+    ``cli.common`` imports this module -- at module scope the pair does not import at
+    all.
+    """
+
+    from oss_policy_kit.cli.common import markup_safe
 
     buf = StringIO()
     console = Console(file=buf, width=120, force_terminal=color, color_system=("standard" if color else None))
@@ -1014,16 +1244,28 @@ def _drift_table(report: DriftReport, color: bool) -> str:
     table.add_column("Before")
     table.add_column("After")
     for d in report.regressions:
-        table.add_row("[red]regression[/red]", d.control_id, d.before_status, d.after_status)
+        table.add_row(
+            "[red]regression[/red]",
+            markup_safe(d.control_id),
+            markup_safe(d.before_status),
+            markup_safe(d.after_status),
+        )
     for d in report.improvements:
-        table.add_row("[green]improve[/green]", d.control_id, d.before_status, d.after_status)
+        table.add_row(
+            "[green]improve[/green]",
+            markup_safe(d.control_id),
+            markup_safe(d.before_status),
+            markup_safe(d.after_status),
+        )
     if not report.regressions and not report.improvements:
         table.add_row("—", "(no status changes on shared controls)", "", "")
     console.print(table)
     if report.new_controls:
-        console.print(f"[cyan]New in after:[/cyan] {', '.join(report.new_controls)}")
+        console.print(f"[cyan]New in after:[/cyan] {', '.join(markup_safe(c) for c in report.new_controls)}")
     if report.removed_controls:
-        console.print(f"[yellow]Removed:[/yellow] {', '.join(report.removed_controls)}")
+        console.print(f"[yellow]Removed:[/yellow] {', '.join(markup_safe(c) for c in report.removed_controls)}")
     if report.expired_waivers:
-        console.print(f"[magenta]Expired waivers:[/magenta] {', '.join(report.expired_waivers)}")
+        console.print(
+            f"[magenta]Expired waivers:[/magenta] {', '.join(markup_safe(c) for c in report.expired_waivers)}"
+        )
     return buf.getvalue()

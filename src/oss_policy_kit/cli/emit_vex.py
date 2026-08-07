@@ -27,6 +27,7 @@ This subcommand intentionally does **not**:
 from __future__ import annotations
 
 import json
+import re
 from itertools import islice
 from pathlib import Path
 from typing import Any
@@ -38,8 +39,10 @@ import typer
 # names so behavior and existing test hooks stay byte-identical.
 from oss_policy_kit.application import vuln_waivers as _vuln_waivers_mod
 from oss_policy_kit.application.input_limits import (
+    BAD_INPUT_ERRORS,
     MAX_SARIF_BYTES,
     bad_input_detail,
+    bad_input_reason,
     oversize_reason,
     too_deep_reason,
 )
@@ -163,9 +166,10 @@ def _read_sarif_document(sarif_path: Path) -> tuple[dict[str, Any], str | None]:
     """Return (parsed SARIF document, error_or_None); ``{}`` whenever an error is returned.
 
     Every failure an ordinary bad file can produce — oversized, unreadable,
-    wrongly encoded, unparseable, nested past the parser's stack — becomes a
-    message the caller turns into exit 2. None of them is a defect in the kit, so
-    none of them may reach the CLI's exit-3 handler.
+    wrongly encoded, unparseable, nested past the parser's stack, carrying an integer
+    literal past CPython's 4300-digit conversion limit — becomes a message the caller
+    turns into exit 2. None of them is a defect in the kit, so none of them may reach
+    the CLI's exit-3 handler.
     """
 
     oversize = oversize_reason(sarif_path, MAX_SARIF_BYTES, label="OSV-Scanner SARIF")
@@ -196,6 +200,19 @@ def _read_sarif_document(sarif_path: Path) -> tuple[dict[str, Any], str | None]:
         doc = json.loads(raw)
     except json.JSONDecodeError as exc:
         return {}, f"Could not parse SARIF JSON: {exc}"
+    except BAD_INPUT_ERRORS as exc:
+        # The depth guard's sibling, and it was missing. CPython refuses to convert an
+        # integer literal longer than 4300 digits and raises a BARE ``ValueError`` --
+        # ``json.JSONDecodeError`` never sees it -- so a SARIF holding a 5000-digit number
+        # escaped every handler in this module. ``bad_input_reason`` names the file and
+        # supplies the "why" WITHOUT CPython's ``use sys.set_int_max_str_digits()``
+        # advice, which is about the interpreter, not about the file the operator has to
+        # fix. One hostile document, one vocabulary, exit 2 either way.
+        #
+        # A bare ``ValueError`` is safe to claim as bad input HERE (and only here):
+        # ``json.loads`` was handed a string read from a user-controlled file one line
+        # above, so nothing else could have raised it.
+        return {}, bad_input_reason(exc, label="OSV-Scanner SARIF", name=sarif_path.name)
     if not isinstance(doc, dict) or "runs" not in doc:
         return {}, "SARIF missing top-level 'runs' array."
     if not isinstance(doc.get("runs"), list):
@@ -342,14 +359,128 @@ def _validate_sarif_structure(doc: dict[str, Any], *, limit: int = _MAX_SARIF_ST
 
 
 def _sarif_structure_error(sarif_path: Path, errors: list[str]) -> str:
-    """Render the refusal for a structurally invalid input SARIF (basename only, M-002)."""
+    """Render the refusal for a structurally invalid input SARIF (basename only, M-002).
+
+    Not escaped here. The caller raises this as an ``InvalidInputError`` and the command
+    wrapper prints ``markup_safe(exc.message)``; escaping in both places rendered a file
+    named ``[dev].sarif.json`` as ``\\[dev].sarif.json`` — a backslash the operator never
+    typed, in the one token they have to compare against their own command line.
+    """
 
     return (
-        f"OSV-Scanner SARIF '{markup_safe(sarif_path.name)}' is not a structurally valid SARIF document:\n  - "
+        f"OSV-Scanner SARIF '{sarif_path.name}' is not a structurally valid SARIF document:\n  - "
         + "\n  - ".join(errors)
         + "\nRefusing to emit a VEX document from it: an empty or partial VEX reads to a "
         "consumer as 'the manufacturer has nothing to declare'. Re-run "
         "`osv-scanner --format sarif --recursive .` and keep its output verbatim."
+    )
+
+
+# --- Is the input actually OSV-Scanner output? ------------------------------
+#
+# Structure is not identity. Fed the kit's OWN `export-evidence --format sarif` (or
+# `evaluate --sarif-output`) document, emit-vex exited 0, passed `--validate`, and wrote
+# a structurally perfect CycloneDX VEX 1.6 whose entries were POLICY CONTROL IDS —
+# `GOV-SEC-001`, `CI-PIN-008`, `SAST-OSV-068`. Published, that document tells every
+# downstream consumer the manufacturer has analysed those as vulnerabilities affecting
+# the product. Being confidently wrong about which universe of identifiers it is
+# publishing is worse than refusing, so this gate refuses.
+
+#: Producer name (``runs[].tool.driver.name``) every SARIF this kit writes carries. Used
+#: only to say *why* the input is wrong; the refusal itself rests on the ids below, so a
+#: renamed producer cannot slip a control-id document past the gate.
+_KIT_SARIF_PRODUCER_PREFIX = "oss-policy-kit"
+
+#: Database prefixes that identify a vulnerability record: the OSV schema's registered
+#: database ids (https://ossf.github.io/osv-schema/#id-modified-fields) plus the vendor
+#: prefixes OSV-Scanner and its neighbours emit. Deliberately generous — a prefix missing
+#: from this set is a false refusal, which is the one failure mode worse than the defect.
+_VULN_ID_PREFIXES: frozenset[str] = frozenset(
+    {
+        "ALAS", "ALBA", "ALEA", "ALSA", "ASB", "BIT", "CESA", "CGA", "CPANSA", "CURL",
+        "CVE", "DEBIAN", "DLA", "DSA", "DTSA", "ELSA", "EUVD", "FEDORA", "GHSA", "GMS",
+        "GO", "GSD", "HSEC", "JLSEC", "LBSEC", "LSN", "MAL", "MGASA", "MINI", "MSRC",
+        "NPM", "OESA", "OPENSUSE", "OSV", "PHSA", "PSF", "PYSEC", "RHBA", "RHEA", "RHSA",
+        "RLSA", "RSEC", "RUSTSEC", "RXSA", "SNYK", "SUSE", "TEMP", "UBUNTU", "USN", "UVI",
+        "V8", "VDB", "WID", "WS", "XSA",
+    }
+)  # fmt: skip
+
+#: Fallback shape ``<DB>-<YYYY>-<sequence>`` for advisory databases not named above.
+#: Control ids do not match it: ``GOV-SEC-001`` fails on ``SEC`` where four digits belong,
+#: and no id in the bundled catalog of 222 controls matches (asserted in the test file).
+_VULN_ID_DB_YEAR_SEQ = re.compile(r"^[A-Za-z][A-Za-z0-9_]*-\d{4}-\d+$")
+
+#: Ids quoted back to the operator, and how much of each. A hostile SARIF can carry a
+#: one-megabyte "id" (or driver name); three short ones are enough to recognise the
+#: wrong file, and nothing the document controls may set the length of the refusal.
+_WRONG_INPUT_ID_SAMPLE = 3
+_WRONG_INPUT_ID_CHARS = 60
+_WRONG_INPUT_PRODUCER_CHARS = 60
+
+
+def _looks_like_vulnerability_id(vid: str) -> bool:
+    """True when *vid* is plausibly a vulnerability identifier rather than some other rule id."""
+
+    head, sep, _rest = vid.partition("-")
+    if sep and head.upper() in _VULN_ID_PREFIXES:
+        return True
+    return bool(_VULN_ID_DB_YEAR_SEQ.match(vid))
+
+
+def _sarif_producer_name(doc: dict[str, Any]) -> str | None:
+    """Return the first ``runs[].tool.driver.name`` the document declares, if any."""
+
+    runs = doc.get("runs")
+    for run in runs if isinstance(runs, list) else []:
+        if not isinstance(run, dict):
+            continue
+        tool = run.get("tool")
+        driver = tool.get("driver") if isinstance(tool, dict) else None
+        name = driver.get("name") if isinstance(driver, dict) else None
+        if isinstance(name, str) and name.strip():
+            return name.strip()
+    return None
+
+
+def _wrong_input_error(sarif_path: Path, doc: dict[str, Any], ids: list[str]) -> str | None:
+    """Refuse a well-formed SARIF that is not a vulnerability scan, else ``None``.
+
+    Two deliberate escape hatches keep an honest adopter out of this branch:
+
+    - **No ids at all** is silent. A clean OSV-Scanner run is exactly that, and the
+      empty VEX it produces is the truth (there is a control test for it).
+    - **One recognisable id is enough** for the whole document. A real scan carries at
+      least one CVE/GHSA/PYSEC-style id, so a prefix this kit has never heard of costs
+      nothing as long as the file also contains one it has.
+
+    Never escaped for Rich here: the caller raises it as an ``InvalidInputError`` whose
+    message the command wrapper escapes exactly once.
+    """
+
+    if not ids or any(_looks_like_vulnerability_id(v) for v in ids):
+        return None
+    sample = ", ".join(v[:_WRONG_INPUT_ID_CHARS] for v in ids[:_WRONG_INPUT_ID_SAMPLE])
+    raw_producer = _sarif_producer_name(doc)
+    producer = raw_producer[:_WRONG_INPUT_PRODUCER_CHARS] if raw_producer is not None else None
+    if producer is not None and producer.lower().startswith(_KIT_SARIF_PRODUCER_PREFIX):
+        origin = (
+            f" It identifies its producer as '{producer}', which reports policy CONTROLS, not "
+            "vulnerabilities — this looks like `export-evidence --format sarif` or "
+            "`evaluate --sarif-output` output."
+        )
+    elif producer is not None:
+        origin = f" It identifies its producer as '{producer}'."
+    else:
+        origin = ""
+    count = len(ids)
+    noun = "id" if count == 1 else "ids"
+    return (
+        f"OSV-Scanner SARIF '{sarif_path.name}' does not look like a vulnerability scan: none of its "
+        f"{count} rule/result {noun} is a vulnerability identifier (e.g. {sample})." + origin + " Refusing to "
+        "emit a VEX document from it: every entry would assert to downstream consumers that "
+        "the identifier is a vulnerability the manufacturer has analysed. Produce the input with "
+        "`osv-scanner --format sarif --recursive .`; emit-vex reads CVE / GHSA / OSV-style ids."
     )
 
 
@@ -654,9 +785,12 @@ def _write_vex_output(
     except OSError as exc:
         raise InvalidInputError(f"Cannot write to --output '{output}': {exc}") from exc
     applied = sum(1 for vid in vuln_ids if vid in vuln_waivers)
+    # markup_safe on the path: Rich reads `[dev]` as a style tag and deletes it, so
+    # `--output "[dev]-out.json"` was confirmed back to the operator as `-out.json` — the
+    # command named a file it had not written.
     stderr_console().print(
         f"[green]Wrote {doc_label} document[/green]: "
-        f"{output} ({len(vuln_ids)} vulnerability ID(s), "
+        f"{markup_safe(output)} ({len(vuln_ids)} vulnerability ID(s), "
         f"{applied} marked not_affected via waivers)."
     )
     # Report waiver IDs that did NOT match any SARIF finding so the user can spot
@@ -670,7 +804,7 @@ def _write_vex_output(
         stderr_console().print(
             f"[yellow]Warning:[/yellow] {len(unmatched_waivers)} waiver "
             f"vulnerability_id(s) did not match any SARIF finding: "
-            f"{preview}{more}. Check for typos or alias mismatches "
+            f"{markup_safe(preview)}{more}. Check for typos or alias mismatches "
             f"(CVE vs GHSA vs OSV vs RUSTSEC)."
         )
 
@@ -688,16 +822,18 @@ def _explicit_waivers_warning(waivers: Path) -> str | None:
     The path is echoed exactly as typed and never resolved, so a relative argument
     cannot become an absolute one that ships the operator's home directory or account
     name to whoever the message is pasted to (M-002).
+
+    Not escaped for Rich here. The caller prints ``markup_safe(...)`` of this string, and
+    escaping in both places is how ``--waivers "[dev]/waivers.yaml"`` reached the operator
+    as ``'\\[dev]/waivers.yaml'`` — a leading backslash they never typed, in the one token
+    the message exists to let them compare against their own command line.
     """
 
     if waivers.is_file():
         return None
     what = "is a directory, not a file" if waivers.is_dir() else "does not exist"
-    # markup_safe: the path is printed inside a Rich markup string, and Rich silently
-    # drops anything shaped like `[tag]` -- the one token the operator has to compare
-    # against what they typed is exactly the token that must survive rendering.
     return (
-        f"--waivers path '{markup_safe(waivers)}' {what}; no waivers were applied, so every "
+        f"--waivers path '{waivers}' {what}; no waivers were applied, so every "
         "finding is emitted as unanalyzed (CycloneDX state 'in_triage' / OpenVEX "
         "status 'under_investigation'). Check the path for a typo."
     )
@@ -709,6 +845,9 @@ def _read_validated_sarif(osv_sarif: Path) -> tuple[list[str], dict[str, list[st
     Structure is checked BEFORE the IDs are collected, because the tolerant reader
     turns a malformed scan into an empty ID list, and an empty VEX document at exit 0
     reads to a downstream consumer as a clean bill of health.
+
+    Identity is checked AFTER, on the ids themselves: a document can be a flawless SARIF
+    and still be the wrong SARIF (see :func:`_wrong_input_error`).
     """
 
     if not osv_sarif.is_file():
@@ -723,7 +862,11 @@ def _read_validated_sarif(osv_sarif: Path) -> tuple[list[str], dict[str, list[st
     structure_errors = _validate_sarif_structure(sarif_doc)
     if structure_errors:
         raise InvalidInputError(_sarif_structure_error(osv_sarif, structure_errors))
-    return _collect_sarif_data(sarif_doc)
+    ids, refs = _collect_sarif_data(sarif_doc)
+    wrong_input = _wrong_input_error(osv_sarif, sarif_doc, ids)
+    if wrong_input is not None:
+        raise InvalidInputError(wrong_input)
+    return ids, refs
 
 
 def _load_and_report_waivers(waivers: Path, *, explicit: bool) -> dict[str, _VulnWaiver]:

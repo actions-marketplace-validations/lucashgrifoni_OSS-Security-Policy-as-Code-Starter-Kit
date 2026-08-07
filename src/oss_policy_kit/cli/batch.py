@@ -109,7 +109,11 @@ def evaluate_many_cmd(
             cons = stderr_console()
 
             def progress_cb(repo_name: str, current: int, total: int) -> None:
-                cons.print(f"[dim]  [{current}/{total}][/dim] {repo_name}")
+                # The directory name is the operator's, not ours: a child called
+                # ``[bold]repo-a`` reached the console as ``repo-a``. The consolidated
+                # ``evaluation-batch.json`` records it correctly, but the progress stream
+                # is the only place anyone watches during a long batch.
+                cons.print(f"[dim]  [{current}/{total}][/dim] {markup_safe(repo_name)}")
 
         batch = run_batch_evaluation(
             target_root=root,

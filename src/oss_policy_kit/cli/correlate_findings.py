@@ -42,7 +42,63 @@ _SEVERITY_RANK = {name: len(NORMALIZED_SEVERITIES) - i for i, name in enumerate(
 _GATE_SEVERITIES = ("critical", "high", "medium", "low")
 
 
-def _render_human(report: dict[str, Any], output: Path) -> None:
+def _echo_path(typed: Path, target_path: Path) -> str:
+    """The form of *typed* that is safe to print: the relative argument, verbatim (M-002).
+
+    ``--output f.json`` was answered with ``Wrote findings/1.0 artifact: <abs>/f.json`` —
+    the kit resolved the argument under ``--target`` and then echoed the resolution,
+    spelling out the operator's cwd, home directory and OS account name. Echoing the
+    string the user typed is not a leak; resolving it is.
+
+    An absolute argument is already the user's own string, but it must still not appear in
+    output, so it is cited relative to ``--target`` when it sits inside the tree and by
+    bare name otherwise — the same ladder ``ingest-scorecard._display_path`` uses.
+    """
+
+    if not typed.is_absolute():
+        return typed.as_posix()
+    try:
+        return typed.resolve().relative_to(target_path).as_posix()
+    except (OSError, ValueError):
+        return typed.name
+
+
+#: Why an ``--enrichment-file`` the operator explicitly supplied did not reach the ranking.
+#: Keyed by the ``sources_read`` status ``findings_report._load_enrichment`` records.
+_ENRICHMENT_NOT_OK: dict[str, str] = {
+    "unreadable": "it could not be read, decoded, or parsed as a JSON object",
+    "oversize": f"it is larger than the {MAX_EVIDENCE_BYTES}-byte limit",
+    "missing": "it was not found",
+}
+
+
+def _warn_if_enrichment_unused(report: dict[str, Any], shown: str) -> None:
+    """Warn on stderr when an explicitly-supplied enrichment snapshot was not used.
+
+    The artifact already records the truth (``sources_read`` carries the snapshot with
+    ``status`` ``unreadable``), and correlate-findings is right not to fail: an unreadable
+    source degrades one input, it does not invalidate the run. But the operator asked for
+    this file by name, and the only console trace was ``3 ok, 8 not read`` in a line that
+    counts nine sources nobody asked about. A file named on the command line and then
+    silently ignored deserves to be said out loud.
+
+    Warning only — the exit code, the artifact and the ranking are untouched.
+    """
+
+    record = next((s for s in report["sources_read"] if s["kind"] == "enrichment-snapshot"), None)
+    if record is None or record["status"] == "ok":
+        return
+    # ``shown`` is the only non-literal here, so it is the only value escaped: ``why`` comes
+    # from the literal table above, and escaping a literal twice is how a backslash the
+    # operator never typed reaches the screen.
+    why = _ENRICHMENT_NOT_OK.get(record["status"], "it could not be used")
+    stderr_console().print(
+        f"[yellow]Enrichment:[/yellow] --enrichment-file {markup_safe(shown)} was not used because "
+        f"{why}; ranking falls back to severity alone. The artifact records it under sources_read."
+    )
+
+
+def _render_human(report: dict[str, Any], output: str) -> None:
     findings = report["findings"]
     by_sev = report["findings_by_severity"]
     sources = report["sources_read"]
@@ -149,7 +205,7 @@ def _resolve_paths(
     if enrichment_file is not None:
         enrichment_path = enrichment_file if enrichment_file.is_absolute() else target_path / enrichment_file
         if not enrichment_path.is_file():
-            raise InvalidInputError(f"--enrichment-file {enrichment_file.name} is not a file.")
+            raise InvalidInputError(f"--enrichment-file {_echo_path(enrichment_file, target_path)} is not a file.")
     return target_path, output_path, waivers_path, enrichment_path
 
 
@@ -187,6 +243,8 @@ def _run_correlate_findings(
     )
     for w in report.get("extensions", {}).get("waiver_warnings", []):
         stderr_console().print(f"[yellow]Waivers:[/yellow] {markup_safe(w)}")
+    if enrichment_file is not None:
+        _warn_if_enrichment_unused(report, _echo_path(enrichment_file, target_path))
     _write_artifact(report, output_path)
 
     if fmt == "json":
@@ -194,7 +252,7 @@ def _run_correlate_findings(
     elif fmt == "sarif":
         write_stdout_text(json.dumps(render_findings_sarif(report), indent=2, sort_keys=True) + "\n")
     else:
-        _render_human(report, output_path)
+        _render_human(report, _echo_path(output, target_path))
 
     message = _gate_tripped(report, sev, fail_on_kev)
     if message is not None:

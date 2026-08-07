@@ -7,6 +7,7 @@ import logging
 import sys
 import textwrap
 from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, NoReturn, cast
@@ -123,6 +124,50 @@ def markup_safe(value: object) -> str:
     """
 
     return _rich_markup_escape(str(value))
+
+
+def display_path(value: str | Path, *, root: str | Path | None = None) -> str:
+    """Render *value* for a user-facing message without leaking the host layout (M-002).
+
+    Three rules, applied in order:
+
+    - A **relative** value is returned exactly as it was given. The adopter typed
+      ``--target .``; answering with the fully-qualified home-directory path hands their
+      OS account name to whoever reads the terminal, the CI log, or the pasted issue --
+      and tells them nothing they did not already type.
+    - An **absolute** value that sits under the current directory is shown relative to it.
+      Where an artifact landed is genuinely useful, and cwd-relative is the form that is
+      both useful and free of everything above the working directory.
+    - Anything else falls back to *root* -- the directory the command was pointed at --
+      and finally to the bare name. Losing the parent directories is the point: the
+      fallback has to hold the same line the first two rules do.
+
+    ``root`` is the artifact's own root (an output directory, a repository target), not a
+    second chance to print the host layout: it is only ever used as the base to subtract.
+    """
+
+    raw = str(value)
+    if not raw:
+        return raw
+    path = Path(raw)
+    if not path.is_absolute():
+        return raw
+    try:
+        resolved = path.resolve()
+    except OSError:
+        return path.name or raw
+    bases: list[Path] = []
+    # A deleted working directory makes ``Path.cwd()`` raise; the fallbacks below still apply.
+    with suppress(OSError):
+        bases.append(Path.cwd())
+    if root is not None:
+        bases.append(Path(root))
+    for base in bases:
+        try:
+            return str(resolved.relative_to(base.resolve()))
+        except (OSError, ValueError):
+            continue
+    return path.name or raw
 
 
 def exit_for_unexpected(exc: BaseException) -> NoReturn:
@@ -441,21 +486,32 @@ def _warn_deprecated_profile_alias(profile_id: str) -> None:
     )
 
 
-def _warn_missing_scan_evidence(repo_root: Path, control_ids: set[str], machine_stdout: bool) -> None:
+def _warn_missing_scan_evidence(
+    repo_root: Path,
+    control_ids: set[str],
+    machine_stdout: bool,
+    *,
+    target_display: str | None = None,
+) -> None:
     """Print a prominent banner when the profile bundles scan-* controls but the
     corresponding evidence file is missing. Prevents the UX gap where evaluate
     against k8s/iac/sast profiles returns opaque manual-review-required for every
     control because the user did not know to run the scan-* command first.
+
+    The command the banner tells the operator to run quotes the target as they typed it
+    (``target_display``), not the resolved path: this is a line meant to be copied, and a
+    resolved path both leaks the account name (M-002) and is not what they asked for.
     """
     if machine_stdout:
         return  # JSON-mode stdout must stay pure; banner would corrupt parsing.
+    shown_target = display_path(target_display if target_display is not None else repo_root)
     evidence_dir = repo_root / ".oss-policy-kit" / "evidence"
     missing: list[tuple[str, str]] = []
     for prefix, filename, scan_cmd in _SCAN_EVIDENCE_MAP:
         if not any(cid.startswith(prefix) for cid in control_ids):
             continue
         if not (evidence_dir / filename).is_file():
-            missing.append((scan_cmd, str(repo_root)))
+            missing.append((scan_cmd, shown_target))
     if not missing:
         return
     out = stderr_console()
@@ -513,10 +569,101 @@ class EvaluateRequest:
     report_json_contract_provided: bool = True
 
 
+#: Root-callback parameter name -> the flag the user typed. Used only to explain a
+#: command line that put a root option before the subcommand; ``--with-findings-summary``
+#: is absent on purpose because :func:`_relocate_misplaced_root_flag` already moves it.
+_ROOT_CALLBACK_FLAGS: tuple[tuple[str, str], ...] = (
+    ("target_opt", "--target"),
+    ("profile", "--profile"),
+    ("output_dir", "--output-dir"),
+    ("waivers", "--waivers"),
+    ("scorecard_json", "--scorecard-json"),
+    ("kit_root", "--kit-root"),
+    ("output_format", "--format"),
+    ("fail_on", "--fail-on"),
+    ("summary_only", "--summary-only"),
+    ("report_json_contract", "--report-json-contract"),
+    ("sarif_output", "--sarif-output"),
+    ("use_insights_evidence", "--use-insights-evidence"),
+)
+
+
+def _current_cli_context() -> Any | None:
+    """Best-effort handle on the Click context of the running command, or ``None``.
+
+    Typer 0.26+ vendors Click into ``typer._click``, so the context stack the runtime
+    pushes onto is NOT the one top-level ``click.get_current_context`` reads -- that one
+    answers ``None`` here. Both are tried, newest first, and any failure yields ``None``:
+    this only enriches an error message, and no diagnostic is worth an exception on the
+    way out.
+    """
+
+    from importlib import import_module
+
+    for module_name in ("typer._click.globals", "click.globals"):
+        try:
+            ctx = import_module(module_name).get_current_context(silent=True)
+        except Exception:  # noqa: BLE001 - diagnostics only; never break the real error
+            continue
+        if ctx is not None:
+            return ctx
+    return None
+
+
+def _root_flags_typed_before_subcommand() -> list[str]:
+    """Return the root options the user typed *before* the subcommand, in declaration order.
+
+    The root callback exists so ``oss-policy-kit --target <repo> --profile <p>`` works
+    without typing ``evaluate``. When a subcommand IS named, Click still parses those
+    options at the root and the callback returns early, so they never reach the
+    subcommand. Naming them is what turns a contradictory error into an actionable one.
+
+    Empty when there is no parent context (compatibility usage, where the options *were*
+    honoured) or when provenance is unavailable.
+    """
+
+    ctx = _current_cli_context()
+    parent = getattr(ctx, "parent", None)
+    if parent is None:
+        return []
+    typed: list[str] = []
+    for name, flag in _ROOT_CALLBACK_FLAGS:
+        try:
+            source = parent.get_parameter_source(name)
+        except Exception:  # noqa: BLE001 - provenance is best-effort
+            continue
+        if source is not None and getattr(source, "name", "") == "COMMANDLINE":
+            typed.append(flag)
+    return typed
+
+
+def _missing_target_message() -> str:
+    """Explain a missing target -- naming the misplaced root options when that is the cause.
+
+    ``oss-policy-kit --target <repo> evaluate --profile p`` used to exit 2 with "Provide a
+    repository path as TARGET or via --target/-t" while ``--target`` was visibly on the
+    command line, so the message contradicted what the operator could read in front of
+    them. The same flags work with no subcommand and after the subcommand; only this one
+    placement drops them, and that is what the message now says.
+    """
+
+    misplaced = _root_flags_typed_before_subcommand()
+    if not misplaced:
+        return "Provide a repository path as TARGET or via --target/-t."
+    flags = ", ".join(misplaced)
+    verb = "was" if len(misplaced) == 1 else "were"
+    return (
+        f"{flags} {verb} typed before the subcommand, where it configures oss-policy-kit "
+        f"itself and is not handed to `evaluate`. Put it after the subcommand "
+        f"(`oss-policy-kit evaluate {misplaced[0]} <value> ...`), or drop the subcommand "
+        f"to use the compatibility form (`oss-policy-kit {misplaced[0]} <value> ...`)."
+    )
+
+
 def _resolve_eval_target(req: EvaluateRequest) -> Path:
     chosen = req.target_opt or req.target_pos
     if not chosen:
-        raise InvalidInputError("Provide a repository path as TARGET or via --target/-t.")
+        raise InvalidInputError(_missing_target_message())
     return resolve_existing_dir(chosen)
 
 
@@ -647,7 +794,13 @@ def _write_eval_reports(  # type: ignore[no-untyped-def]
         raise InvalidInputError(f"Cannot write to --output-dir '{req.output_dir}': {exc.strerror or exc}") from exc
 
 
-def _maybe_write_sarif(report, req: EvaluateRequest, out: Path) -> None:  # type: ignore[no-untyped-def]
+def _output_child_display(out_display: str, path: Path) -> str:
+    """Name a file the run just wrote, under the output directory as the user named it."""
+
+    return display_path(Path(out_display) / path.name)
+
+
+def _maybe_write_sarif(report, req: EvaluateRequest, out: Path, out_display: str) -> None:  # type: ignore[no-untyped-def]
     if req.sarif_output is None:
         return
     from oss_policy_kit.application.sarif_writer import write_sarif_report
@@ -662,10 +815,17 @@ def _maybe_write_sarif(report, req: EvaluateRequest, out: Path) -> None:  # type
         # never leaked (M-002), matching the report write in _write_eval_reports.
         raise InvalidInputError(f"Cannot write --sarif-output: {exc.strerror or 'filesystem error'}") from exc
     if not req.summary_only and req.output_format != "json":
-        stderr_console().print(f"[green]Wrote[/green] {markup_safe(sarif_path)}")
+        # Composed from the two pieces the user typed, so a relative --output-dir and a
+        # relative --sarif-output come back as the same relative path they went in as.
+        shown = (
+            display_path(req.sarif_output)
+            if req.sarif_output.is_absolute()
+            else display_path(Path(out_display) / req.sarif_output)
+        )
+        stderr_console().print(f"[green]Wrote[/green] {markup_safe(shown)}")
 
 
-def _render_eval_table(report, out: Path) -> None:  # type: ignore[no-untyped-def]
+def _render_eval_table(report, out_display: str) -> None:  # type: ignore[no-untyped-def]
     if terminal_ui.human_tty_stdout():
         terminal_ui.print_evaluate_executive_preface(
             report,
@@ -680,7 +840,8 @@ def _render_eval_table(report, out: Path) -> None:  # type: ignore[no-untyped-de
         stdout_console.print(table)
         status_str = "  ".join(f"{k}={v}" for k, v in sorted(report.summary_by_status.items()))
         stdout_console.print(
-            f"\n[dim]Summary: {status_str} | Controls: {len(report.results)} | Reports: {markup_safe(out)}[/dim]"
+            f"\n[dim]Summary: {status_str} | Controls: {len(report.results)} | "
+            f"Reports: {markup_safe(out_display)}[/dim]"
         )
     write_stdout_text(cap.get())
 
@@ -709,19 +870,21 @@ def _render_eval_report(  # type: ignore[no-untyped-def]
     report,
     req: EvaluateRequest,
     fmt: str,
-    out: Path,
+    out_display: str,
     json_path: Path,
     md_path: Path,
 ) -> None:
     machine_stdout = fmt == "json"
     if not req.summary_only and not machine_stdout:
-        stderr_console().print(f"[green]Wrote[/green] {markup_safe(json_path)}")
-        stderr_console().print(f"[green]Wrote[/green] {markup_safe(md_path)}")
+        # Named under the output directory as the user wrote it: a relative --output-dir
+        # is answered relative, never expanded into the host layout (M-002).
+        stderr_console().print(f"[green]Wrote[/green] {markup_safe(_output_child_display(out_display, json_path))}")
+        stderr_console().print(f"[green]Wrote[/green] {markup_safe(_output_child_display(out_display, md_path))}")
     warnings = report.operational_warnings
     if machine_stdout:
         # ``--summary-only --format json``: stdout is the only user-facing channel (pure JSON).
         if not req.summary_only:
-            stderr_console().print(f"[dim]Reports written to: {markup_safe(out)}[/dim]")
+            stderr_console().print(f"[dim]Reports written to: {markup_safe(out_display)}[/dim]")
         print_stdout_summary(report, output_format="json", include_absolute_path=req.include_absolute_path)
         if not req.summary_only and not req.quiet:
             print_operational_warning_summary(warnings)
@@ -734,7 +897,7 @@ def _render_eval_report(  # type: ignore[no-untyped-def]
         if not req.quiet:
             print_operational_warning_summary(warnings)
         return
-    _render_eval_table(report, out)
+    _render_eval_table(report, out_display)
     if not req.quiet:
         print_operational_warning_summary(warnings)
 
@@ -777,6 +940,7 @@ def _run_evaluate(req: EvaluateRequest) -> None:
         repo_root=repo_root,
         control_ids=set(prof.control_ids),
         machine_stdout=(fmt == "json"),
+        target_display=req.target_opt or req.target_pos,
     )
     insights_evidence = load_insights_evidence(repo_root) if req.use_insights_evidence else None
     report = evaluate_repository(
@@ -793,6 +957,10 @@ def _run_evaluate(req: EvaluateRequest) -> None:
         enable_attested=req.enable_attested,
     )
     out = settings.output_dir.resolve()
+    # ``out`` is what we write through; ``out_display`` is what the operator reads back.
+    # Every "Wrote ..." / "Reports: ..." line is built from the second, so a relative
+    # --output-dir is never answered with the resolved host path (M-002).
+    out_display = display_path(settings.output_dir)
     extensions: dict[str, Any] | None = None
     if req.with_findings_summary:
         from oss_policy_kit import __version__ as _kit_version
@@ -800,8 +968,8 @@ def _run_evaluate(req: EvaluateRequest) -> None:
 
         extensions = {"findings_summary": build_findings_summary(repo_root, kit_version=_kit_version)}
     json_path, md_path = _write_eval_reports(report, req, out, extensions)
-    _maybe_write_sarif(report, req, out)
-    _render_eval_report(report, req, fmt, out, json_path, md_path)
+    _maybe_write_sarif(report, req, out, out_display)
+    _render_eval_report(report, req, fmt, out_display, json_path, md_path)
     if fail_on_violated(cast(FailOnPolicy, policy), report.summary_by_status):
         raise typer.Exit(code=1)
 

@@ -366,6 +366,75 @@ def _sarif_result_level(control: dict[str, Any]) -> str | None:
     return _SARIF_LEVEL_MAP.get(state, "warning")
 
 
+def _non_finding_control_ids(report: dict[str, Any]) -> frozenset[str]:
+    """Control ids the report itself says are not findings (see :func:`_sarif_result_level`)."""
+    out: set[str] = set()
+    for c in report.get("controls", []) or []:
+        if not isinstance(c, dict) or _sarif_result_level(c) is not None:
+            continue
+        cid = str(c.get("id", "")).strip()
+        if cid:
+            out.add(cid)
+    return frozenset(out)
+
+
+def _result_rule_id(result: dict[str, Any]) -> str:
+    """Rule id of a SARIF result, from ``ruleId`` or from the ``rule`` reference object.
+
+    SARIF 2.1.0 spells the same thing two ways (§3.27.5 ``ruleId``, §3.27.7 ``rule``).
+    Reading only the first would leave the second as a way to reintroduce exactly the
+    result this filter exists to remove.
+    """
+    rid = result.get("ruleId")
+    if isinstance(rid, str) and rid.strip():
+        return rid.strip()
+    rule = result.get("rule")
+    if isinstance(rule, dict):
+        nested = rule.get("id")
+        if isinstance(nested, str):
+            return nested.strip()
+    return ""
+
+
+def _filter_passthrough_runs(runs: list[Any], report: dict[str, Any]) -> list[dict[str, Any]]:
+    """Apply the non-finding filter to SARIF runs carried on the report itself.
+
+    A report may arrive with a ``sarif_runs`` key, and the renderer used to return it
+    verbatim — so the filter that stopped a passing control becoming a code-scanning
+    alert applied to the synthesized run only, and a run listing ``GOV-SEC-001`` at
+    ``level: error`` for a control this very report records as ``PASS`` was exported
+    unchanged. Same report, same format, opposite answer depending on which branch ran.
+
+    A result is dropped when its rule id names a control that *this* report says is not a
+    finding. Results for rules the report knows nothing about are kept: they may be
+    genuine findings from another tool, and silently deleting a finding is the worse
+    failure. Entries that are not SARIF runs at all are dropped, because passing them
+    through produces a document no consumer can read.
+    """
+    non_finding = _non_finding_control_ids(report)
+    filtered: list[dict[str, Any]] = []
+    for run in runs:
+        if not isinstance(run, dict):
+            continue
+        results = run.get("results")
+        if not isinstance(results, list):
+            filtered.append(run)
+            continue
+        kept = [r for r in results if not (isinstance(r, dict) and _result_rule_id(r) in non_finding)]
+        omitted = len(results) - len(kept)
+        new_run = dict(run)
+        new_run["results"] = kept
+        if omitted:
+            # Only written when something was actually removed, so an untouched
+            # passthrough run still exports byte-identically.
+            props = dict(run["properties"]) if isinstance(run.get("properties"), dict) else {}
+            props["kit_non_finding_results_omitted"] = omitted
+            props["kit_results_policy"] = _SARIF_RESULTS_POLICY
+            new_run["properties"] = props
+        filtered.append(new_run)
+    return filtered
+
+
 def _render_sarif(report: dict[str, Any]) -> dict[str, Any]:
     """Re-export the report's SARIF projection, if present.
 
@@ -379,14 +448,22 @@ def _render_sarif(report: dict[str, Any]) -> dict[str, Any]:
     ``tool.driver.rules`` and the omission is counted in the run's ``properties``, so
     nothing about *which* controls ran is lost -- but a control that passed no longer
     arrives at a SARIF consumer as an alert. See :data:`_SARIF_RESULTS_POLICY`.
+
+    A run carried on the report is filtered by the same rule (see
+    :func:`_filter_passthrough_runs`), so the guarantee is a property of the *format*
+    rather than of one branch of this function.
     """
-    runs = report.get("sarif_runs") if isinstance(report.get("sarif_runs"), list) else None
-    if runs:
-        return {
-            "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
-            "version": "2.1.0",
-            "runs": runs,
-        }
+    carried = report.get("sarif_runs")
+    if isinstance(carried, list) and carried:
+        runs = _filter_passthrough_runs(carried, report)
+        # An empty list here means every entry was unusable as a SARIF run; fall through
+        # and synthesize rather than export a document with no runs in it.
+        if runs:
+            return {
+                "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+                "version": "2.1.0",
+                "runs": runs,
+            }
     # Synthesize from controls (reports/2.0 ``state``/``message`` — the only contract).
     results = []
     rule_ids: list[str] = []
