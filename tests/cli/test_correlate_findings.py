@@ -200,7 +200,11 @@ def test_bad_fail_on_severity_exits_2(tmp_path: Path) -> None:
 def test_nonexistent_target_exits_2(tmp_path: Path) -> None:
     result = _invoke(["correlate-findings", "--target", str(tmp_path / "nope"), "--output", str(tmp_path / "f.json")])
     assert result.exit_code == 2, result.output
-    assert "is not a directory" in result.output
+    # Whitespace is collapsed before matching: Rich wraps to the console width, so an
+    # asserted phrase can land across a line break. Home-directory redaction shortened
+    # this message and moved the wrap point, which is exactly how a passing assertion
+    # turns red without the behaviour changing at all.
+    assert "is not a directory" in " ".join(result.output.split())
 
 
 def test_unwritable_output_exits_2_without_path_leak(tmp_path: Path) -> None:

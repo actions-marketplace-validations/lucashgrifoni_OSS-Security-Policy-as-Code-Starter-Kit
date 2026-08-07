@@ -231,13 +231,95 @@ def build_console(
         if k not in merged_env:
             merged_env[k] = v
     force_color = is_tty and not no_color
-    return Console(
+    return _HomeRedactingConsole(
         file=target,
         width=w,
         force_terminal=force_color,
         no_color=no_color or not is_tty,
         _environ=merged_env,
     )
+
+
+#: Set to True by the CLI when ``--include-absolute-path`` is passed, which is the
+#: documented opt-out from privacy-by-default path handling.
+_ABSOLUTE_PATHS_ALLOWED = False
+
+
+def allow_absolute_paths(allowed: bool) -> None:
+    """Opt this process out of home-directory redaction on the console."""
+
+    global _ABSOLUTE_PATHS_ALLOWED
+    _ABSOLUTE_PATHS_ALLOWED = allowed
+
+
+def redact_home(text: str) -> str:
+    """Replace the real home-directory prefix with ``~`` wherever it appears.
+
+    The last line of defence for M-002, and deliberately the narrowest one that works.
+
+    Per-site fixes do not converge on this class: an AST sweep finds 398 places where a
+    resolved path heads for a message or an artifact, and three rounds of patching the
+    commands a validation happened to name still left 97 of 280 swept cases printing the
+    account name, across 20 of the 23 commands. So the guarantee moves to the boundary,
+    the same way the exit-3 class was finally closed.
+
+    It substitutes the literal ``Path.home()`` string rather than trying to recognise
+    "an absolute path". That distinction matters: pattern-matching paths would mangle
+    URLs, regexes and quoted user input, while this can only ever fire on the one string
+    whose disclosure is the actual harm -- the account name and the layout above the
+    repository. Absolute paths outside the home directory still print in full; they are
+    less useful to an attacker and less embarrassing in a pasted log, and reducing them
+    is the per-command work that continues elsewhere.
+
+    Comparison is case-insensitive because Windows paths reach here in either case, and
+    both separator forms are covered because a path can arrive POSIX-shaped from config.
+    """
+
+    if _ABSOLUTE_PATHS_ALLOWED or not text:
+        return text
+    for home in _home_forms():
+        if not home:
+            continue
+        lowered = text.lower()
+        needle = home.lower()
+        if needle not in lowered:
+            continue
+        out: list[str] = []
+        i = 0
+        while True:
+            j = lowered.find(needle, i)
+            if j < 0:
+                out.append(text[i:])
+                break
+            out.append(text[i:j])
+            out.append("~")
+            i = j + len(needle)
+        text = "".join(out)
+        lowered = text.lower()
+    return text
+
+
+def _home_forms() -> tuple[str, ...]:
+    """The home directory as it can appear in text: native and POSIX separators."""
+
+    try:
+        home = str(Path.home())
+    except (OSError, RuntimeError):  # pragma: no cover - only when HOME is unresolvable
+        return ()
+    forms = {home, home.replace("\\", "/")}
+    return tuple(sorted((f for f in forms if f), key=len, reverse=True))
+
+
+class _HomeRedactingConsole(Console):
+    """A Rich console that cannot print the operator's home directory.
+
+    Subclassing rather than wrapping ``print``: Rich renders tables, panels and markup
+    through the same segment pipeline, and the leaks found in validation came through
+    table cells and progress lines as much as through ``print`` calls.
+    """
+
+    def render_str(self, text: str, **kwargs: Any) -> Any:
+        return super().render_str(redact_home(text), **kwargs)
 
 
 def build_stdout_console(*, width: int | None = None) -> Console:
