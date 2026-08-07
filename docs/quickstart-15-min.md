@@ -107,7 +107,7 @@ so the gap stays explicit:
 
 ```bash
 cp templates/waivers/waivers.yaml ./my-repo/waivers/waivers.yaml
-# edit with owner, justification, expires_on
+# edit with owner, justification, expires_at
 oss-policy-kit evaluate \
   --target ./my-repo \
   --profile github-level-1 \

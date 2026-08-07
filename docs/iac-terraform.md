@@ -79,10 +79,12 @@ Findings are control-level (one finding per resource per rule). Waive at the con
   control_id: IAC-TF-008
   reason: legacy modules pre-tagging policy; tracked in TICKET-1234
   owner: platform-team
-  expires_on: 2026-09-30
+  expires_at: 2026-09-30
 ```
 
-The waiver flips the control to `waived` in the report; the underlying findings are still visible in the evidence JSON for audit. Waivers must have an `expires_on` to keep the kit honest.
+The waiver flips the control to `waived` in the report; the underlying findings are still visible in the evidence JSON for audit. Waivers must carry an expiry to keep the kit honest.
+
+The canonical expiry key is **`expires_at`**. `expires_on` is a legacy spelling that is still accepted on both waiver surfaces, so existing files keep working — but new waivers should use `expires_at`.
 
 ## Roadmap
 

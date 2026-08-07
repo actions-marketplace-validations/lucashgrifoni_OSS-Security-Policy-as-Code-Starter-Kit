@@ -101,7 +101,7 @@ def _make_pulumi_evaluator(rule_id: str, summary: str) -> Callable[[Any], EvalOu
             reason=f"{rule_id} ({summary}) raised {count} finding(s) on the scanned Pulumi programs.{files_hint}",
             remediation=(
                 "Review evaluation-report.md for details and remediate the listed resources, "
-                "or document an explicit waiver in waivers.yaml with owner, reason, and expires_on."
+                "or document an explicit waiver in waivers.yaml with owner, reason, and expires_at."
             ),
             evidence_sources=sources,
             confidence="high",
