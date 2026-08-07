@@ -39,6 +39,19 @@
 | (new) | `ATTESTED` | State for controls anchored on a verified attestation. Emitted **opt-in** by `PROV-VERIFY-061` when a fully verified provenance record (transparency-log inclusion + fresh `verified_at`) is present and `evaluate --enable-attested` is set (ADR-028). Default off → that control stays `PASS`. Fail-closed: any verification gap keeps the prior `FAIL`/`UNKNOWN`, never `ATTESTED`. |
 | `self-attested` | `SELF_ATTESTED` | Self-reported evidence (ADR-033 insights wiring, self-attested azure/aws evidence). Recorded as a claim, never verified by the kit. |
 | `waived` | `UNKNOWN` with `reason: "waived"` | The waiver block on the control carries owner/justification/expiry; waived findings stay visible but stop tripping `--fail-on`. |
+| `not-evaluated` | `UNKNOWN` with `reason: "not-evaluated"` | The control needs an input that was not supplied, so no verdict was attempted. `OSS-SCORECARD-001` without a Scorecard JSON is the common case. Supplying the input is what changes the outcome — this is not a judgement about the target. |
+| `not-observable` | `UNKNOWN` with `reason: "not-observable-in-clone"` | The fact sits structurally outside a repository clone. No input you can pass to the kit resolves it; it needs live platform evidence or manual review. |
+
+### The `reason` values
+
+`UNKNOWN` always carries a `reason`. The complete set is `manual-review-required`,
+`skipped-by-flag`, `evaluator-error`, `waived`, `not-evaluated`, `not-observable-in-clone`, and
+`unmapped-source-status`.
+
+The last one is a defensive fallback for an internal status the mapping does not recognise, and
+**you should never see it**. It means the kit produced a status its own contract does not define —
+if it appears in a report, that is a defect in the kit, not a statement about your repository.
+Please open an issue with the control id.
 
 ## Selecting a contract
 

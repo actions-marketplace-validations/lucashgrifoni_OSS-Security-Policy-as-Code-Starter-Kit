@@ -38,6 +38,10 @@ REPORTS_V2_STATUS_MAP: dict[str, tuple[str, str | None]] = {
     "attested": ("ATTESTED", None),
     "self-attested": ("SELF_ATTESTED", None),  # ADR-033: opt-in Insights self-reported evidence
     "waived": ("UNKNOWN", "waived"),
+    # Kept in lockstep with engine.REPORTS_V2_STATUS_MAP; see the note there. Both were
+    # unmapped ControlStatus members that surfaced to adopters as `unmapped-source-status`.
+    "not-evaluated": ("UNKNOWN", "not-evaluated"),
+    "not-observable": ("UNKNOWN", "not-observable-in-clone"),
 }
 
 

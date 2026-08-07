@@ -104,6 +104,13 @@ REPORTS_V2_STATUS_MAP: dict[str, tuple[str, str | None]] = {
     "attested": ("ATTESTED", None),  # ADR-028: verified-attestation pass (in-toto+cosign); distinct from PASS
     "self-attested": ("SELF_ATTESTED", None),  # ADR-033: opt-in Insights self-reported evidence
     "waived": ("UNKNOWN", "waived"),  # parity with reporting.REPORTS_V2_STATUS_MAP (v9.0.3 drift fix)
+    # Both were ControlStatus members with no entry here, so they fell through to the
+    # "we do not recognise this" fallback below and reached adopters as
+    # `unmapped-source-status` -- a discriminator documented nowhere. NOT_EVALUATED is
+    # returned by evaluators across five modules, notably OSS-SCORECARD-001 when no
+    # Scorecard JSON is supplied, so the fallback was reachable on an ordinary run.
+    "not-evaluated": ("UNKNOWN", "not-evaluated"),
+    "not-observable": ("UNKNOWN", "not-observable-in-clone"),
 }
 
 
