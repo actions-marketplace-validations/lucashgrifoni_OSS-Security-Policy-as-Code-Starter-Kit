@@ -272,11 +272,11 @@ A path you typed that turns out to be missing (a typo) or to be a directory is h
 **differently depending on what the command produces**. This is deliberate — see
 [ADR-044](decisions/adr-044-unreadable-waivers-gate-fails-document-warns.md).
 
-| Command | Output | Behaviour | Exit |
+| Output | Command | Behaviour | Exit |
 |---|---|---|---:|
-| `evaluate` | a verdict | stops: `Waivers file not found: <path>` | `2` |
-| `correlate-findings` | a verdict | stops: `--waivers <path> is not a file.` | `2` |
-| `emit-vex` | a document | warns on stderr, still writes the document | `0` |
+| a verdict | `evaluate` | stops: `Waivers file not found: <path>` | `2` |
+| a verdict | `correlate-findings` | stops: `--waivers <path> is not a file.` | `2` |
+| a document | `emit-vex` | warns on stderr, still writes the document | `0` |
 
 The rule behind the split:
 
