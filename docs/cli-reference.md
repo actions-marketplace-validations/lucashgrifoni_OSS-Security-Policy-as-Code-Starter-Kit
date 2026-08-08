@@ -266,6 +266,36 @@ The **human** `--summary-only` mode prints a short, action-oriented recap (count
 - **`--waivers`**: external YAML loaded for **this run only**; may set specific controls to `waived`. The report states the waiver file's basename under `external_waiver_path` by default (privacy-by-default, M-002); pass `--include-absolute-path` to keep the full absolute path.
 - **`GOV-WAIV-014`**: checks for a **versioned** waiver policy file **inside the clone** (for example `waivers/waivers.yaml`). Using `--waivers` does **not** satisfy that control by design; the Markdown report explains both mechanisms side by side.
 
+### When the `--waivers` path cannot be read
+
+A path you typed that turns out to be missing (a typo) or to be a directory is handled
+**differently depending on what the command produces**. This is deliberate — see
+[ADR-044](decisions/adr-044-unreadable-waivers-gate-fails-document-warns.md).
+
+| Command | Output | Behaviour | Exit |
+|---|---|---|---:|
+| `evaluate` | a verdict | stops: `Waivers file not found: <path>` | `2` |
+| `correlate-findings` | a verdict | stops: `--waivers <path> is not a file.` | `2` |
+| `emit-vex` | a document | warns on stderr, still writes the document | `0` |
+
+The rule behind the split:
+
+> An unreadable `--waivers` path **fails** any command whose output asserts a verdict, and
+> **warns** any command whose output can state its own incompleteness.
+
+A gate that lost its waivers reports controls as failing that you legitimately dispensed —
+those verdicts are wrong, so the run must stop. A VEX emitted without waivers is not wrong:
+every finding carries CycloneDX `in_triage` / OpenVEX `under_investigation`, which says exactly
+what happened — these were not analysed. Withholding that document would remove accurate
+information rather than prevent inaccurate information.
+
+**In CI, do not rely on the `emit-vex` warning being read.** stderr is easy to bury in a job
+log. If a typo'd waiver path must fail your pipeline, assert on the emitted document instead —
+for example, fail when any `analysis.state` is `in_triage` and you expected `not_affected`.
+
+An **absent default** `waivers/waivers.yaml` is an ordinary repository state and stays silent
+in every command; only a path you passed explicitly produces the messages above.
+
 ## Exit Codes
 
 After a successful evaluation:
