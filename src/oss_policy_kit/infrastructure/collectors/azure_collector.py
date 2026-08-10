@@ -167,6 +167,10 @@ def _environment_has_approval_check(client: Any, project: str, environment_id: s
         )
         r = client.get(url)
         _enforce_rate_limit(r)
+        # Behaviourally redundant with the `!= 200` catch-all below, and kept deliberately:
+        # it pins what a refusal means here independently of it, so a later change to the
+        # generic branch cannot silently reclassify 401/403. Mutation-testing this line
+        # produces an equivalent mutant, which is expected rather than a missing test.
         if r.status_code in {401, 403}:
             return None
         if r.status_code == 404:
