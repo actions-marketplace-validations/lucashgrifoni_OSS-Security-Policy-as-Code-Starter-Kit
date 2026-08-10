@@ -417,7 +417,9 @@ def test_without_the_flag_both_formats_still_redact_every_rooted_reference(tmp_p
     # ``target_path`` is legitimately the target's own basename, so the leak check is
     # scoped to the references: nothing above the leaf may survive in either format.
     blob = "\n".join(json_values + md_values)
-    assert "ci-user" not in blob and "secret-repo" not in blob and "synthetic" not in blob
+    assert "ci-user" not in blob
+    assert "secret-repo" not in blob
+    assert "synthetic" not in blob
 
 
 def test_the_flag_leaves_urls_and_repo_relative_paths_exactly_as_they_were(tmp_path: Path) -> None:

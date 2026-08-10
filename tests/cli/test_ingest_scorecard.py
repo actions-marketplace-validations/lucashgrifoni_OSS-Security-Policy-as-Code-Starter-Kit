@@ -77,7 +77,9 @@ def test_cli_human_maps_controls_and_is_honest(tmp_path: Path) -> None:
     assert "CI-PERM-006" in out  # a mapped control id is shown
     assert "SEC-CODEQL-010" in out  # SAST -> CodeQL control
     assert "verbatim" in out
-    assert "never elevates" in out and "changes no" in out and "evaluate" in out  # honesty note
+    assert "never elevates" in out
+    assert "changes no" in out
+    assert "evaluate" in out
 
 
 def test_cli_json_shape(tmp_path: Path) -> None:
@@ -130,7 +132,8 @@ def _report(freshness: str) -> ScorecardIngestReport:
 def test_render_human_fresh_branch(capsys: pytest.CaptureFixture[str]) -> None:
     _render_human(_report("fresh"))
     out = capsys.readouterr().out
-    assert "Corroborated" in out and "CI-PERM-006" in out
+    assert "Corroborated" in out
+    assert "CI-PERM-006" in out
 
 
 def test_render_human_stale_branch(capsys: pytest.CaptureFixture[str]) -> None:

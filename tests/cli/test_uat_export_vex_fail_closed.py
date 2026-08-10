@@ -310,8 +310,10 @@ def test_cyclonedx_detail_names_the_sarif_basename_only(tmp_path: Path) -> None:
     detail = doc["vulnerabilities"][0]["analysis"]["detail"]
     assert "osv-scanner.sarif.json" in detail
     # Separator-free needles: "evidence/sast" cannot match a Windows-shaped leak.
-    assert "evidence" not in detail and "sast" not in detail, detail
-    assert str(tmp_path) not in detail and tmp_path.as_posix() not in detail, detail
+    assert "evidence" not in detail, detail
+    assert "sast" not in detail, detail
+    assert str(tmp_path) not in detail, detail
+    assert tmp_path.as_posix() not in detail, detail
 
 
 def test_openvex_status_notes_names_the_sarif_basename_only(tmp_path: Path) -> None:
@@ -321,8 +323,10 @@ def test_openvex_status_notes_names_the_sarif_basename_only(tmp_path: Path) -> N
     notes = doc["statements"][0]["status_notes"]
     assert "osv-scanner.sarif.json" in notes
     # Separator-free needles: "evidence/sast" cannot match a Windows-shaped leak.
-    assert "evidence" not in notes and "sast" not in notes, notes
-    assert str(tmp_path) not in notes and tmp_path.as_posix() not in notes, notes
+    assert "evidence" not in notes, notes
+    assert "sast" not in notes, notes
+    assert str(tmp_path) not in notes, notes
+    assert tmp_path.as_posix() not in notes, notes
 
 
 @pytest.mark.parametrize("fmt", ["cyclonedx", "openvex"])

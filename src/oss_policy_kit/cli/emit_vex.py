@@ -649,6 +649,44 @@ def _build_openvex_document(
     }
 
 
+def _nonempty_str(value: Any) -> bool:
+    """True when *value* is a string with something other than whitespace in it."""
+
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _validate_openvex_products(i: int, products: Any) -> list[str]:
+    """Messages for ``statements[i].products[]``: it must be a non-empty list of ``@id`` objects."""
+
+    if not isinstance(products, list) or not products:
+        return [f"statements[{i}].products[] missing or empty"]
+    return [
+        f"statements[{i}].products[{j}].@id missing or empty"
+        for j, p in enumerate(products)
+        if not isinstance(p, dict) or not _nonempty_str(p.get("@id"))
+    ]
+
+
+def _validate_openvex_status_obligations(i: int, s: dict[str, Any], status: Any) -> list[str]:
+    """Messages for the fields a given ``status`` obliges the statement to carry.
+
+    ``not_affected`` has to say *why* (a known justification, or free-text impact);
+    ``affected`` has to say *what is being done*. Every other status carries neither.
+    """
+
+    if status == "not_affected":
+        errs = []
+        just = s.get("justification")
+        if just is None and not _nonempty_str(s.get("impact_statement")):
+            errs.append(f"statements[{i}] status=not_affected requires justification or impact_statement")
+        if just is not None and just not in _OPENVEX_JUSTIFICATIONS:
+            errs.append(f"statements[{i}].justification={just!r} not in {sorted(_OPENVEX_JUSTIFICATIONS)}")
+        return errs
+    if status == "affected" and not _nonempty_str(s.get("action_statement")):
+        return [f"statements[{i}] status=affected requires action_statement"]
+    return []
+
+
 def _validate_openvex_statement(i: int, s: Any) -> list[str]:
     """Structural-validation messages for one OpenVEX ``statements[i]`` entry."""
 
@@ -656,27 +694,13 @@ def _validate_openvex_statement(i: int, s: Any) -> list[str]:
         return [f"statements[{i}] must be an object"]
     errs: list[str] = []
     vuln = s.get("vulnerability")
-    if not isinstance(vuln, dict) or not isinstance(vuln.get("name"), str) or not vuln["name"].strip():
+    if not isinstance(vuln, dict) or not _nonempty_str(vuln.get("name")):
         errs.append(f"statements[{i}].vulnerability.name missing or empty")
-    products = s.get("products")
-    if not isinstance(products, list) or not products:
-        errs.append(f"statements[{i}].products[] missing or empty")
-    else:
-        for j, p in enumerate(products):
-            if not isinstance(p, dict) or not isinstance(p.get("@id"), str) or not p["@id"].strip():
-                errs.append(f"statements[{i}].products[{j}].@id missing or empty")
+    errs.extend(_validate_openvex_products(i, s.get("products")))
     status = s.get("status")
     if status not in _OPENVEX_STATUSES:
         errs.append(f"statements[{i}].status={status!r} not in {sorted(_OPENVEX_STATUSES)}")
-    if status == "not_affected":
-        just = s.get("justification")
-        impact = s.get("impact_statement")
-        if just is None and not (isinstance(impact, str) and impact.strip()):
-            errs.append(f"statements[{i}] status=not_affected requires justification or impact_statement")
-        if just is not None and just not in _OPENVEX_JUSTIFICATIONS:
-            errs.append(f"statements[{i}].justification={just!r} not in {sorted(_OPENVEX_JUSTIFICATIONS)}")
-    if status == "affected" and not (isinstance(s.get("action_statement"), str) and s["action_statement"].strip()):
-        errs.append(f"statements[{i}] status=affected requires action_statement")
+    errs.extend(_validate_openvex_status_obligations(i, s, status))
     return errs
 
 
@@ -895,6 +919,18 @@ def _load_and_report_waivers(waivers: Path, *, explicit: bool) -> dict[str, _Vul
     return vuln_waivers
 
 
+def _warn_on_placeholder_product(product: str | None) -> None:
+    """Warn that an OpenVEX document without ``--product`` names a placeholder, not a real subject."""
+
+    if product and product.strip():
+        return
+    stderr_console().print(
+        f"[yellow]Warning:[/yellow] no --product supplied; emitting placeholder product "
+        f"@id '{_OPENVEX_PRODUCT_PLACEHOLDER}'. The OpenVEX document is structurally valid "
+        "but you must set a real product identifier (e.g. a purl) before distributing it."
+    )
+
+
 def _run_emit_vex(
     osv_sarif: Path,
     output: Path | None,
@@ -921,27 +957,18 @@ def _run_emit_vex(
     refs_arg = refs if include_references else None
 
     if output_format == "openvex":
-        if not (product and product.strip()):
-            stderr_console().print(
-                f"[yellow]Warning:[/yellow] no --product supplied; emitting placeholder product "
-                f"@id '{_OPENVEX_PRODUCT_PLACEHOLDER}'. The OpenVEX document is structurally valid "
-                "but you must set a real product identifier (e.g. a purl) before distributing it."
-            )
+        _warn_on_placeholder_product(product)
         doc = _build_openvex_document(
             vuln_ids, osv_sarif, waivers=vuln_waivers or None, references=refs_arg, product=product
         )
-        if validate_output:
-            errors = _validate_openvex_structure(doc)
-            if errors:
-                raise InvalidInputError("OpenVEX structural validation failed:\n  - " + _BULLET.join(errors))
         doc_label = "OpenVEX"
+        errors = _validate_openvex_structure(doc) if validate_output else []
     else:
         doc = _build_vex_document(vuln_ids, osv_sarif, waivers=vuln_waivers or None, references=refs_arg)
-        if validate_output:
-            errors = _validate_vex_structure(doc)
-            if errors:
-                raise InvalidInputError("CycloneDX VEX 1.6 structural validation failed:\n  - " + _BULLET.join(errors))
         doc_label = "CycloneDX VEX 1.6"
+        errors = _validate_vex_structure(doc) if validate_output else []
+    if errors:
+        raise InvalidInputError(f"{doc_label} structural validation failed:\n  - " + _BULLET.join(errors))
 
     payload = json.dumps(doc, indent=2, sort_keys=False) + "\n"
     if output is None:

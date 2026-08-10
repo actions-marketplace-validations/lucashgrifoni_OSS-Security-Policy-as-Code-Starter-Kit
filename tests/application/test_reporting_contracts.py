@@ -48,7 +48,8 @@ def test_map_status_to_reports_v2() -> None:
     state, _ = rp._map_status_to_reports_v2("pass")
     assert isinstance(state, str)
     unknown, reason = rp._map_status_to_reports_v2("totally-unknown")
-    assert unknown == "UNKNOWN" and reason == "unmapped-source-status"
+    assert unknown == "UNKNOWN"
+    assert reason == "unmapped-source-status"
 
 
 def test_profile_helpers() -> None:
@@ -65,21 +66,25 @@ def test_profile_helpers() -> None:
 
 def test_derive_profile_metadata_and_digest() -> None:
     meta = rp.derive_profile_metadata("github-level-3")
-    assert meta["family"] == "github" and meta["posture"] == "hard_gate"
+    assert meta["family"] == "github"
+    assert meta["posture"] == "hard_gate"
     digest = rp.compute_results_digest(_report().results)
-    assert isinstance(digest, str) and len(digest) >= 8
+    assert isinstance(digest, str)
+    assert len(digest) >= 8
 
 
 def test_report_to_dict_default_is_v2_0() -> None:
     payload = rp.report_to_dict(_report())
     assert payload["profile"]["id"] == "github-level-3"
-    assert "controls" in payload and "action_insights" in payload
+    assert "controls" in payload
+    assert "action_insights" in payload
     assert payload["contract_version"] == "reports/2.0"
 
 
 def test_report_to_dict_v2_0_shape() -> None:
     payload = rp.report_to_dict(_report(), schema_version_override="https://x/reports/2.0")
-    assert isinstance(payload, dict) and "controls" in payload
+    assert isinstance(payload, dict)
+    assert "controls" in payload
     assert payload["profile"]["family"] == "github"
     assert payload["weighted_score"]["percent"] == 70.0
 

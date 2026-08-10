@@ -66,8 +66,10 @@ def test_every_label_is_reachable_from_a_real_signal_id() -> None:
 
     assert STACK_LABEL_BY_SIGNAL_ID, "the shared map is empty, so every assertion here is vacuous"
     for signal_id, label in STACK_LABEL_BY_SIGNAL_ID.items():
-        assert signal_id.strip() == signal_id and signal_id, f"malformed signal id: {signal_id!r}"
-        assert label.strip() == label and label, f"malformed label for {signal_id}: {label!r}"
+        assert signal_id.strip() == signal_id, f"malformed signal id: {signal_id!r}"
+        assert signal_id, f"malformed signal id: {signal_id!r}"
+        assert label.strip() == label, f"malformed label for {signal_id}: {label!r}"
+        assert label, f"malformed label for {signal_id}: {label!r}"
 
 
 def test_container_only_repository_is_still_named(tmp_path: Path) -> None:

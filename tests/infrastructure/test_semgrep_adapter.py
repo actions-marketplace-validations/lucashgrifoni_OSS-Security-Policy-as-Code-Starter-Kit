@@ -121,7 +121,8 @@ def test_normalize_finding_rule_id_alias() -> None:
     del rec["check_id"]
     rec["rule_id"] = "alt.rule"
     f = sa._normalize_finding(rec)
-    assert f is not None and f.rule_id == "alt.rule"
+    assert f is not None
+    assert f.rule_id == "alt.rule"
 
 
 @pytest.mark.parametrize("missing", ["rule", "path"])
@@ -140,8 +141,10 @@ def test_normalize_finding_defaults_when_extra_absent() -> None:
     assert f is not None
     assert f.severity == "INFO"
     assert f.message == ""
-    assert f.cwe == [] and f.owasp == []
-    assert f.line_start == 0 and f.line_end == 0
+    assert f.cwe == []
+    assert f.owasp == []
+    assert f.line_start == 0
+    assert f.line_end == 0
 
 
 def test_normalize_finding_cwe_owasp_list_and_garbage() -> None:
@@ -166,7 +169,8 @@ def test_normalize_finding_cwe_garbage_type() -> None:
     rec = _result_record()
     rec["extra"]["metadata"] = {"cwe": 42}
     f = sa._normalize_finding(rec)
-    assert f is not None and f.cwe == []  # non-list/str -> empty
+    assert f is not None
+    assert f.cwe == []
 
 
 # --------------------------------------------------------------------------- #
@@ -185,7 +189,8 @@ def test_parse_findings_bad_json_returns_none() -> None:
 def test_parse_findings_skips_non_dict_and_invalid() -> None:
     payload = {"results": [_result_record(), "junk", {"no": "fields"}]}
     out = sa._parse_semgrep_findings(json.dumps(payload))
-    assert out is not None and len(out) == 1
+    assert out is not None
+    assert len(out) == 1
 
 
 # --------------------------------------------------------------------------- #

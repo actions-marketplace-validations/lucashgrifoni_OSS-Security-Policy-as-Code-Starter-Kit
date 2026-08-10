@@ -151,7 +151,8 @@ def test_tampered_map_raises_loaderror(tmp_path: Path, mappings: list[dict]) -> 
 def _load_generator():
     path = _REPO_ROOT / "scripts" / "generate-osps-coverage.py"
     spec = importlib.util.spec_from_file_location("generate_osps_coverage", path)
-    assert spec and spec.loader
+    assert spec
+    assert spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -211,7 +212,9 @@ def test_cli_human_output_is_honest() -> None:
     assert proc.returncode == 0, proc.stderr + proc.stdout
     out = proc.stdout
     assert "v2026.02.19" in out
-    assert "11 / 17" in out and "18 / 32" in out and "22 / 40" in out
+    assert "11 / 17" in out
+    assert "18 / 32" in out
+    assert "22 / 40" in out
     assert "NOT a conformance certification" in out
     assert "OSPS-DO-01" in out  # a real gap is shown
 

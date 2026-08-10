@@ -53,7 +53,8 @@ def test_render_chainloop_envelope_shape() -> None:
     assert out["subject"]["kit"] == "oss-policy-kit"
     assert out["subject"]["profile"] == "github-level-1"
     assert out["experimental"] is True
-    assert "predicate" in out and "evaluatedAt" in out["predicate"]
+    assert "predicate" in out
+    assert "evaluatedAt" in out["predicate"]
 
 
 def test_render_chainloop_passes_validation() -> None:
@@ -78,7 +79,8 @@ def test_render_sarif_synthesises_only_actionable_controls() -> None:
 
     out = _render_sarif(_sample_report())
     assert out["version"] == "2.1.0"
-    assert isinstance(out["runs"], list) and len(out["runs"]) == 1
+    assert isinstance(out["runs"], list)
+    assert len(out["runs"]) == 1
     run = out["runs"][0]
 
     emitted = {r["ruleId"] for r in run["results"]}
@@ -186,7 +188,8 @@ def test_render_oscal_carries_assurance_subject_and_log() -> None:
     assert len(obs) == 2
     assert obs[0]["methods"] == ["EXAMINE"]  # examines artifacts, does not run tests
     props = {p["name"]: p["value"] for p in obs[0]["props"]}
-    assert props["assurance"] == "deterministic" and props["kit-state"] == "PASS"
+    assert props["assurance"] == "deterministic"
+    assert props["kit-state"] == "PASS"
     assert obs[0]["subjects"][0]["subject-uuid"]  # points at a defined subject
     # the result references the evaluated repo and logs the run
     subj = result["assessment-subjects"][0]

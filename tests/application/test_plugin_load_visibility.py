@@ -52,7 +52,8 @@ def test_broken_plugin_recorded_not_raised(monkeypatch, _restore_registry):
     _patch_eps(monkeypatch, [_FakeEP("MY-BROKEN-001", _boom)])
     ev._load_external_evaluators()  # must not raise
     errs = {e["name"]: e for e in ev.plugin_load_errors()}
-    assert "MY-BROKEN-001" in errs and errs["MY-BROKEN-001"]["kind"] == "load"
+    assert "MY-BROKEN-001" in errs
+    assert errs["MY-BROKEN-001"]["kind"] == "load"
     assert "MY-BROKEN-001" not in ev.EVALUATOR_REGISTRY
 
 

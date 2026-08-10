@@ -60,9 +60,11 @@ def test_bo_hit_unknown_names_return_false() -> None:
 
 def test_normalize_based_on_az_appends_evidence() -> None:
     out = ph._normalize_based_on_az([], [Path("a.yml")], [Path("e.json")])
-    assert out[0] == "azure_pipelines_yaml" and "azure_evidence_json_files" in out
+    assert out[0] == "azure_pipelines_yaml"
+    assert "azure_evidence_json_files" in out
 
 
 def test_normalize_based_on_aws_appends_evidence() -> None:
     out = ph._normalize_based_on_aws([], True, [Path("e.json")])
-    assert out[0] == "aws_codebuild_buildspec" and "aws_evidence_json_files" in out
+    assert out[0] == "aws_codebuild_buildspec"
+    assert "aws_evidence_json_files" in out

@@ -126,12 +126,16 @@ def test_subprocess_profiles_command() -> None:
     assert "github-level-1" in proc.stdout
     assert "github-release-hardening-1" in proc.stdout
     assert "Bundled profiles" in proc.stdout
-    assert "GitHub" in proc.stdout and "baseline" in proc.stdout and "level" in proc.stdout
-    assert "maintainers" in proc.stdout.lower() and "starting" in proc.stdout.lower()
+    assert "GitHub" in proc.stdout
+    assert "baseline" in proc.stdout
+    assert "level" in proc.stdout
+    assert "maintainers" in proc.stdout.lower()
+    assert "starting" in proc.stdout.lower()
     assert "baseline" in proc.stdout.lower()
     assert "Maintainers adopting a" not in proc.stdout
     assert "minimal, honest OSS security" not in proc.stdout
-    assert "Starter" in proc.stdout and "clone-visible" in proc.stdout.replace("\n", "")
+    assert "Starter" in proc.stdout
+    assert "clone-visible" in proc.stdout.replace("\n", "")
     assert "repositories: governance files, safe workflow" not in proc.stdout
     assert "Details" not in proc.stdout
     # Note: "Track" is now legitimate vocabulary in profile titles
@@ -193,7 +197,8 @@ def test_subprocess_show_profiles_flag() -> None:
     assert "Title" in proc.stdout
     assert "Platform" in proc.stdout
     assert "Level" in proc.stdout
-    assert "Recommended" in proc.stdout and "gate" in proc.stdout
+    assert "Recommended" in proc.stdout
+    assert "gate" in proc.stdout
     assert "Audience" in proc.stdout
     assert "Description" in proc.stdout
     # Normalize Rich table wrapping and box-drawing borders before substring checks:
@@ -203,12 +208,17 @@ def test_subprocess_show_profiles_flag() -> None:
     assert "GitHub maintainers starting" not in normalized_stdout
     # "Maintainers adopting ..." is the compact audience; it may wrap mid-word under
     # narrow layouts, so check distinctive prefix/words that survive column wrapping.
-    assert "Maintainer" in normalized_stdout and "adopting" in normalized_stdout
+    assert "Maintainer" in normalized_stdout
+    assert "adopting" in normalized_stdout
     assert "--fail-on fail" in normalized_stdout
-    assert "minimal" in proc.stdout and "honest" in proc.stdout and "OSS" in proc.stdout and "security" in proc.stdout
+    assert "minimal" in proc.stdout
+    assert "honest" in proc.stdout
+    assert "OSS" in proc.stdout
+    assert "security" in proc.stdout
     assert "baseline" in proc.stdout.lower()
     assert "Starter GitHub baseline for clone-visible checks." not in normalized_stdout
-    assert "governance" in proc.stdout and "workflow" in proc.stdout
+    assert "governance" in proc.stdout
+    assert "workflow" in proc.stdout
     assert "Details" not in proc.stdout
     # Note: "Track" is now legitimate vocabulary in profile titles
     # ("SLSA v1.1 Build Track Level 2", "EU CRA strict track" etc.)

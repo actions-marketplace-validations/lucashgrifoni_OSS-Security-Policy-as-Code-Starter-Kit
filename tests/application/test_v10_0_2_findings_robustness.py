@@ -85,7 +85,8 @@ def test_bug5_deeply_nested_enrichment_degrades_not_crashes(tmp_path: Path) -> N
         enrichment_path=tmp_path / "enrich.json",
     )
     enrich = [s for s in report["sources_read"] if s["kind"] == "enrichment-snapshot"]
-    assert enrich and enrich[0]["status"] == "unreadable"
+    assert enrich
+    assert enrich[0]["status"] == "unreadable"
 
 
 def test_bug5_deeply_nested_enrichment_cli_never_exit_3(tmp_path: Path) -> None:
@@ -107,7 +108,8 @@ def test_bug5_deeply_nested_enrichment_cli_never_exit_3(tmp_path: Path) -> None:
     assert "recursion" not in result.output.lower()
     data = json.loads(out.read_text(encoding="utf-8"))
     enrich = [s for s in data["sources_read"] if s["kind"] == "enrichment-snapshot"]
-    assert enrich and enrich[0]["status"] == "unreadable"
+    assert enrich
+    assert enrich[0]["status"] == "unreadable"
 
 
 # --------------------------------------------------------------------------- #
@@ -119,7 +121,8 @@ def test_bug6_deeply_nested_kit_evidence_degrades_not_crashes(tmp_path: Path) ->
     _write(tmp_path, _EVID / "sast-semgrep.json", _DEEP_JSON)
     findings, records = normalize_kit_evidence(tmp_path)
     semgrep = [r for r in records if r.path.endswith("sast-semgrep.json")]
-    assert semgrep and semgrep[0].status == "unreadable"
+    assert semgrep
+    assert semgrep[0].status == "unreadable"
     # The unreadable source contributes no findings but never aborts the run.
     assert all("sast-semgrep" not in s.source_path for f in findings for s in f.sources)
 
@@ -132,7 +135,8 @@ def test_bug6_deeply_nested_kit_evidence_cli_never_exit_3(tmp_path: Path) -> Non
     assert "Unexpected error" not in result.output
     data = json.loads(out.read_text(encoding="utf-8"))
     semgrep = [s for s in data["sources_read"] if s["path"].endswith("sast-semgrep.json")]
-    assert semgrep and semgrep[0]["status"] == "unreadable"
+    assert semgrep
+    assert semgrep[0]["status"] == "unreadable"
 
 
 # --------------------------------------------------------------------------- #

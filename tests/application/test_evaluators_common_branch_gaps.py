@@ -36,28 +36,37 @@ def test_validate_json_evidence_unreadable(tmp_path: Path) -> None:
     p = tmp_path / "ev.json"
     p.write_text("{not valid json", encoding="utf-8")
     data, err, ph = ec.validate_json_evidence(p, schema_loader=_schema, evidence_name="test")
-    assert data is None and err is not None and "unreadable or invalid JSON" in err and ph == []
+    assert data is None
+    assert err is not None
+    assert "unreadable or invalid JSON" in err
+    assert ph == []
 
 
 def test_validate_json_evidence_non_dict_root(tmp_path: Path) -> None:
     p = tmp_path / "ev.json"
     p.write_text("[1, 2, 3]", encoding="utf-8")
     data, err, _ph = ec.validate_json_evidence(p, schema_loader=_schema, evidence_name="test")
-    assert data is None and err is not None and "root must be a JSON object" in err
+    assert data is None
+    assert err is not None
+    assert "root must be a JSON object" in err
 
 
 def test_validate_json_evidence_schema_violation(tmp_path: Path) -> None:
     p = tmp_path / "ev.json"
     p.write_text('{"y": 1}', encoding="utf-8")  # missing required "x"
     data, err, _ph = ec.validate_json_evidence(p, schema_loader=_schema, evidence_name="test")
-    assert data is None and err is not None and "does not match schema" in err
+    assert data is None
+    assert err is not None
+    assert "does not match schema" in err
 
 
 def test_validate_json_evidence_ok(tmp_path: Path) -> None:
     p = tmp_path / "ev.json"
     p.write_text('{"x": 1}', encoding="utf-8")
     data, err, ph = ec.validate_json_evidence(p, schema_loader=_schema, evidence_name="test")
-    assert data == {"x": 1} and err is None and ph == []
+    assert data == {"x": 1}
+    assert err is None
+    assert ph == []
 
 
 # --------------------------------------------------------------------------- #
@@ -139,4 +148,5 @@ def test_accept_dockerfile_candidate_resolve_oserror(tmp_path: Path, monkeypatch
 def test_evidence_placeholder_outcome() -> None:
     assert ec.evidence_placeholder_outcome(Path("ev.json"), []) is None
     outcome = ec.evidence_placeholder_outcome(Path("ev.json"), ["REPLACE_ME"])
-    assert outcome is not None and outcome.status == ControlStatus.NOT_EVALUATED
+    assert outcome is not None
+    assert outcome.status == ControlStatus.NOT_EVALUATED

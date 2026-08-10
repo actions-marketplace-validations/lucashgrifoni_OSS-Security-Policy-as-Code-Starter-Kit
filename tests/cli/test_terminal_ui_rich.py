@@ -87,7 +87,8 @@ def test_profile_platform_key() -> None:
 def test_forward_journey_ids() -> None:
     cands = {"github-level-1", "github-level-2", "github-level-3"}
     out = tui._forward_journey_ids("github-level-1", cands)
-    assert out[0] == "github-level-1" and len(out) <= 3
+    assert out[0] == "github-level-1"
+    assert len(out) <= 3
     # Non-platform profile.
     assert tui._forward_journey_ids("custom", {"custom"}) == ["custom"]
     assert tui._forward_journey_ids("custom", set()) == []
@@ -160,7 +161,8 @@ def test_interactive_summary_full() -> None:
     assert "OSS Policy Evaluation" in out
     assert "Triage" in out
     assert "Next actions" in out
-    assert "Fail" in out and "Manual review" in out
+    assert "Fail" in out
+    assert "Manual review" in out
 
 
 def test_interactive_summary_advisory_and_no_triage() -> None:
@@ -236,7 +238,9 @@ def test_recommend_profile_rich_compact(tmp_path: Path) -> None:
 
 def test_compute_rec_signals_and_context() -> None:
     sig = tui._compute_rec_signals(_rec(), unicode_icons=False)
-    assert sig.gh_sig and sig.gh_ev and sig.rel_label == "strong"
+    assert sig.gh_sig
+    assert sig.gh_ev
+    assert sig.rel_label == "strong"
     assert tui._recommend_context_line(sig).startswith("Primary context: GitHub")
     # Azure-only context.
     az = tui._compute_rec_signals(_rec(signals_detected=[{"id": "azure_pipelines_yaml"}]), unicode_icons=False)
@@ -266,7 +270,8 @@ def test_build_recommend_scope_compact_vs_wide() -> None:
 
 
 def test_cli_banner_plain() -> None:
-    assert isinstance(tui.cli_banner_plain(), str) and tui.cli_banner_plain()
+    assert isinstance(tui.cli_banner_plain(), str)
+    assert tui.cli_banner_plain()
 
 
 def test_write_cli_banner_to_formatter(monkeypatch) -> None:
@@ -371,7 +376,8 @@ def test_print_profiles_catalog_panel_wide() -> None:
     rows = [_prow("GitHub", "github-level-1"), _prow("Azure", "azure-level-1"), _prow("AWS", "aws-level-1")]
     tui.print_profiles_catalog_panel(rows, console=c, subtitle="bundled")
     out = buf.getvalue()
-    assert "Bundled profiles" in out and "github-level-1" in out
+    assert "Bundled profiles" in out
+    assert "github-level-1" in out
 
 
 def test_print_profiles_catalog_panel_narrow_and_legacy() -> None:

@@ -39,7 +39,8 @@ def _load_catalog_ids() -> set[str]:
     for entry in controls:
         assert isinstance(entry, dict), "catalog.yaml: each control must be a mapping"
         cid = entry.get("id")
-        assert isinstance(cid, str) and cid.strip(), f"catalog.yaml: missing 'id' in {entry!r}"
+        assert isinstance(cid, str), f"catalog.yaml: missing 'id' in {entry!r}"
+        assert cid.strip(), f"catalog.yaml: missing 'id' in {entry!r}"
         ids.add(cid)
     return ids
 
@@ -67,9 +68,11 @@ def test_profile_has_required_fields(profile_path: Path) -> None:
         assert field in data, f"{profile_path.parent.name}: missing required field '{field}'"
         value = data[field]
         if field == "controls":
-            assert isinstance(value, list) and value, f"{profile_path}: 'controls:' must be a non-empty list"
+            assert isinstance(value, list), f"{profile_path}: 'controls:' must be a non-empty list"
+            assert value, f"{profile_path}: 'controls:' must be a non-empty list"
         else:
-            assert isinstance(value, str) and value.strip(), f"{profile_path}: '{field}' must be a non-empty string"
+            assert isinstance(value, str), f"{profile_path}: '{field}' must be a non-empty string"
+            assert value.strip(), f"{profile_path}: '{field}' must be a non-empty string"
 
 
 @pytest.mark.parametrize("profile_path", _profile_files(), ids=lambda p: p.parent.name)

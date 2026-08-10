@@ -20,7 +20,8 @@ def _load_hygiene_module():
 
     path = _REPO_ROOT / "scripts" / "check_public_hygiene.py"
     spec = importlib.util.spec_from_file_location("check_public_hygiene", path)
-    assert spec and spec.loader, "could not locate scripts/check_public_hygiene.py"
+    assert spec, "could not locate scripts/check_public_hygiene.py"
+    assert spec.loader, "could not locate scripts/check_public_hygiene.py"
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

@@ -238,8 +238,9 @@ def test_x6_04_broken_pipe_exits_zero_quietly(
 def test_x6_04_unrelated_oserror_still_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
     """A non-pipe OSError (e.g. ENOENT) is not swallowed — it must still surface."""
 
+    error = OSError(errno.ENOENT, "No such file")
     with pytest.raises(OSError) as excinfo:
-        _run_main_raising(OSError(errno.ENOENT, "No such file"), monkeypatch)
+        _run_main_raising(error, monkeypatch)
     assert excinfo.value.errno == errno.ENOENT
 
 

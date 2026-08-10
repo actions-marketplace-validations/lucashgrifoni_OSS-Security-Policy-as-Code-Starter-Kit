@@ -49,7 +49,8 @@ def test_index_manifests_records_read_error(tmp_path: Path) -> None:
     a_dir = tmp_path / "is_a_dir.yaml"
     a_dir.mkdir()  # reading a directory raises OSError
     manifests, skipped, errors = sc._index_manifests(tmp_path, [a_dir])
-    assert manifests == [] and any("is_a_dir" in e["file"] for e in errors)
+    assert manifests == []
+    assert any("is_a_dir" in e["file"] for e in errors)
 
 
 def test_index_manifests_records_yaml_error(tmp_path: Path) -> None:
@@ -119,7 +120,8 @@ def test_grants_broad_secret_read_non_dict_rule() -> None:
 def test_rbac_004_fires_on_wildcard_resources() -> None:
     m = _m("ClusterRole", {"rules": [{"resources": ["*"], "verbs": ["get"]}]})
     findings = sc._rule_rbac_004_cluster_role_no_namespace(Path("."), [m])
-    assert len(findings) == 1 and findings[0].rule_id == "K8S-RBAC-004"
+    assert len(findings) == 1
+    assert findings[0].rule_id == "K8S-RBAC-004"
 
 
 # --------------------------------------------------------------------------- #

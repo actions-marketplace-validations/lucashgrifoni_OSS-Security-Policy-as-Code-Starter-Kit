@@ -193,6 +193,51 @@ def _display_path(raw: str, *, include_absolute: bool) -> str:
     return Path(raw).name or raw
 
 
+def _classify_status_changes(
+    bm: dict[str, Any],
+    am: dict[str, Any],
+    shared: set[str],
+) -> tuple[list[ControlDelta], list[ControlDelta]]:
+    """Split the controls present on both sides into regressions and improvements.
+
+    A control whose status changed in neither direction (``pass`` -> ``waived``, say)
+    is deliberately in neither list: it moved, but not across the pass/fail line the
+    drift verdict is about.
+    """
+
+    regressions: list[ControlDelta] = []
+    improvements: list[ControlDelta] = []
+    for cid in sorted(shared):
+        b = bm[cid]
+        a = am[cid]
+        bs = _status(b)
+        as_ = _status(a)
+        if bs == as_:
+            continue
+        is_regression = _is_positive(bs) and _is_negative(as_)
+        if not is_regression and not (_is_negative(bs) and _is_positive(as_)):
+            continue
+        delta = ControlDelta(
+            control_id=cid,
+            title=_title(a) or _title(b),
+            before_status=bs,
+            after_status=as_,
+            is_regression=is_regression,
+        )
+        (regressions if is_regression else improvements).append(delta)
+    return regressions, improvements
+
+
+def _dropped_waivers(bm: dict[str, Any], am: dict[str, Any], shared: set[str]) -> list[str]:
+    """Controls that carried a waiver before and carry none after."""
+
+    return [
+        cid
+        for cid in sorted(shared)
+        if isinstance(bm[cid].get("waiver"), dict) and not isinstance(am[cid].get("waiver"), dict)
+    ]
+
+
 def compute_drift(
     before: dict[str, Any],
     after: dict[str, Any],
@@ -240,51 +285,12 @@ def compute_drift(
     before_ids = set(bm)
     after_ids = set(am)
 
-    regressions: list[ControlDelta] = []
-    improvements: list[ControlDelta] = []
     new_controls = sorted(after_ids - before_ids)
     removed_controls = sorted(before_ids - after_ids)
 
     shared = before_ids & after_ids
-    for cid in sorted(shared):
-        b = bm[cid]
-        a = am[cid]
-        bs = _status(b)
-        as_ = _status(a)
-        if bs == as_:
-            continue
-        title = _title(a) or _title(b)
-        is_regression = _is_positive(bs) and _is_negative(as_)
-        is_improvement = _is_negative(bs) and _is_positive(as_)
-        if is_regression:
-            regressions.append(
-                ControlDelta(
-                    control_id=cid,
-                    title=title,
-                    before_status=bs,
-                    after_status=as_,
-                    is_regression=True,
-                )
-            )
-        elif is_improvement:
-            improvements.append(
-                ControlDelta(
-                    control_id=cid,
-                    title=title,
-                    before_status=bs,
-                    after_status=as_,
-                    is_regression=False,
-                )
-            )
-
-    expired: list[str] = []
-    for cid in sorted(shared):
-        b = bm[cid]
-        a = am[cid]
-        bw = b.get("waiver")
-        aw = a.get("waiver")
-        if isinstance(bw, dict) and (aw is None or not isinstance(aw, dict)):
-            expired.append(cid)
+    regressions, improvements = _classify_status_changes(bm, am, shared)
+    expired = _dropped_waivers(bm, am, shared)
 
     return DriftReport(
         before_path=before_path,

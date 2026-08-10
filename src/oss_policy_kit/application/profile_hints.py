@@ -371,6 +371,24 @@ def _detect_node_stack(
     return _LABEL_NODE
 
 
+def _append_pyproject_tooling_notes(pyproject: Path, notes: list[str]) -> None:
+    """Note the quality tooling declared in *pyproject*, if it can be read at all.
+
+    An unreadable file yields no notes rather than an error: the stack was already
+    identified by the file's existence, and the notes are advisory.
+    """
+
+    try:
+        body = pyproject.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return
+    lowered = body.lower()
+    if "[tool.ruff]" in body or "[tool.ruff." in body or "ruff>" in lowered:
+        notes.append("Ruff is configured under pyproject.toml - align CI quality gates with the same rules.")
+    if "[tool.mypy]" in body or "python -m mypy" in lowered:
+        notes.append("Mypy is referenced - keep static type checks in CI for stronger supply-chain posture.")
+
+
 def _detect_python_stack(
     repo_root: Path,
     found: list[dict[str, str]],
@@ -383,15 +401,7 @@ def _detect_python_stack(
         _append_signal(found, "python_pyproject", "Python project detected via pyproject.toml")
         if weights is not None:
             weights[_LABEL_PYTHON] = _STACK_WEIGHT_DECLARES_PROJECT
-        try:
-            body = (repo_root / "pyproject.toml").read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            body = ""
-        bl = body.lower()
-        if "[tool.ruff]" in body or "[tool.ruff." in body or "ruff>" in bl:
-            notes.append("Ruff is configured under pyproject.toml - align CI quality gates with the same rules.")
-        if "[tool.mypy]" in body or "python -m mypy" in bl:
-            notes.append("Mypy is referenced - keep static type checks in CI for stronger supply-chain posture.")
+        _append_pyproject_tooling_notes(repo_root / "pyproject.toml", notes)
         return _LABEL_PYTHON
     if (repo_root / "requirements.txt").is_file():
         _append_signal(found, "python_requirements", "Python project detected via requirements.txt")

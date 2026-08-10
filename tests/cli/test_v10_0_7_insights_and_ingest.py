@@ -195,7 +195,8 @@ def test_depth_budget_is_the_documented_200_not_the_interpreter_stack(tmp_path: 
     at_budget = tmp_path / "at.yml"
     at_budget.write_text(_flow_nested(_BUDGET), encoding="utf-8")
     doc, error = load_insights_file(at_budget)
-    assert error is None and doc is not None
+    assert error is None
+    assert doc is not None
 
     past_budget = tmp_path / "past.yml"
     past_budget.write_text(_flow_nested(_BUDGET + 1), encoding="utf-8")

@@ -70,7 +70,7 @@ def _flat(text: str) -> str:
     return " ".join(text.split())
 
 
-@pytest.fixture()
+@pytest.fixture
 def workdir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """A current directory whose name is the leak marker; commands run relative to it."""
 

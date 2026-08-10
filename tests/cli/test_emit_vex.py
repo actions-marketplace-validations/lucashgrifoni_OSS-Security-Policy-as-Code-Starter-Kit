@@ -75,7 +75,8 @@ def test_extract_vuln_ids_rejects_malformed_json(tmp_path: Path) -> None:
     p.write_text("{ not json", encoding="utf-8")
     ids, err = _extract_vuln_ids_from_sarif(p)
     assert ids == []
-    assert err and ("parse" in err.lower() or "json" in err.lower())
+    assert err
+    assert "parse" in err.lower() or "json" in err.lower()
 
 
 def test_extract_vuln_ids_rejects_missing_runs(tmp_path: Path) -> None:

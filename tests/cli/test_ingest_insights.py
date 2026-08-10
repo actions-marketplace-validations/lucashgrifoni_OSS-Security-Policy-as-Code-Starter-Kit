@@ -252,7 +252,8 @@ def test_discover_prefers_canonical_over_github(tmp_path: Path) -> None:
     _write_insights(tmp_path, _valid_doc(), rel="SECURITY-INSIGHTS.yml")
     _write_insights(tmp_path, _valid_doc(), rel=".github/SECURITY-INSIGHTS.yml")
     found = ie.discover_insights_file(tmp_path)
-    assert found is not None and found.name == "SECURITY-INSIGHTS.yml"
+    assert found is not None
+    assert found.name == "SECURITY-INSIGHTS.yml"
     assert found.parent == tmp_path
 
 

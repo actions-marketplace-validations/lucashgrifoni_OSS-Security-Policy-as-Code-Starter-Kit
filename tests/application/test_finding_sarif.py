@@ -122,11 +122,14 @@ def test_osv_enrichment_and_vulnerability_ids(tmp_path: Path) -> None:
     )
     findings, _ = fs.normalize_sarif_sources(tmp_path)
     first, second = findings
-    assert first.kev is True and first.epss == 0.91 and first.cvss == 9.8
+    assert first.kev is True
+    assert first.epss == 0.91
+    assert first.cvss == 9.8
     assert first.vulnerability_ids == ("CVE-2026-1234",)
     assert first.sources[0].native_id == "CVE-2026-1234"
     assert second.kev is None  # no kev property -> unknown, not False
-    assert second.epss == 0.02 and second.cvss is None
+    assert second.epss == 0.02
+    assert second.cvss is None
     assert second.vulnerability_ids == ("GHSA-xxxx-yyyy",)
 
 
@@ -146,7 +149,8 @@ def test_physical_location_kept_and_missing_region_tolerated(tmp_path: Path) -> 
     by_rule = {f.rule: f.location for f in findings}
     assert by_rule["R1"].file == ".github/workflows/ci.yml"
     assert (by_rule["R1"].line_start, by_rule["R1"].line_end) == (12, 14)
-    assert by_rule["R2"].file == "other.yml" and by_rule["R2"].line_start is None
+    assert by_rule["R2"].file == "other.yml"
+    assert by_rule["R2"].line_start is None
     assert by_rule["R3"].file is None
 
 

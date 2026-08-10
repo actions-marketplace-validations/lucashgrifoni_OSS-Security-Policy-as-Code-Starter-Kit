@@ -86,7 +86,8 @@ def test_every_hook_declares_explicit_stages() -> None:
     """Stages must be set so pre-commit does not run an expensive hook on every commit."""
     for hook in _load_hooks():
         stages = hook.get("stages")
-        assert isinstance(stages, list) and stages, f"{hook['id']} must declare explicit stages"
+        assert isinstance(stages, list), f"{hook['id']} must declare explicit stages"
+        assert stages, f"{hook['id']} must declare explicit stages"
 
 
 def test_evaluate_script_is_invokable_as_module() -> None:

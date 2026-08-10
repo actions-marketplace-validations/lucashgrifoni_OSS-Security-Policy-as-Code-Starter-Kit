@@ -411,37 +411,34 @@ def _rule_iac_pul_005_default_network(repo_root: Path, calls: list[PulumiCall]) 
     return findings
 
 
+# (predicate, snake_case kwarg, camelCase kwarg) -- the two ways a Pulumi resource can
+# hand out a public IP. The kwarg name is what the message quotes, so it stays paired
+# with the predicate that selects it.
+_PUBLIC_IP_KWARGS: tuple[tuple[Callable[[PulumiCall], bool], str, str], ...] = (
+    (_is_subnet, "map_public_ip_on_launch", "mapPublicIpOnLaunch"),
+    (_is_instance, "associate_public_ip_address", "associatePublicIpAddress"),
+)
+
+
 def _rule_iac_pul_006_public_ip(repo_root: Path, calls: list[PulumiCall]) -> list[PulumiFinding]:
     findings: list[PulumiFinding] = []
     for c in calls:
-        if _is_subnet(c):
-            v = c.kwargs.get("map_public_ip_on_launch", c.kwargs.get("mapPublicIpOnLaunch"))
-            if v is True:
+        for matches, snake, camel in _PUBLIC_IP_KWARGS:
+            if not matches(c):
+                continue
+            if c.kwargs.get(snake, c.kwargs.get(camel)) is True:
                 findings.append(
                     PulumiFinding(
                         rule_id="IAC-PUL-006",
                         severity="MEDIUM",
-                        message=f"{c.resource_type}({c.resource_name!r}) has map_public_ip_on_launch=True.",
+                        message=f"{c.resource_type}({c.resource_name!r}) has {snake}=True.",
                         file=_normalize_target(repo_root, c.source),
                         resource_type=c.resource_type,
                         resource_name=c.resource_name,
                         line_start=c.line if c.line > 0 else None,
                     )
                 )
-        elif _is_instance(c):
-            v = c.kwargs.get("associate_public_ip_address", c.kwargs.get("associatePublicIpAddress"))
-            if v is True:
-                findings.append(
-                    PulumiFinding(
-                        rule_id="IAC-PUL-006",
-                        severity="MEDIUM",
-                        message=f"{c.resource_type}({c.resource_name!r}) has associate_public_ip_address=True.",
-                        file=_normalize_target(repo_root, c.source),
-                        resource_type=c.resource_type,
-                        resource_name=c.resource_name,
-                        line_start=c.line if c.line > 0 else None,
-                    )
-                )
+            break
     return findings
 
 

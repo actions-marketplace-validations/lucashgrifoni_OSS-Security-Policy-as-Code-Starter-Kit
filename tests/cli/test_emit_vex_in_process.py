@@ -43,7 +43,9 @@ def _rules_sarif(tmp_path: Path, *rule_ids: str) -> Path:
 def test_extract_sarif_rules_not_a_list(tmp_path: Path) -> None:
     p = _sarif(tmp_path, {"runs": [{"tool": {"driver": {"rules": "nope"}}}]})
     ids, refs, err = ev._extract_sarif_data(p)
-    assert err is None and ids == [] and refs == {}
+    assert err is None
+    assert ids == []
+    assert refs == {}
 
 
 def test_extract_sarif_rule_and_result_element_guards(tmp_path: Path) -> None:
@@ -80,7 +82,8 @@ def test_extract_sarif_rule_and_result_element_guards(tmp_path: Path) -> None:
 def test_extract_sarif_results_not_a_list(tmp_path: Path) -> None:
     p = _sarif(tmp_path, {"runs": [{"results": "nope"}]})
     ids, _refs, err = ev._extract_sarif_data(p)
-    assert err is None and ids == []
+    assert err is None
+    assert ids == []
 
 
 def test_extract_sarif_runs_not_a_list(tmp_path: Path) -> None:
@@ -92,7 +95,8 @@ def test_extract_sarif_runs_not_a_list(tmp_path: Path) -> None:
 def test_extract_sarif_run_not_a_dict(tmp_path: Path) -> None:
     p = _sarif(tmp_path, {"runs": [123]})
     ids, _refs, err = ev._extract_sarif_data(p)
-    assert err is None and ids == []
+    assert err is None
+    assert ids == []
 
 
 def test_extract_sarif_read_oserror(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -105,7 +109,8 @@ def test_extract_sarif_read_oserror(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     # and we reach the read_text OSError branch.
     monkeypatch.setattr(Path, "read_text", _boom)
     ids, _refs, err = ev._extract_sarif_data(p)
-    assert err is not None and "Could not read SARIF" in err
+    assert err is not None
+    assert "Could not read SARIF" in err
 
 
 # --------------------------------------------------------------------------- #
@@ -117,7 +122,8 @@ def test_load_vuln_waivers_unreadable_yaml(tmp_path: Path) -> None:
     p = tmp_path / "w.yaml"
     p.write_text("a: b: c\n", encoding="utf-8")  # invalid YAML -> YAMLError
     out, warns = ev._load_vuln_waivers(p)
-    assert out == {} and any("Could not read waivers file" in m for m in warns)
+    assert out == {}
+    assert any("Could not read waivers file" in m for m in warns)
 
 
 def test_load_vuln_waivers_entries_not_a_list(tmp_path: Path) -> None:

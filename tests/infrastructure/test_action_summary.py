@@ -11,7 +11,8 @@ import pytest
 
 _SCRIPT = Path(__file__).parents[2] / "scripts" / "action_summary.py"
 _spec = importlib.util.spec_from_file_location("action_summary", _SCRIPT)
-assert _spec is not None and _spec.loader is not None
+assert _spec is not None
+assert _spec.loader is not None
 action_summary = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(action_summary)
 
@@ -32,7 +33,8 @@ def test_summary_has_counts_table_and_failing_section() -> None:
     assert "| PASS | 1 |" in summary
     assert "| FAIL | 1 |" in summary
     assert "### Failing controls" in summary
-    assert "`B`" in summary and "missing thing" in summary
+    assert "`B`" in summary
+    assert "missing thing" in summary
 
 
 def test_annotations_error_for_fail_warning_for_review() -> None:

@@ -250,9 +250,11 @@ def test_explicit_waivers_warning_helper_branches(tmp_path: Path) -> None:
 
     assert ev._explicit_waivers_warning(good) is None
     missing = ev._explicit_waivers_warning(Path("nope.yaml"))
-    assert missing is not None and "does not exist" in missing
+    assert missing is not None
+    assert "does not exist" in missing
     directory = ev._explicit_waivers_warning(a_dir)
-    assert directory is not None and "is a directory" in directory
+    assert directory is not None
+    assert "is a directory" in directory
 
 
 # --------------------------------------------------------------------------- #

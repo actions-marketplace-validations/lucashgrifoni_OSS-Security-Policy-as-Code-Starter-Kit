@@ -65,7 +65,8 @@ def test_sarif_version_and_schema() -> None:
     sarif = build_sarif(_report([_result(cid="GOV-SEC-001", status=ControlStatus.FAIL)]))
     assert sarif["version"] == SARIF_VERSION == "2.1.0"
     assert sarif["$schema"].startswith("https://")
-    assert "runs" in sarif and isinstance(sarif["runs"], list)
+    assert "runs" in sarif
+    assert isinstance(sarif["runs"], list)
     assert len(sarif["runs"]) == 1
 
 

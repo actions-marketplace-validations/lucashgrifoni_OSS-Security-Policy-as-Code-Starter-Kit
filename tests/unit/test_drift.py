@@ -48,7 +48,8 @@ def _report(controls: list[dict], **extra: object) -> dict:
 def test_no_changes_empty_drift() -> None:
     rows = [_row("A", "t", "PASS"), _row("B", "u", "FAIL")]
     d = compute_drift(_report(rows, kit_version="1"), _report(list(rows), kit_version="2"))
-    assert not d.regressions and not d.improvements
+    assert not d.regressions
+    assert not d.improvements
     assert not d.has_regressions
 
 

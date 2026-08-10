@@ -105,12 +105,14 @@ def test_default_branch_name() -> None:
 
 def test_collection_block() -> None:
     b = ac._azure_collection_block("2026-05-01T00:00:00Z", "https://dev.azure.com/org/_apis/x")
-    assert b["mode"] == "api" and b["evidence_collection_method"] == "live"
+    assert b["mode"] == "api"
+    assert b["evidence_collection_method"] == "live"
 
 
 def test_rate_limit_and_permission() -> None:
+    Resp = _Resp(429, headers={"retry-after": "30"})
     with pytest.raises(RateLimitError):
-        ac._enforce_rate_limit(_Resp(429, headers={"retry-after": "30"}))
+        ac._enforce_rate_limit(Resp)
     ac._enforce_rate_limit(_Resp(200))  # no raise
     with pytest.raises(CollectionPermissionError):
         ac._raise_permission("https://x", 403)
@@ -147,10 +149,13 @@ def test_service_connection_posture() -> None:
 
 
 def test_service_connection_posture_permission_error() -> None:
+    Client = _Client([_Resp(403)])
     with pytest.raises(CollectionPermissionError):
-        ac._azure_service_connection_posture(_Client([_Resp(403)]), "Proj")
+        ac._azure_service_connection_posture(Client, "Proj")
 
 
 def test_service_connection_posture_non_200() -> None:
     conns, posture, _notes, status = ac._azure_service_connection_posture(_Client([_Resp(500)]), "Proj")
-    assert status == 500 and conns == [] and posture["service_connection_restricted"] is False
+    assert status == 500
+    assert conns == []
+    assert posture["service_connection_restricted"] is False

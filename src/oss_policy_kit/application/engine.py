@@ -23,6 +23,7 @@ from oss_policy_kit.domain.errors import LoadError
 from oss_policy_kit.domain.models import (
     ControlResult,
     ControlStatus,
+    EvalOutcome,
     ExecutionReport,
     LiveCollectionMetadata,
     WaiverRecord,
@@ -315,6 +316,38 @@ def _not_applicable_result(cid: str, spec: ControlSpec, profile: ProfileSpec, re
     )
 
 
+def _resolve_inapplicable(
+    cid: str,
+    ctx: EvalContext,
+    profile: ProfileSpec,
+    spec: ControlSpec,
+) -> ControlResult | None:
+    """Return the NOT_APPLICABLE result when *spec*'s precondition is unmet, else None."""
+
+    if spec.applicability is None:
+        return None
+    applicable, na_reason = resolve_applicability(spec.applicability, ctx.repo_root)
+    if applicable:
+        return None
+    if ctx.verbose_emit is not None:
+        ctx.verbose_emit(
+            f"[dim]→ {_markup_escape(cid)} ({_markup_escape(spec.title)}) — not applicable (precondition unmet)[/dim]"
+        )
+    return _not_applicable_result(cid, spec, profile, na_reason or "Not applicable.")
+
+
+def _emit_verbose_outcome(ctx: EvalContext, outcome: EvalOutcome) -> None:
+    """Echo one evaluator's verdict on the verbose channel, truncated and escaped."""
+
+    if ctx.verbose_emit is None:
+        return
+    reason_one = outcome.reason.replace("\n", " ").strip()
+    if len(reason_one) > 220:
+        reason_one = reason_one[:217].rstrip() + "..."
+    # Truncate first, escape second, so the cut never lands inside a ``\[`` we added.
+    ctx.verbose_emit(f"[dim]  Result: {_markup_escape(outcome.status.value)} — {_markup_escape(reason_one)}[/dim]")
+
+
 def _evaluate_control(
     cid: str,
     ctx: EvalContext,
@@ -339,15 +372,10 @@ def _evaluate_control(
     if cid not in catalog:
         raise LoadError(f"Profile references unknown control '{cid}'")
     spec = catalog[cid]
-    if applicability_engine and spec.applicability is not None:
-        applicable, na_reason = resolve_applicability(spec.applicability, ctx.repo_root)
-        if not applicable:
-            if ctx.verbose_emit is not None:
-                ctx.verbose_emit(
-                    f"[dim]→ {_markup_escape(cid)} ({_markup_escape(spec.title)}) "
-                    f"— not applicable (precondition unmet)[/dim]"
-                )
-            return _not_applicable_result(cid, spec, profile, na_reason or "Not applicable.")
+    if applicability_engine:
+        inapplicable = _resolve_inapplicable(cid, ctx, profile, spec)
+        if inapplicable is not None:
+            return inapplicable
     evaluator = EVALUATOR_REGISTRY.get(cid)
     if evaluator is None:
         raise LoadError(f"No evaluator implemented for control '{cid}'")
@@ -364,12 +392,7 @@ def _evaluate_control(
         len(outcome.evidence_sources),
         f" reason={outcome.reason.splitlines()[0]!r}" if outcome.status.value != "pass" and outcome.reason else "",
     )
-    if ctx.verbose_emit is not None:
-        reason_one = outcome.reason.replace("\n", " ").strip()
-        if len(reason_one) > 220:
-            reason_one = reason_one[:217].rstrip() + "..."
-        # Truncate first, escape second, so the cut never lands inside a ``\[`` we added.
-        ctx.verbose_emit(f"[dim]  Result: {_markup_escape(outcome.status.value)} — {_markup_escape(reason_one)}[/dim]")
+    _emit_verbose_outcome(ctx, outcome)
     final_status, applied_waiver = _apply_waiver(outcome.status, waivers.get(cid))
     return ControlResult(
         control_id=cid,

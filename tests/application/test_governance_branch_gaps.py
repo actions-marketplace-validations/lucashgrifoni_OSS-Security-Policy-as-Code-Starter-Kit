@@ -107,12 +107,14 @@ def test_classify_evidence_files_error_path(tmp_path: Path) -> None:
 
 def test_mfa_failure_none_all_members(tmp_path: Path) -> None:
     out = gov._mfa_enforcement_failure(None, True, tmp_path / "x.json")
-    assert out is not None and out.status == ControlStatus.MANUAL_REVIEW_REQUIRED
+    assert out is not None
+    assert out.status == ControlStatus.MANUAL_REVIEW_REQUIRED
 
 
 def test_mfa_failure_admins_off_only(tmp_path: Path) -> None:
     out = gov._mfa_enforcement_failure(True, False, tmp_path / "x.json")
-    assert out is not None and out.status == ControlStatus.FAIL
+    assert out is not None
+    assert out.status == ControlStatus.FAIL
 
 
 def test_mfa_failure_clean_returns_none(tmp_path: Path) -> None:
@@ -159,7 +161,9 @@ def test_classify_sbom_file_unconfirmed(tmp_path: Path) -> None:
     p = tmp_path / "not-an-sbom.json"
     p.write_text("just some text, not an sbom", encoding="utf-8")
     label, note, unconfirmed = gov._classify_sbom_file(p)
-    assert label is None and note is None and unconfirmed == p.name
+    assert label is None
+    assert note is None
+    assert unconfirmed == p.name
 
 
 def test_classify_sbom_file_unreadable_returns_all_none(tmp_path: Path) -> None:

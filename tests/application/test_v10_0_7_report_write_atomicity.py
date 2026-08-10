@@ -133,8 +133,9 @@ def test_a_sarif_write_that_dies_mid_flight_leaves_no_zero_byte_file(tmp_path: P
     previous = json.dumps({"version": "2.1.0", "runs": [{"marker": _TARGET_A}]}) + "\n"
     sarif.write_text(previous, encoding="utf-8")
 
+    unencodable_report = _unencodable_report(target_path=_TARGET_B)
     with pytest.raises(UnicodeEncodeError):
-        sw.write_sarif_report(_unencodable_report(target_path=_TARGET_B), sarif)
+        sw.write_sarif_report(unencodable_report, sarif)
 
     assert sarif.stat().st_size > 0, "the SARIF was truncated to zero bytes by a failed write"
     assert sarif.read_text(encoding="utf-8") == previous, "a failed write clobbered the previous SARIF"
@@ -174,8 +175,9 @@ def test_a_sarif_destination_that_cannot_be_written_still_raises_oserror(tmp_pat
     occupied = out / "evaluation-report.sarif"
     occupied.mkdir()
 
+    report = _report()
     with pytest.raises(OSError):
-        sw.write_sarif_report(_report(), occupied)
+        sw.write_sarif_report(report, occupied)
 
     assert sorted(p.name for p in out.iterdir()) == [occupied.name], "a temp file was orphaned by the refusal"
 
@@ -233,12 +235,14 @@ def test_a_blocked_markdown_write_does_not_leave_a_new_json_beside_a_stale_one(
     out = tmp_path / "out"
     _seed_pair(out)
     before_json, before_md = _pair_text(out)
-    assert _TARGET_A in before_json and _TARGET_A in before_md
+    assert _TARGET_A in before_json
+    assert _TARGET_A in before_md
 
     _block_markdown_publish(monkeypatch, out / "evaluation-report.md")
 
+    report_2 = _report(target_path=_TARGET_B)
     with pytest.raises(OSError):
-        rp.write_reports(_report(target_path=_TARGET_B), out)
+        rp.write_reports(report_2, out)
 
     after_json, after_md = _pair_text(out)
     assert _TARGET_B not in after_json, "the JSON advanced to a run whose Markdown never landed"
@@ -262,8 +266,9 @@ def test_a_first_run_whose_markdown_is_blocked_leaves_no_orphan_json(
     out.mkdir()
     _block_markdown_publish(monkeypatch, out / "evaluation-report.md")
 
+    report_3 = _report(target_path=_TARGET_B)
     with pytest.raises(OSError):
-        rp.write_reports(_report(target_path=_TARGET_B), out)
+        rp.write_reports(report_3, out)
 
     assert list(out.iterdir()) == [], "a failed run left a report behind with no counterpart"
 
@@ -304,20 +309,24 @@ def test_the_operator_is_told_when_the_pair_could_not_be_put_back(
     monkeypatch.setattr(rp.os, "replace", replace)
     monkeypatch.setattr(Path, "write_text", write_text)
 
+    report_4 = _report(target_path=_TARGET_B)
     with pytest.raises(OSError) as caught:
-        rp.write_reports(_report(target_path=_TARGET_B), out)
+        rp.write_reports(report_4, out)
 
     detail = caught.value.strerror or ""
-    assert "evaluation-report.json" in detail and "evaluation-report.md" in detail
+    assert "evaluation-report.json" in detail
+    assert "evaluation-report.md" in detail
     assert "different runs" in detail, f"the mixed pair was reported as a plain write failure: {detail!r}"
     # The message reaches the user, so it carries no host path and no account name (M-002).
     # Asserted on a separator-free marker: the two report basenames are the only names
     # allowed in it, and neither contains a separator to begin with.
     assert tmp_path.name not in detail
-    assert "/" not in detail and "\\" not in detail, f"a host path leaked into the message: {detail!r}"
+    assert "/" not in detail, f"a host path leaked into the message: {detail!r}"
+    assert "\\" not in detail, f"a host path leaked into the message: {detail!r}"
     # The state the message describes is the state on disk: JSON advanced, Markdown did not.
     after_json, after_md = _pair_text(out)
-    assert _TARGET_B in after_json and _TARGET_A in after_md
+    assert _TARGET_B in after_json
+    assert _TARGET_A in after_md
 
 
 def test_a_previous_json_that_could_not_be_read_is_never_deleted_by_the_rollback(
@@ -345,8 +354,9 @@ def test_a_previous_json_that_could_not_be_read_is_never_deleted_by_the_rollback
     monkeypatch.setattr(Path, "read_bytes", read_bytes)
     _block_markdown_publish(monkeypatch, md_path)
 
+    report_5 = _report(target_path=_TARGET_B)
     with pytest.raises(OSError) as caught:
-        rp.write_reports(_report(target_path=_TARGET_B), out)
+        rp.write_reports(report_5, out)
 
     assert json_path.is_file(), "a file the kit could not read was deleted by the rollback"
     assert "different runs" in (caught.value.strerror or ""), "an unrecoverable pair was reported as a plain failure"
@@ -400,8 +410,9 @@ def test_a_markdown_that_cannot_be_staged_publishes_no_json_at_all(
     monkeypatch.setattr(Path, "write_text", write_text)
     monkeypatch.setattr(rp.os, "replace", replace)
 
+    report_6 = _report(target_path=_TARGET_B)
     with pytest.raises(OSError):
-        rp.write_reports(_report(target_path=_TARGET_B), out)
+        rp.write_reports(report_6, out)
 
     assert swapped == [], f"a report was published and then undone rather than never published: {swapped}"
     assert _pair_text(out) == (before_json, before_md), "the JSON published before the Markdown was staged"
@@ -415,8 +426,9 @@ def test_a_report_that_cannot_be_encoded_touches_neither_file(tmp_path: Path) ->
     _seed_pair(out)
     before = _pair_text(out)
 
+    unencodable_report_2 = _unencodable_report(target_path=_TARGET_B)
     with pytest.raises(UnicodeEncodeError):
-        rp.write_reports(_unencodable_report(target_path=_TARGET_B), out)
+        rp.write_reports(unencodable_report_2, out)
 
     assert _pair_text(out) == before
     assert sorted(p.name for p in out.iterdir()) == ["evaluation-report.json", "evaluation-report.md"]
@@ -447,8 +459,9 @@ def test_a_markdown_renderer_that_raises_publishes_no_json(tmp_path: Path, monke
     monkeypatch.setattr(rp.os, "replace", replace)
     monkeypatch.setattr(rp, "_markdown_report_text", boom)
 
+    report_7 = _report(target_path=_TARGET_B)
     with pytest.raises(ValueError):
-        rp.write_reports(_report(target_path=_TARGET_B), out)
+        rp.write_reports(report_7, out)
 
     assert swapped == [], f"a report was published before the pair was known to render: {swapped}"
     assert _pair_text(out) == before
@@ -587,8 +600,10 @@ def test_the_drift_table_still_renders_its_own_labels_as_style() -> None:
     """
 
     plain = _visible(rp.render_drift_report(_bracketed_drift(), "table", color=False))
-    assert "regression" in plain and "improve" in plain
-    assert "[/red]" not in plain and "[/green]" not in plain, "the kit's own style tags leaked as literal text"
+    assert "regression" in plain
+    assert "improve" in plain
+    assert "[/red]" not in plain, "the kit's own style tags leaked as literal text"
+    assert "[/green]" not in plain, "the kit's own style tags leaked as literal text"
 
     ansi = rp.render_drift_report(_bracketed_drift(), "table", color=True)
     assert "\x1b[" in ansi, "the kit's own labels stopped being styled at all"
@@ -600,7 +615,8 @@ def test_markdown_and_json_drift_output_were_never_lossy_and_stay_that_way() -> 
     drift = _bracketed_drift()
 
     md = rp.render_drift_report(drift, "markdown")
-    assert _BRACKETED_ID in md and _BRACKETED_AFTER in md
+    assert _BRACKETED_ID in md
+    assert _BRACKETED_AFTER in md
 
     payload = json.loads(rp.render_drift_report(drift, "json"))
     assert payload["regressions"][0]["control_id"] == _BRACKETED_ID

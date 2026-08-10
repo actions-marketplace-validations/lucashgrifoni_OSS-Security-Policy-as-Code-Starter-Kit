@@ -89,7 +89,8 @@ def test_extract_sarif_data_returns_error_not_raises_on_utf16(tmp_path: Path) ->
     ids, refs, err = _extract_sarif_data(sarif)
     assert ids == []
     assert refs == {}
-    assert err is not None and "UTF-8" in err
+    assert err is not None
+    assert "UTF-8" in err
 
 
 def test_emit_vex_utf16le_sarif_exits_2_not_3(tmp_path: Path) -> None:

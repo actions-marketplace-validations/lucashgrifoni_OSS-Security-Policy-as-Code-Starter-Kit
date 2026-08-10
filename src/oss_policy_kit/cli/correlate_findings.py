@@ -98,6 +98,29 @@ def _warn_if_enrichment_unused(report: dict[str, Any], shown: str) -> None:
     )
 
 
+def _finding_where(loc: dict[str, Any]) -> str:
+    """Where a finding sits: ``file:line``, the bare file, or its logical resource name."""
+
+    if loc["file"]:
+        return f"{loc['file']}:{loc['line_start']}" if loc["line_start"] else str(loc["file"])
+    return str(loc["logical"]["resource_name"] or loc["logical"]["name"] or "-")
+
+
+def _finding_tags(f: dict[str, Any]) -> str:
+    """The trailing ``(WAIVED, KEV, EPSS=0.42, merged x3)`` annotation, or an empty string."""
+
+    tags = []
+    if f["waiver"]["waived"]:
+        tags.append("WAIVED")
+    if f["kev"]:
+        tags.append("KEV")
+    if f["epss"] is not None:
+        tags.append(f"EPSS={f['epss']:.2f}")
+    if f["correlation"]["merged_from"] > 1:
+        tags.append(f"merged x{f['correlation']['merged_from']}")
+    return f"   ({', '.join(tags)})" if tags else ""
+
+
 def _render_human(report: dict[str, Any], output: str) -> None:
     findings = report["findings"]
     by_sev = report["findings_by_severity"]
@@ -114,20 +137,8 @@ def _render_human(report: dict[str, Any], output: str) -> None:
     if report["findings_total"] == 0:
         lines.append("  (no findings correlated from the available scanner evidence)")
     for f in findings[:_HUMAN_TABLE_CAP]:
-        loc = f["location"]
-        where = loc["file"] or (loc["logical"]["resource_name"] or loc["logical"]["name"] or "-")
-        if loc["file"] and loc["line_start"]:
-            where = f"{loc['file']}:{loc['line_start']}"
-        tags = []
-        if f["waiver"]["waived"]:
-            tags.append("WAIVED")
-        if f["kev"]:
-            tags.append("KEV")
-        if f["epss"] is not None:
-            tags.append(f"EPSS={f['epss']:.2f}")
-        if f["correlation"]["merged_from"] > 1:
-            tags.append(f"merged x{f['correlation']['merged_from']}")
-        suffix = f"   ({', '.join(tags)})" if tags else ""
+        where = _finding_where(f["location"])
+        suffix = _finding_tags(f)
         lines.append(
             f"  #{f['priority']['rank']:<3} [{f['severity']['normalized'].upper():<8}] {f['rule']}  {where}{suffix}"
         )

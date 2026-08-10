@@ -77,11 +77,13 @@ def test_semgrep_finding_normalizes_fields_and_severity(tmp_path: Path) -> None:
     assert f.severity.by_source == (("semgrep", "ERROR"),)
     assert f.location.file == "app/main.py"
     assert (f.location.line_start, f.location.line_end) == (10, 12)
-    assert f.cwe == ("CWE-95",) and f.owasp == ("A03:2021",)
+    assert f.cwe == ("CWE-95",)
+    assert f.owasp == ("A03:2021",)
     assert f.sources[0].source_path == ".oss-policy-kit/evidence/sast-semgrep.json"
     assert f.id == ""  # correlation assigns opk-fk ids later
     semgrep_record = next(r for r in records if r.path.endswith("sast-semgrep.json"))
-    assert semgrep_record.status == "ok" and semgrep_record.tool == "semgrep"
+    assert semgrep_record.status == "ok"
+    assert semgrep_record.tool == "semgrep"
 
 
 def test_iac_finding_normalizes_resource_location(tmp_path: Path) -> None:

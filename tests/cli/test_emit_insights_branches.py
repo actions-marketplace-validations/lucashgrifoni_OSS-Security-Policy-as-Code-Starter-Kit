@@ -35,7 +35,8 @@ def test_emit_insights_writes_yaml(tmp_path: Path) -> None:
     assert res.exit_code == 0, res.output
     assert out.is_file()
     doc = yaml.safe_load(out.read_text(encoding="utf-8"))
-    assert isinstance(doc, dict) and doc
+    assert isinstance(doc, dict)
+    assert doc
 
 
 def test_emit_insights_validate(tmp_path: Path) -> None:

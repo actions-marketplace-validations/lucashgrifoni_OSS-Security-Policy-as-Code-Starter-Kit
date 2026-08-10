@@ -248,46 +248,58 @@ def diff_catalogs(old: CatalogSnapshot, new: CatalogSnapshot) -> CatalogDiff:
     )
 
 
+def _control_lines(diff: CatalogDiff) -> list[str]:
+    """The control section: one counts header, then one line per added/removed/changed control."""
+
+    lines = [
+        f"Controls: +{len(diff.added_controls)} added, "
+        f"-{len(diff.removed_controls)} removed, "
+        f"~{len(diff.changed_controls)} changed"
+    ]
+    lines.extend(f"  + {ref.id}  {ref.title}" for ref in diff.added_controls)
+    lines.extend(f"  - {ref.id}  {ref.title}" for ref in diff.removed_controls)
+    for change in diff.changed_controls:
+        deltas = "; ".join(f"{c.field}: {c.old} -> {c.new}" for c in change.changes)
+        lines.append(f"  ~ {change.id}  {deltas}")
+    return lines
+
+
+def _profile_change_summary(pchange: ProfileChange) -> str:
+    """Render one profile's membership delta as ``+a, +b; -c``."""
+
+    parts = []
+    if pchange.added:
+        parts.append(", ".join(f"+{c}" for c in pchange.added))
+    if pchange.removed:
+        parts.append(", ".join(f"-{c}" for c in pchange.removed))
+    return "; ".join(parts)
+
+
+def _profile_lines(diff: CatalogDiff) -> list[str]:
+    """The profile section, or the one-line explanation of why there is none."""
+
+    if not diff.profiles_compared:
+        return ["Profiles: not compared (one side is a bare catalog.yaml without a profiles/ directory)."]
+    lines = [
+        f"Profiles: +{len(diff.added_profiles)} added, "
+        f"-{len(diff.removed_profiles)} removed, "
+        f"~{len(diff.changed_profiles)} changed"
+    ]
+    lines.extend(f"  + {pid}" for pid in diff.added_profiles)
+    lines.extend(f"  - {pid}" for pid in diff.removed_profiles)
+    lines.extend(f"  ~ {pchange.id}  {_profile_change_summary(pchange)}" for pchange in diff.changed_profiles)
+    return lines
+
+
 def render_human(diff: CatalogDiff) -> str:
     """Render a concise human-readable summary of *diff*."""
 
     lines = [f"Catalog diff: {diff.from_label} -> {diff.to_label}", ""]
     if diff.is_empty:
         lines.append("No control or profile differences.")
-    lines.append(
-        f"Controls: +{len(diff.added_controls)} added, "
-        f"-{len(diff.removed_controls)} removed, "
-        f"~{len(diff.changed_controls)} changed"
-    )
-    for ref in diff.added_controls:
-        lines.append(f"  + {ref.id}  {ref.title}")
-    for ref in diff.removed_controls:
-        lines.append(f"  - {ref.id}  {ref.title}")
-    for change in diff.changed_controls:
-        deltas = "; ".join(f"{c.field}: {c.old} -> {c.new}" for c in change.changes)
-        lines.append(f"  ~ {change.id}  {deltas}")
-
+    lines.extend(_control_lines(diff))
     lines.append("")
-    if not diff.profiles_compared:
-        lines.append("Profiles: not compared (one side is a bare catalog.yaml without a profiles/ directory).")
-    else:
-        lines.append(
-            f"Profiles: +{len(diff.added_profiles)} added, "
-            f"-{len(diff.removed_profiles)} removed, "
-            f"~{len(diff.changed_profiles)} changed"
-        )
-        for pid in diff.added_profiles:
-            lines.append(f"  + {pid}")
-        for pid in diff.removed_profiles:
-            lines.append(f"  - {pid}")
-        for pchange in diff.changed_profiles:
-            parts = []
-            if pchange.added:
-                parts.append(", ".join(f"+{c}" for c in pchange.added))
-            if pchange.removed:
-                parts.append(", ".join(f"-{c}" for c in pchange.removed))
-            lines.append(f"  ~ {pchange.id}  {'; '.join(parts)}")
-
+    lines.extend(_profile_lines(diff))
     lines.append("")
     lines.append("Generated, read-only: explains changes between two kit versions; changes no evaluate verdict.")
     return "\n".join(lines) + "\n"

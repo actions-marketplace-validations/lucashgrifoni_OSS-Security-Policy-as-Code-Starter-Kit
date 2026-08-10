@@ -101,7 +101,8 @@ def test_markdown_evidence_bullets_redact_absolute_paths_by_default(tmp_path: Pa
     assert "/synthetic-abs-root/" not in detail
     assert _WIN_DRIVE_PREFIX not in detail
     # The full parent chain (basename followed by a separator) must never survive.
-    assert "secret-repo/" not in detail and "secret-repo\\" not in detail
+    assert "secret-repo/" not in detail
+    assert "secret-repo\\" not in detail
 
     # The Markdown evidence bullet must render the SAME value the JSON report emits.
     json_payload = rp.report_to_dict(report)

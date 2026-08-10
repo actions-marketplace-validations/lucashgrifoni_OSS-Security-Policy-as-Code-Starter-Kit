@@ -255,15 +255,18 @@ def test_validate_bsi_in_scope() -> None:
     content = '{"purl":"pkg:pypi/x","hashes":[],"licenses":[],"supplier":"acme"}'
     res = s._validate_bsi_tr_03183_v2_1(content, "cyclonedx", "1.6")
     assert res is not None
-    assert res["identifiers_present"] and res["hashes_present"]
-    assert res["licenses_present"] and res["supplier_present"]
+    assert res["identifiers_present"]
+    assert res["hashes_present"]
+    assert res["licenses_present"]
+    assert res["supplier_present"]
     assert res["vulnerability_data_separated"] is True
 
 
 def test_validate_bsi_with_embedded_vulns() -> None:
     content = '{"purl":"pkg:x","vulnerabilities": [ {"id":"CVE-1"} ]}'
     res = s._validate_bsi_tr_03183_v2_1(content, "spdx", "3.0")
-    assert res is not None and res["vulnerability_data_separated"] is False
+    assert res is not None
+    assert res["vulnerability_data_separated"] is False
 
 
 def test_find_sbom_files(tmp_path: Path) -> None:
@@ -271,7 +274,8 @@ def test_find_sbom_files(tmp_path: Path) -> None:
     (tmp_path / "bom.xml").write_text("<bom/>", encoding="utf-8")
     found = s._find_sbom_files(tmp_path)
     names = {p.name for p in found}
-    assert "sbom.json" in names and "bom.xml" in names
+    assert "sbom.json" in names
+    assert "bom.xml" in names
 
 
 # --------------------------------------------------------------------------- #
@@ -299,7 +303,8 @@ def test_audit_stream_signal_no_match(tmp_path: Path) -> None:
 def test_disclosure_sla_signal_match(tmp_path: Path) -> None:
     (tmp_path / "SECURITY.md").write_text("We will respond within 48 hours.\n", encoding="utf-8")
     out = s._disclosure_sla_signal_match(tmp_path)
-    assert out is not None and out[1] in s._DISCLOSURE_SLA_KEYWORDS
+    assert out is not None
+    assert out[1] in s._DISCLOSURE_SLA_KEYWORDS
 
 
 def test_disclosure_sla_signal_no_match(tmp_path: Path) -> None:
@@ -366,7 +371,8 @@ def test_self_hosted_workflow_paths(tmp_path: Path) -> None:
     (wf / "b.yaml").write_text("runs-on: ubuntu-latest\n", encoding="utf-8")
     (wf / "empty.yml").write_text("", encoding="utf-8")
     all_self, ephemeral = s._self_hosted_workflow_paths(tmp_path)
-    assert len(all_self) == 1 and len(ephemeral) == 1
+    assert len(all_self) == 1
+    assert len(ephemeral) == 1
 
 
 def test_self_hosted_workflow_paths_no_dir(tmp_path: Path) -> None:
@@ -395,40 +401,48 @@ def test_load_sarif_runs_ok(tmp_path: Path) -> None:
     p = tmp_path / "x.sarif.json"
     p.write_text(json.dumps({"runs": [{"results": []}]}), encoding="utf-8")
     runs, err = s._load_sarif_runs(p)
-    assert err is None and isinstance(runs, list) and len(runs) == 1
+    assert err is None
+    assert isinstance(runs, list)
+    assert len(runs) == 1
 
 
 def test_load_sarif_runs_missing(tmp_path: Path) -> None:
     runs, err = s._load_sarif_runs(tmp_path / "nope.json")
-    assert runs is None and err and "Could not read" in err
+    assert runs is None
+    assert err
+    assert "Could not read" in err
 
 
 def test_load_sarif_runs_bad_json(tmp_path: Path) -> None:
     p = tmp_path / "bad.json"
     p.write_text("{not json", encoding="utf-8")
     runs, err = s._load_sarif_runs(p)
-    assert runs is None and "Could not parse" in (err or "")
+    assert runs is None
+    assert "Could not parse" in (err or "")
 
 
 def test_load_sarif_runs_too_deep(tmp_path: Path) -> None:
     p = tmp_path / "deep.json"
     p.write_text("[" * 250 + "]" * 250, encoding="utf-8")
     runs, err = s._load_sarif_runs(p)
-    assert runs is None and "too deeply nested" in (err or "")
+    assert runs is None
+    assert "too deeply nested" in (err or "")
 
 
 def test_load_sarif_runs_no_runs_key(tmp_path: Path) -> None:
     p = tmp_path / "x.json"
     p.write_text(json.dumps({"version": "2.1.0"}), encoding="utf-8")
     runs, err = s._load_sarif_runs(p)
-    assert runs is None and "missing top-level 'runs'" in (err or "")
+    assert runs is None
+    assert "missing top-level 'runs'" in (err or "")
 
 
 def test_load_sarif_runs_runs_not_array(tmp_path: Path) -> None:
     p = tmp_path / "x.json"
     p.write_text(json.dumps({"runs": "x"}), encoding="utf-8")
     runs, err = s._load_sarif_runs(p)
-    assert runs is None and "not an array" in (err or "")
+    assert runs is None
+    assert "not an array" in (err or "")
 
 
 def test_sarif_rule_levels() -> None:
@@ -480,8 +494,10 @@ def test_parse_zizmor_severity_properties(tmp_path: Path) -> None:
     }
     p.write_text(json.dumps(doc), encoding="utf-8")
     counts, err = s._parse_zizmor_severity_properties(p)
-    assert err is None and counts is not None
-    assert counts["high"] == 1 and counts["unknown"] == 1
+    assert err is None
+    assert counts is not None
+    assert counts["high"] == 1
+    assert counts["unknown"] == 1
 
 
 def test_parse_zizmor_bad_paths(tmp_path: Path) -> None:
@@ -513,10 +529,12 @@ def test_classify_epss_kev_result() -> None:
     kev, high = s._classify_epss_kev_result(
         {"ruleId": "CVE-1", "properties": {"kev": True, "epss_score": 0.9, "cvss_score": 8.0}}, 0.5, 7.0
     )
-    assert kev == "CVE-1" and high == "CVE-1"
+    assert kev == "CVE-1"
+    assert high == "CVE-1"
     # kev as string + low epss
     kev2, high2 = s._classify_epss_kev_result({"properties": {"kev": "yes", "cve": "CVE-2", "epss": 0.1}}, 0.5, 7.0)
-    assert kev2 == "CVE-2" and high2 is None
+    assert kev2 == "CVE-2"
+    assert high2 is None
     # non-dict / no props
     assert s._classify_epss_kev_result("x", 0.5, 7.0) == (None, None)
     assert s._classify_epss_kev_result({"properties": "x"}, 0.5, 7.0) == (None, None)
@@ -536,10 +554,13 @@ def test_scan_sarif_epss_kev(tmp_path: Path) -> None:
     }
     p.write_text(json.dumps(doc), encoding="utf-8")
     scan = s._scan_sarif_epss_kev(p)
-    assert scan.error is None and scan.kev == ["CVE-A"] and scan.high_epss == ["CVE-B"]
+    assert scan.error is None
+    assert scan.kev == ["CVE-A"]
+    assert scan.high_epss == ["CVE-B"]
     # The fields that let a caller tell "enrichment ran and found nothing" apart from
     # "there is no enrichment here" -- the distinction SCA-KEV-001 was missing.
-    assert scan.saw_kev_property and scan.saw_epss_property
+    assert scan.saw_kev_property
+    assert scan.saw_epss_property
 
 
 def test_scan_sarif_epss_kev_errors(tmp_path: Path) -> None:
@@ -619,7 +640,8 @@ def test_read_first_existing(tmp_path: Path) -> None:
     assert s._read_first_existing(tmp_path, ("X.md", "Y.md")) == (None, "")
     (tmp_path / "Y.md").write_text("Hello\n", encoding="utf-8")
     p, text = s._read_first_existing(tmp_path, ("X.md", "Y.md"))
-    assert p is not None and text == "hello\n"
+    assert p is not None
+    assert text == "hello\n"
 
 
 # --------------------------------------------------------------------------- #
@@ -667,10 +689,12 @@ def test_annex_iv_section(tmp_path: Path) -> None:
 
 def test_mcp_applicable(tmp_path: Path) -> None:
     applicable, found = s._mcp_applicable(tmp_path)
-    assert not applicable and found == []
+    assert not applicable
+    assert found == []
     (tmp_path / "mcp.json").write_text("{}", encoding="utf-8")
     applicable, found = s._mcp_applicable(tmp_path)
-    assert applicable and found
+    assert applicable
+    assert found
 
 
 def test_mcp_applicable_via_dependency(tmp_path: Path) -> None:
@@ -682,7 +706,8 @@ def test_mcp_applicable_via_dependency(tmp_path: Path) -> None:
 def test_mcp_applicable_via_dotmcp_dir(tmp_path: Path) -> None:
     (tmp_path / ".mcp").mkdir()
     applicable, found = s._mcp_applicable(tmp_path)
-    assert applicable and any(p.name == ".mcp" for p in found)
+    assert applicable
+    assert any(p.name == ".mcp" for p in found)
 
 
 def test_mcp_na() -> None:
@@ -704,7 +729,8 @@ def test_mcp_text_signal_skips_dirs(tmp_path: Path) -> None:
 
 def test_agentic_applicable(tmp_path: Path) -> None:
     applicable, found = s._agentic_applicable(tmp_path)
-    assert not applicable and found == []
+    assert not applicable
+    assert found == []
     (tmp_path / "requirements.txt").write_text("langchain==0.1.0\n", encoding="utf-8")
     applicable, _found = s._agentic_applicable(tmp_path)
     assert applicable
@@ -713,7 +739,8 @@ def test_agentic_applicable(tmp_path: Path) -> None:
 def test_agentic_applicable_via_path_hint(tmp_path: Path) -> None:
     (tmp_path / "agents").mkdir()
     applicable, found = s._agentic_applicable(tmp_path)
-    assert applicable and found
+    assert applicable
+    assert found
 
 
 def test_agentic_na() -> None:

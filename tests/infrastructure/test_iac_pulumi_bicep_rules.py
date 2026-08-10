@@ -124,7 +124,8 @@ def test_pulumi_ebs_dynamodb_unencrypted_and_instance_public_ip(tmp_path: Path) 
     (tmp_path / "infra.py").write_text(src, encoding="utf-8")
     outcome = pulumi.run_scan(tmp_path)
     fired = _rule_ids(outcome.findings)
-    assert "IAC-PUL-004" in fired and "IAC-PUL-006" in fired
+    assert "IAC-PUL-004" in fired
+    assert "IAC-PUL-006" in fired
     # Two distinct 004 findings (EBS + DynamoDB).
     assert sum(1 for f in outcome.findings if f.rule_id == "IAC-PUL-004") == 2
 

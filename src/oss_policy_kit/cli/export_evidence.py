@@ -911,7 +911,33 @@ def _validate_intoto(doc: dict[str, Any]) -> list[str]:
     return errs
 
 
-def _validate_gemara(doc: dict[str, Any]) -> list[str]:
+def _reference_id(container: Any, key: str) -> Any:
+    """``container[key]["reference-id"]`` when both levels are objects, else None."""
+
+    if not isinstance(container, dict):
+        return None
+    nested = container.get(key)
+    return nested.get("reference-id") if isinstance(nested, dict) else None
+
+
+def _validate_gemara_evaluation(ev: dict[str, Any]) -> str | None:
+    """The first thing wrong with one evaluation entry, or None when it is well-formed."""
+
+    name = ev.get("name")
+    if ev.get("result") not in _GEMARA_RESULTS:
+        return f"gemara: evaluation {name!r} has an invalid result"
+    logs = ev.get("assessment-logs")
+    if not isinstance(logs, list) or not logs:
+        return f"gemara: evaluation {name!r} must have a non-empty assessment-logs"
+    # Gemara enforces the assessment requirement reference-id == control reference-id.
+    if _reference_id(ev, "control") != _reference_id(logs[0], "requirement"):
+        return f"gemara: evaluation {name!r} requirement reference-id must match the control"
+    return None
+
+
+def _validate_gemara_header(doc: dict[str, Any]) -> list[str]:
+    """Messages for the document-level fields: metadata, target, and the rolled-up result."""
+
     errs: list[str] = []
     md = doc.get("metadata")
     if not isinstance(md, dict) or md.get("type") != "EvaluationLog":
@@ -922,6 +948,11 @@ def _validate_gemara(doc: dict[str, Any]) -> list[str]:
         errs.append("gemara: target must be an object")
     if doc.get("result") not in _GEMARA_RESULTS:
         errs.append("gemara: result must be a Gemara Result enum value")
+    return errs
+
+
+def _validate_gemara(doc: dict[str, Any]) -> list[str]:
+    errs = _validate_gemara_header(doc)
     evals = doc.get("evaluations")
     if not isinstance(evals, list) or not evals:
         errs.append("gemara: evaluations must be a non-empty array")
@@ -929,21 +960,10 @@ def _validate_gemara(doc: dict[str, Any]) -> list[str]:
     for ev in evals:
         if not isinstance(ev, dict):
             continue
-        if ev.get("result") not in _GEMARA_RESULTS:
-            errs.append(f"gemara: evaluation {ev.get('name')!r} has an invalid result")
-            break
-        logs = ev.get("assessment-logs")
-        if not isinstance(logs, list) or not logs:
-            errs.append(f"gemara: evaluation {ev.get('name')!r} must have a non-empty assessment-logs")
-            break
-        # Gemara enforces the assessment requirement reference-id == control reference-id.
-        control_ref = ev.get("control", {}).get("reference-id") if isinstance(ev.get("control"), dict) else None
-        first = logs[0]
-        log_ref = (
-            first.get("requirement", {}).get("reference-id") if isinstance(first.get("requirement"), dict) else None
-        )
-        if control_ref != log_ref:
-            errs.append(f"gemara: evaluation {ev.get('name')!r} requirement reference-id must match the control")
+        # One report per document: the first malformed evaluation is enough to reject it.
+        problem = _validate_gemara_evaluation(ev)
+        if problem is not None:
+            errs.append(problem)
             break
     return errs
 

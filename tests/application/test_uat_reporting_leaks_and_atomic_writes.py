@@ -103,7 +103,8 @@ def test_deeply_nested_evidence_path_redacted_in_json_and_markdown(tmp_path: Pat
 
     payload = rp.report_to_dict(report)
     refs = payload["controls"][0]["evidence"]["references"]
-    assert refs and all(r["redacted"] is True for r in refs)
+    assert refs
+    assert all(r["redacted"] is True for r in refs)
     assert _ACCOUNT not in json.dumps(payload)
 
     md = tmp_path / "evaluation-report.md"
@@ -269,8 +270,9 @@ def test_failed_write_leaves_the_previous_report_intact(tmp_path: Path, writer: 
     path.write_text(previous, encoding="utf-8")
 
     write = rp.write_json_report if writer == "json" else rp.write_markdown_report
+    unencodable_report = _unencodable_report()
     with pytest.raises(UnicodeEncodeError):
-        write(_unencodable_report(), path)
+        write(unencodable_report, path)
 
     assert path.read_text(encoding="utf-8") == previous, "destination was truncated by a failed write"
     assert sorted(p.name for p in out.iterdir()) == [path.name], "temp file left behind after a failed write"
@@ -396,6 +398,8 @@ def test_temp_file_shrinks_rather_than_overrunning_the_path_limit(
     # derives its own fixture from the constant it is checking cannot catch a change
     # to that constant. This asserts the production value instead.
     limit = 259  # Windows MAX_PATH (260) less the terminating NUL
+    # Order is ruff's, not Sonar's: SIM300 (an enforced CI gate) rejects the reverse,
+    # while Sonar S3415 asks for it. The blocking linter wins; S3415 is marked won't-fix.
     assert limit == rp._MAX_TEMP_PATH, "the temp-path budget moved away from Windows MAX_PATH"
 
     name = "evaluation-report.json"
@@ -416,6 +420,7 @@ def test_temp_file_shrinks_rather_than_overrunning_the_path_limit(
     rp._atomic_write_text(dest, '{"contract_version": "reports/2.0"}\n')
 
     assert json.loads(dest.read_text(encoding="utf-8")) == {"contract_version": "reports/2.0"}
-    assert seen and name not in seen[0], "temp name did not shrink, so the path limit was overrun"
+    assert seen, "temp name did not shrink, so the path limit was overrun"
+    assert name not in seen[0], "temp name did not shrink, so the path limit was overrun"
     assert re.fullmatch(r"\.[0-9a-f]{8}\.tmp", seen[0]), f"unexpected shrunk temp name: {seen[0]}"
     assert [p.name for p in deep.iterdir()] == [name], "a temp file was orphaned next to the report"

@@ -149,6 +149,8 @@ def test_init_config_tracks_the_epoch_and_nothing_else(tmp_path: Path, monkeypat
     assert _invoke(["init", "--target", str(tmp_path), "--yes", "--force"]).exit_code == 0
     second = config.read_text(encoding="utf-8")
 
-    assert _PINNED_STAMP in first and _OTHER_STAMP not in first
-    assert _OTHER_STAMP in second and _PINNED_STAMP not in second
+    assert _PINNED_STAMP in first
+    assert _OTHER_STAMP not in first
+    assert _OTHER_STAMP in second
+    assert _PINNED_STAMP not in second
     assert first.replace(_PINNED_STAMP, _OTHER_STAMP) == second

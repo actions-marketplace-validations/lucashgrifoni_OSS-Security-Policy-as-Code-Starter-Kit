@@ -70,8 +70,10 @@ def test_same_cve_two_tools_merges_cross_tool() -> None:
     result = fc.correlate([a, b])
     assert len(result.findings) == 1
     f = result.findings[0]
-    assert f.correlation is not None and f.correlation.merged_from == 2
-    assert result.merged_groups == 1 and result.cross_tool_merges == 1
+    assert f.correlation is not None
+    assert f.correlation.merged_from == 2
+    assert result.merged_groups == 1
+    assert result.cross_tool_merges == 1
     assert f.severity.normalized == "critical"  # strongest across the group
     assert {t for t, _ in f.severity.by_source} == {"osv-scanner", "grype"}
     assert len(f.sources) == 2
@@ -82,7 +84,8 @@ def test_iac_same_resource_same_message_merges() -> None:
     a = _nf("iac", "IAC-TF-001", file="main.tf", logical=loc, message="public bucket")
     b = _nf("iac", "IAC-TF-001", file="main.tf", logical=loc, message="public bucket")
     result = fc.correlate([a, b])
-    assert len(result.findings) == 1 and result.merged_groups == 1
+    assert len(result.findings) == 1
+    assert result.merged_groups == 1
 
 
 def test_iac_same_resource_different_message_does_not_merge() -> None:
@@ -91,7 +94,8 @@ def test_iac_same_resource_different_message_does_not_merge() -> None:
     a = _nf("iac", "IAC-TF-001", file="main.tf", logical=loc, message="public acl")
     b = _nf("iac", "IAC-TF-001", file="main.tf", logical=loc, message="versioning disabled")
     result = fc.correlate([a, b])
-    assert len(result.findings) == 2 and result.merged_groups == 0
+    assert len(result.findings) == 2
+    assert result.merged_groups == 0
 
 
 def test_code_null_line_is_a_distinct_sentinel() -> None:
@@ -153,8 +157,10 @@ def test_merge_takes_strongest_enrichment_and_unions_tags() -> None:
     b = _nf("grype", "CVE-M", vuln_ids=("CVE-M",), kev=True, epss=0.7, cvss=None, cwe=("CWE-89",))
     f = fc.correlate([a, b]).findings[0]
     assert f.kev is True  # OR across the group
-    assert f.epss == 0.7 and f.cvss == 5.0  # max present
-    assert f.cwe == ("CWE-79", "CWE-89") and f.owasp == ("A03",)  # union, sorted
+    assert f.epss == 0.7
+    assert f.cvss == 5.0
+    assert f.cwe == ("CWE-79", "CWE-89")
+    assert f.owasp == ("A03",)
 
 
 def test_kev_stays_none_when_no_source_reports_it() -> None:

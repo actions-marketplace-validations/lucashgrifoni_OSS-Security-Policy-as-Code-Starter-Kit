@@ -122,7 +122,8 @@ def test_end_to_end_pipeline_validates_and_ranks(tmp_path: Path) -> None:
     assert code["reachability"] is None
     # both sources recorded ok
     ok = {r["tool"]: r["status"] for r in report["sources_read"] if r["status"] == "ok"}
-    assert ok.get("semgrep") == "ok" and ok.get("osv-scanner") == "ok"
+    assert ok.get("semgrep") == "ok"
+    assert ok.get("osv-scanner") == "ok"
 
 
 def test_target_path_is_basename_by_default(tmp_path: Path) -> None:

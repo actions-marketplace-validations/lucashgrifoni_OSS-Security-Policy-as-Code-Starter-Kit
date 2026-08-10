@@ -227,10 +227,12 @@ def test_deeply_nested_report_is_rejected_not_crashed(tmp_path: Path) -> None:
     # The explicit budget, not an incidental RecursionError: the C JSON scanner raises
     # at ~3000 levels on Windows' 1 MB stack and parses the same document on Linux' 8 MB
     # one, so asserting only "nested too deeply" would pass here and protect nobody on CI.
-    assert "nested too deeply" in msg and "more than 200 levels" in msg, msg
+    assert "nested too deeply" in msg, msg
+    assert "more than 200 levels" in msg, msg
     # No directory separator can appear: the message is built from the basename only,
     # so this fails for any variant that resolves or echoes the path.
-    assert "/" not in msg and "\\" not in msg, msg
+    assert "/" not in msg, msg
+    assert "\\" not in msg, msg
 
 
 def test_nesting_budget_refuses_what_the_parser_would_accept(tmp_path: Path) -> None:
@@ -259,7 +261,8 @@ def test_bigint_report_is_rejected_without_cpython_advice(tmp_path: Path) -> Non
     # Same sentence `evaluate --scorecard-json` produces for the same input.
     assert "4300 digits" in msg
     assert "set_int_max_str_digits" not in msg, msg
-    assert "/" not in msg and "\\" not in msg, msg
+    assert "/" not in msg, msg
+    assert "\\" not in msg, msg
 
 
 @pytest.mark.parametrize("fmt", _FORMATS)

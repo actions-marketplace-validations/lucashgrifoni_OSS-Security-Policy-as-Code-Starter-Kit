@@ -68,16 +68,21 @@ def test_environment_approval_check_detects_approval() -> None:
 def test_service_connection_posture_skips_non_dict_endpoint() -> None:
     client = _Client([_Resp(200, {"value": [123, "nope"]})])
     conns, posture, _note, status = az._azure_service_connection_posture(client, "Proj")
-    assert conns == [] and posture["service_connection_restricted"] is False and status == 200
+    assert conns == []
+    assert posture["service_connection_restricted"] is False
+    assert status == 200
 
 
 def test_service_connection_posture_no_endpoints() -> None:
     client = _Client([_Resp(200, {"value": []})])
     conns, posture, _note, _status = az._azure_service_connection_posture(client, "Proj")
-    assert conns == [] and posture["service_connection_restricted"] is False
+    assert conns == []
+    assert posture["service_connection_restricted"] is False
 
 
 def test_service_connection_posture_non_200_status() -> None:
     client = _Client([_Resp(503)])
     conns, posture, note, status = az._azure_service_connection_posture(client, "Proj")
-    assert conns == [] and status == 503 and "503" in note
+    assert conns == []
+    assert status == 503
+    assert "503" in note

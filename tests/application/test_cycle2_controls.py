@@ -118,7 +118,8 @@ def test_extended_profiles_include_new_controls() -> None:
     root = bundled_kit_root()
     assert "LLM-AI-ACT-CYBER-006" in load_profile_by_id(root, "cra-eu-ai-act-art11-1").control_ids
     sca = load_profile_by_id(root, "appsec-sast-sca-1").control_ids
-    assert "SCA-KEV-001" in sca and "SCA-EPSS-001" in sca
+    assert "SCA-KEV-001" in sca
+    assert "SCA-EPSS-001" in sca
     assert "CONT-DISTROLESS-001" in load_profile_by_id(root, "container-baseline-1").control_ids
     publish = load_profile_by_id(root, "oss-publish-readiness-1").control_ids
     assert "SCANNER-INTEGRITY-001" in publish
@@ -192,7 +193,9 @@ def test_cra_support_period_pass_on_supported_versions(tmp_path: Path) -> None:
     assert out.status is ControlStatus.PASS
     # Honest wording: readiness signal, never a CRA conformity/certification claim.
     blob = f"{out.reason} {out.remediation}".lower()
-    assert "certified" not in blob and "conformity" not in blob and "compliant" not in blob
+    assert "certified" not in blob
+    assert "conformity" not in blob
+    assert "compliant" not in blob
 
 
 def test_cra_support_period_manual_when_absent(tmp_path: Path) -> None:

@@ -41,27 +41,33 @@ def test_is_placeholder_path() -> None:
 
 def test_redact_path() -> None:
     rel, redacted = ep._redact_path("src/app.py")
-    assert rel == "src/app.py" and redacted is False
+    assert rel == "src/app.py"
+    assert redacted is False
     assert ep._redact_path("")[1] is False
     win, w_red = ep._redact_path("C:\\Users\\me\\repo\\file.py")
-    assert w_red is True and "<redacted-absolute>" in win
+    assert w_red is True
+    assert "<redacted-absolute>" in win
     posix, p_red = ep._redact_path("/home/me/repo/file.py")
-    assert p_red is True and "<redacted-absolute>" in posix
+    assert p_red is True
+    assert "<redacted-absolute>" in posix
 
 
 def test_classify_reference() -> None:
     assert ep._classify_reference("https://osv.dev/x")["kind"] == "url"
     pathref = ep._classify_reference("src/app.py")
-    assert pathref["kind"] == "path" and pathref["redacted"] is False
+    assert pathref["kind"] == "path"
+    assert pathref["redacted"] is False
 
 
 def test_parse_collected_at() -> None:
     assert ep._parse_collected_at(None) is None
     assert ep._parse_collected_at("not-a-date") is None
     dt = ep._parse_collected_at("2026-05-01T00:00:00Z")
-    assert dt is not None and dt.tzinfo is not None
+    assert dt is not None
+    assert dt.tzinfo is not None
     naive = ep._parse_collected_at("2026-05-01T00:00:00")
-    assert naive is not None and naive.tzinfo is UTC
+    assert naive is not None
+    assert naive.tzinfo is UTC
 
 
 def test_freshness_status() -> None:

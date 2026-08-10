@@ -281,7 +281,8 @@ def test_pinning_to_the_current_date_is_not_reported_as_a_pinned_clock(monkeypat
     # The one case the note exists for: live on the pinned clock, dead on the real one.
     monkeypatch.setattr(vuln_waivers, "_real_today", lambda: date(2099, 6, 1))
     note = pinned_expiry_clock_note(date(2026, 12, 31), pinned_day)
-    assert note is not None and "SOURCE_DATE_EPOCH" in note
+    assert note is not None
+    assert "SOURCE_DATE_EPOCH" in note
 
 
 def test_pinned_note_reaches_the_helper_emit_vex_re_exports(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -111,7 +111,11 @@ def test_allowance_while_present_is_still_justified_and_still_narrow() -> None:
         pytest.skip("no allowance in place; the other test owns that direction")
 
     pinned = _pinned_mcp_version()
-    assert pinned is not None and pinned < _MCP_FIXED_IN, (
+    assert pinned is not None, (
+        "`allow-ghsas` is set, but semgrep's `mcp` pin could not be read at all, so nothing "
+        "justifies the allowance. See the other test in this module for what to remove."
+    )
+    assert pinned < _MCP_FIXED_IN, (
         "`allow-ghsas` is set, but semgrep's pin no longer justifies it. "
         "See the other test in this module for what to remove."
     )

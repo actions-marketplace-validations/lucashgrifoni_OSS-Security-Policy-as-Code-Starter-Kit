@@ -71,7 +71,8 @@ def test_recommend_profiles_wrapper(tmp_path: Path) -> None:
     out = ph.recommend_profiles(tmp_path)
     assert isinstance(out, list)
     if out:
-        assert isinstance(out[0], tuple) and len(out[0]) == 2
+        assert isinstance(out[0], tuple)
+        assert len(out[0]) == 2
 
 
 def test_based_on_helpers(tmp_path: Path) -> None:

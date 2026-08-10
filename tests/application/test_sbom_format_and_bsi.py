@@ -157,34 +157,40 @@ def _spdx_3_compliant() -> str:
 
 def test_detect_cyclonedx_16() -> None:
     fmt, ver = _detect_sbom_format_and_version(_cyclonedx_16_compliant())
-    assert fmt == "cyclonedx" and ver == "1.6"
+    assert fmt == "cyclonedx"
+    assert ver == "1.6"
 
 
 def test_detect_cyclonedx_15() -> None:
     fmt, ver = _detect_sbom_format_and_version(_cyclonedx_15_legacy())
-    assert fmt == "cyclonedx" and ver == "1.5"
+    assert fmt == "cyclonedx"
+    assert ver == "1.5"
 
 
 def test_detect_spdx_3_0_1() -> None:
     fmt, ver = _detect_sbom_format_and_version(_spdx_compliant := _spdx_3_compliant())
     assert fmt == "spdx"
-    assert ver is not None and ver.startswith("3.0")
+    assert ver is not None
+    assert ver.startswith("3.0")
 
 
 def test_detect_spdx_22_json() -> None:
     fmt, ver = _detect_sbom_format_and_version(_spdx_22_json())
-    assert fmt == "spdx" and ver == "2.2"
+    assert fmt == "spdx"
+    assert ver == "2.2"
 
 
 def test_detect_spdx_22_tag_value() -> None:
     blob = "SPDXVersion: SPDX-2.2\nDataLicense: CC0-1.0\nPackageName: foo\n"
     fmt, ver = _detect_sbom_format_and_version(blob)
-    assert fmt == "spdx" and ver == "2.2"
+    assert fmt == "spdx"
+    assert ver == "2.2"
 
 
 def test_detect_unknown_returns_none() -> None:
     fmt, ver = _detect_sbom_format_and_version('{"unrelated": true}')
-    assert fmt is None and ver is None
+    assert fmt is None
+    assert ver is None
 
 
 # ---- _validate_bsi_tr_03183_v2_1 ------------------------------------------

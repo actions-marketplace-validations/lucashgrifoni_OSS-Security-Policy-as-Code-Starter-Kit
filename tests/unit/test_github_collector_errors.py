@@ -28,7 +28,8 @@ def test_status_block_enabled() -> None:
 
 def test_github_collection_block() -> None:
     b = gc._github_collection_block("2026-05-01T00:00:00Z", "https://api.github.com/repos/o/r")
-    assert b["evidence_collection_method"] == "live" and b["mode"] == "api"
+    assert b["evidence_collection_method"] == "live"
+    assert b["mode"] == "api"
 
 
 # --------------------------------------------------------------------------- #

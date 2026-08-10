@@ -162,7 +162,8 @@ def test_summary_only_target_line_is_sanitized_by_default(tmp_path: Path) -> Non
     assert proc.returncode == 0, proc.stderr
     target = _target_line(proc.stdout)
     assert target == "repo", target
-    assert "/" not in target and "\\" not in target
+    assert "/" not in target
+    assert "\\" not in target
 
 
 def test_summary_only_include_absolute_path_opt_in_still_works(tmp_path: Path) -> None:

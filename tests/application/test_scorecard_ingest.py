@@ -54,13 +54,15 @@ def test_present_and_absent_checks(tmp_path: Path) -> None:
     assert {"Token-Permissions", "SAST", "Dangerous-Workflow"} <= present
     # Fuzzing is in the crosswalk but absent from the fixture -> present False, no score.
     fuzz = next(m for m in report.mapped if m.scorecard_check == "Fuzzing")
-    assert fuzz.present is False and fuzz.score is None
+    assert fuzz.present is False
+    assert fuzz.score is None
 
 
 def test_scores_recorded_verbatim(tmp_path: Path) -> None:
     report = ingest_scorecard(_write_fixture(tmp_path), now=_FRESH)
     sast = next(m for m in report.mapped if m.scorecard_check == "SAST")
-    assert sast.score == 6 and sast.control_id == "SEC-CODEQL-010"  # verbatim, mapped to CodeQL control
+    assert sast.score == 6
+    assert sast.control_id == "SEC-CODEQL-010"
     assert report.aggregate_score == 7.3
 
 

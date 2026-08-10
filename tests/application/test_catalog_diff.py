@@ -87,7 +87,8 @@ def test_profile_membership_delta(tmp_path: Path) -> None:
     assert diff.removed_profiles == ("p2",)
     assert [p.id for p in diff.changed_profiles] == ["p1"]
     p1 = diff.changed_profiles[0]
-    assert p1.added == ("C",) and p1.removed == ("B",)
+    assert p1.added == ("C",)
+    assert p1.removed == ("B",)
 
 
 def test_identical_snapshots_is_empty(tmp_path: Path) -> None:
@@ -105,7 +106,8 @@ def test_bare_catalog_yaml_skips_profiles(tmp_path: Path) -> None:
     standalone.write_text((old / "controls" / "catalog.yaml").read_text(encoding="utf-8"), encoding="utf-8")
     diff = diff_catalogs(load_snapshot(standalone, label="loose"), load_snapshot(new, label="new"))
     assert diff.profiles_compared is False
-    assert diff.added_profiles == () and diff.removed_profiles == ()
+    assert diff.added_profiles == ()
+    assert diff.removed_profiles == ()
     # Controls are still compared on a bare catalog.
     assert [r.id for r in diff.added_controls] == ["D"]
     assert "not compared" in render_human(diff)
@@ -117,7 +119,8 @@ def test_to_dict_is_json_serializable(tmp_path: Path) -> None:
     payload = json.loads(json.dumps(diff.to_dict()))
     assert payload["controls"]["added"] == [{"id": "D", "title": "Control D"}]
     assert payload["profiles"]["removed"] == ["p2"]
-    assert payload["from"] == "old" and payload["to"] == "new"
+    assert payload["from"] == "old"
+    assert payload["to"] == "new"
 
 
 def test_missing_path_raises_invalid_input(tmp_path: Path) -> None:

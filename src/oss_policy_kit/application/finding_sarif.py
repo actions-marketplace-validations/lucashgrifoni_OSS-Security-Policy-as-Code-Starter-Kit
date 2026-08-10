@@ -354,6 +354,25 @@ class _Projection(NamedTuple):
     foreign_driver: str | None
 
 
+def _normalize_results(
+    results: list[Any],
+    attributed_to: str,
+    rel: str,
+    rule_levels: dict[str, str],
+) -> list[NormalizedFinding]:
+    """Normalize one run's ``results`` array, dropping entries that are not findings.
+
+    A non-dict entry is skipped rather than raised on: a single malformed result in an
+    otherwise-readable drop should not cost the caller the whole file.
+    """
+
+    return [
+        _normalize_result(attributed_to, rel, result, rule_levels)
+        for result in results
+        if isinstance(result, dict) and not _is_non_finding(result)
+    ]
+
+
 def _project_runs(runs: list[Any], tool: str, rel: str) -> _Projection:
     """Project every run's results into findings.
 
@@ -378,19 +397,16 @@ def _project_runs(runs: list[Any], tool: str, rel: str) -> _Projection:
             tool_version = _driver_version(driver)
         if foreign_driver is None:
             foreign_driver = _foreign_driver(driver, tool)
-        # The shared helper walks tool.driver.rules unguarded; only hand it a run
-        # whose driver really is an object, so a malformed one degrades instead
-        # of raising through correlate-findings as an exit 3.
-        rule_levels = _sarif_rule_levels(run) if driver else {}
         results = run.get("results")
         if not isinstance(results, list):
             if "results" in run:
                 container_invalid = True
             continue
-        attributed_to = foreign_driver or tool
-        for result in results:
-            if isinstance(result, dict) and not _is_non_finding(result):
-                findings.append(_normalize_result(attributed_to, rel, result, rule_levels))
+        # The shared helper walks tool.driver.rules unguarded; only hand it a run
+        # whose driver really is an object, so a malformed one degrades instead
+        # of raising through correlate-findings as an exit 3.
+        rule_levels = _sarif_rule_levels(run) if driver else {}
+        findings.extend(_normalize_results(results, foreign_driver or tool, rel, rule_levels))
     return _Projection(findings, tool_version, container_invalid, foreign_driver)
 
 

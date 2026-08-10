@@ -26,18 +26,21 @@ def test_client_error_code() -> None:
 
 
 def test_map_client_error_permission() -> None:
+    error = _ClientError("AccessDeniedException")
     with pytest.raises(CollectionPermissionError):
-        ac._map_client_error(_ClientError("AccessDeniedException"), operation="BatchGetProjects")
+        ac._map_client_error(error, operation="BatchGetProjects")
 
 
 def test_map_client_error_rate_limit() -> None:
+    error_2 = _ClientError("ThrottlingException")
     with pytest.raises(RateLimitError):
-        ac._map_client_error(_ClientError("ThrottlingException"), operation="GetPipeline")
+        ac._map_client_error(error_2, operation="GetPipeline")
 
 
 def test_map_client_error_network() -> None:
+    error_3 = _ClientError("SomethingElse")
     with pytest.raises(CollectionNetworkError):
-        ac._map_client_error(_ClientError("SomethingElse"), operation="GetPipeline")
+        ac._map_client_error(error_3, operation="GetPipeline")
 
 
 def test_artifact_store_encryption_enabled() -> None:

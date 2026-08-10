@@ -49,12 +49,17 @@ def test_cli_profiles_command_exits_zero() -> None:
     assert "github-level-1" in out
     assert "github-release-hardening-1" in out
     assert "Bundled profiles" in out
-    assert "GitHub" in out and "baseline" in out and "level" in out
-    assert "maintainers" in out.lower() and "starting" in out.lower()
+    assert "GitHub" in out
+    assert "baseline" in out
+    assert "level" in out
+    assert "maintainers" in out.lower()
+    assert "starting" in out.lower()
     assert "baseline" in out.lower()
     assert "Maintainers adopting a" not in out
     assert "minimal, honest OSS security" not in out
-    assert "Starter" in out and "GitHub" in out and "clone-visible" in out.replace("\n", "")
+    assert "Starter" in out
+    assert "GitHub" in out
+    assert "clone-visible" in out.replace("\n", "")
     assert "repositories: governance files, safe workflow" not in out
     assert "Details" not in out
     # Note: "Track" is now legitimate vocabulary in profile titles
@@ -77,7 +82,8 @@ def test_cli_show_profiles_flag_exits_zero() -> None:
     assert "Title" in out
     assert "Platform" in out
     assert "Level" in out
-    assert "Recommended" in out and "gate" in out
+    assert "Recommended" in out
+    assert "gate" in out
     assert "Audience" in out
     assert "Description" in out
     # Normalize Rich table wrapping and box-drawing borders before substring checks:
@@ -87,12 +93,17 @@ def test_cli_show_profiles_flag_exits_zero() -> None:
     assert "GitHub maintainers starting" not in normalized_out
     # "Maintainers adopting ..." is the compact audience; it may wrap mid-word under
     # narrow layouts, so check distinctive prefix/words that survive column wrapping.
-    assert "Maintainer" in normalized_out and "adopting" in normalized_out
+    assert "Maintainer" in normalized_out
+    assert "adopting" in normalized_out
     assert "--fail-on fail" in normalized_out
-    assert "minimal" in out and "honest" in out and "OSS" in out and "security" in out
+    assert "minimal" in out
+    assert "honest" in out
+    assert "OSS" in out
+    assert "security" in out
     assert "baseline" in out.lower()
     assert "Starter GitHub baseline for clone-visible checks." not in normalized_out
-    assert "governance" in out and "workflow" in out
+    assert "governance" in out
+    assert "workflow" in out
     assert "Details" not in out
     # Note: "Track" is now legitimate vocabulary in profile titles
     # ("SLSA v1.1 Build Track Level 2", "EU CRA strict track" etc.)
@@ -339,7 +350,8 @@ def test_cli_collect_evidence_aws_dry_run_lists_three_files(tmp_path: Path, monk
     out = _result_stdout(result)
     # Strip whitespace/newlines so Rich-wrapped long Windows tmp paths do not break substring checks.
     flat = "".join(out.split())
-    assert "collect-evidence" in out and "dry-run" in out
+    assert "collect-evidence" in out
+    assert "dry-run" in out
     assert "platform:aws" in flat
     assert "aws-codebuild-project.json" in flat
     assert "aws-codepipeline.json" in flat
@@ -429,7 +441,8 @@ def test_cli_collect_evidence_dry_run_accepts_missing_target(tmp_path: Path) -> 
     )
     assert result.exit_code == 0, result.output
     out = _result_stdout(result)
-    assert "collect-evidence" in out and "dry-run" in out
+    assert "collect-evidence" in out
+    assert "dry-run" in out
     # The target reported in the preview must be the (non-existing) path the user passed.
     assert "exist" in out
 
@@ -523,7 +536,8 @@ def test_cli_profiles_recommended_gate_column_renders_without_polluting_json() -
     human = runner.invoke(app, ["profiles", "--format", "compact"])
     assert human.exit_code == 0, human.output
     human_out = _result_stdout(human)
-    assert "Recommended" in human_out and "gate" in human_out
+    assert "Recommended" in human_out
+    assert "gate" in human_out
     assert "--fail-on fail" in human_out
     assert "--fail-on none" in human_out
     # v10.0.0: no deprecated aliases remain, so no '(migrate)' legacy rows render.

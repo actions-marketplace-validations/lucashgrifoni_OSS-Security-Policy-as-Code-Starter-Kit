@@ -57,7 +57,8 @@ def test_build_document_includes_security_policy_when_present(tmp_path: Path) ->
     assert vr.get("accepts-vulnerability-reports") is True
     assert vr.get("email-contact") == "alice@example.com"
     sc = doc.get("security-contacts")
-    assert isinstance(sc, list) and any(c.get("value") == "alice@example.com" for c in sc)
+    assert isinstance(sc, list)
+    assert any(c.get("value") == "alice@example.com" for c in sc)
 
 
 def test_build_document_omits_security_section_when_no_security_md(tmp_path: Path) -> None:
