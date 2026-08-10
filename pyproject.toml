@@ -161,11 +161,18 @@ branch = true
 [tool.coverage.report]
 show_missing = true
 skip_covered = false
-# Conservative floor: measured ~92% across the full suite (unit + property). The floor
-# sits a few points below that to absorb Hypothesis-seed variance and Windows/Linux
-# branch differences (CI measures on Linux). Raise as coverage grows; never lower it to
-# accommodate a regression.
-fail_under = 88
+# Floor, not a target. Measured 94.55% locally and 94.23% in CI on the same tree, so the
+# Windows/Linux difference the old comment budgeted for is ~0.01 points, not "a few"; the
+# remaining headroom is for Hypothesis-seed variance in the property suite.
+#
+# Deliberately below 100 and staying there. Chasing the last points in this codebase does
+# not buy tests, it buys the opposite: two audited cases (the release-hardening fallbacks
+# in profile_hints, the emptied PROFILE_DIRECTORY_ALIASES) were unreachable by
+# construction, and the four tests that "covered" one of them asserted
+# `isinstance(result, list)` on a state the caller cannot produce -- executing the line
+# while checking nothing. They were deleted along with the code. Raise this as real
+# coverage grows; never lower it to accommodate a regression.
+fail_under = 93
 exclude_lines = [
   "pragma: no cover",
   "if TYPE_CHECKING:",
