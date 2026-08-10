@@ -14,10 +14,10 @@ on:
       - ".github/workflows/deploy-github-pages.yml"
   workflow_dispatch:
 
+# Only `deploy` needs `pages: write` and `id-token: write`. Granting them here would
+# hand them to `build` as well, which only reads the checkout and uploads an artifact.
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
@@ -39,6 +39,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
 
       - name: Setup Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
@@ -53,6 +55,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     timeout-minutes: 15
+
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
 
     environment:
       name: github-pages

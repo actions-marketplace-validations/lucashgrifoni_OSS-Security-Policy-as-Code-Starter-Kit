@@ -55,13 +55,20 @@ jobs:
 
       - name: Check out the source tag
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
 
       - name: Derive image tags
         id: tags
+        # `inputs.tag_suffix` reaches the shell through the environment, never through
+        # template expansion into the script body: an expanded value is parsed by bash,
+        # an environment variable is not.
+        env:
+          TAG_SUFFIX: ${{ inputs.tag_suffix }}
         run: |
           set -euo pipefail
           REF="${GITHUB_REF#refs/tags/}"
-          SUFFIX="${{ inputs.tag_suffix }}"
+          SUFFIX="$TAG_SUFFIX"
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             VERSION="${REF#v}"
             if [[ -n "$SUFFIX" ]]; then VERSION="$VERSION-$SUFFIX"; fi

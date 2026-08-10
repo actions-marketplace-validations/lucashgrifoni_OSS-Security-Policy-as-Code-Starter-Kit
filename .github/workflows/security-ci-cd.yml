@@ -171,7 +171,11 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Install Snyk CLI
-        run: npm install -g snyk
+        # Pinned: this job holds SNYK_TOKEN, so a floating `latest` would let any
+        # future npm publish run with that secret in the environment. Nothing
+        # watches this pin automatically -- Dependabot does not read
+        # `npm install -g` lines.
+        run: npm install -g snyk@1.1306.3
 
       - name: Authenticate Snyk
         env:
@@ -277,7 +281,11 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Install Snyk CLI
-        run: npm install -g snyk
+        # Pinned: this job holds SNYK_TOKEN, so a floating `latest` would let any
+        # future npm publish run with that secret in the environment. Nothing
+        # watches this pin automatically -- Dependabot does not read
+        # `npm install -g` lines.
+        run: npm install -g snyk@1.1306.3
 
       - name: Authenticate Snyk
         env:
@@ -690,3 +698,90 @@ jobs:
         run: |
           python -m pip install --require-hashes -r .github/requirements/bandit.txt
           python -m bandit -q -r src/oss_policy_kit -ll -ii
+
+  findings-correlation:
+    name: Findings Correlation (dogfooding)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            pypi.org:443
+            files.pythonhosted.org:443
+
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install the kit from source
+        # From source, not from PyPI: this job has to exercise the commit under
+        # test, not the last release.
+        run: python -m pip install -e .
+
+      - name: Produce zizmor SARIF into the evidence directory
+        # `correlate-findings` reads external SARIF from
+        # .oss-policy-kit/evidence/sast/<tool>.sarif.json. Until this job existed,
+        # nothing in CI wrote there, so the command ran on kit-internal evidence
+        # only and the external half of its pipeline was never exercised.
+        # --no-online-audits keeps the run inside the egress allowlist.
+        run: |
+          python -m pip install --require-hashes -r .github/requirements/zizmor.txt
+          mkdir -p .oss-policy-kit/evidence/sast
+          zizmor --format sarif --no-online-audits .github/workflows/ \
+            > .oss-policy-kit/evidence/sast/zizmor.sarif.json
+
+      - name: Produce the kit's own scanner evidence
+        # The five internal sources. Each writes .oss-policy-kit/evidence/*.json
+        # and exits 0 even with nothing to report, which is what a repo with no
+        # IaC looks like.
+        run: |
+          python -m oss_policy_kit scan-iac --target . || true
+          python -m oss_policy_kit scan-k8s --target . || true
+          python -m oss_policy_kit scan-cfn --target . || true
+          python -m oss_policy_kit scan-pulumi --target . || true
+          python -m oss_policy_kit scan-bicep --target . || true
+
+      - name: Correlate findings
+        # Not a gate. --fail-on-severity is deliberately unset: this job exists to
+        # prove the command runs end-to-end on real evidence and to publish the
+        # artifact, not to block a merge on a scanner's opinion of a workflow file.
+        # Turning it into a gate is a separate decision with its own threshold.
+        run: |
+          python -m oss_policy_kit correlate-findings \
+            --target . \
+            --output .oss-policy-kit/findings.json \
+            --format human
+
+      - name: Show which sources were actually read
+        # The honest part: a source that is `missing` must be visible, otherwise
+        # this job looks like coverage it does not have.
+        run: |
+          python - <<'EOF'
+          import json
+          d = json.load(open(".oss-policy-kit/findings.json", encoding="utf-8"))
+          print(f"findings: {d['findings_total']}  by severity: {d['findings_by_severity']}")
+          for s in d["sources_read"]:
+              print(f"  {s['status']:14} {s['kind']:14} {s['tool']}")
+          EOF
+
+      - name: Upload the findings artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v6.0.0
+        if: always()
+        with:
+          name: findings-correlation
+          path: |
+            .oss-policy-kit/findings.json
+            .oss-policy-kit/evidence/sast/zizmor.sarif.json
+          retention-days: 14

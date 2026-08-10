@@ -73,6 +73,13 @@ jobs:
         with:
           client-id: ${{ secrets.RELEASE_PLEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_PLEASE_APP_PRIVATE_KEY }}
+          # Without these the minted token inherits every permission the App
+          # installation holds. release-please needs exactly three: it writes the
+          # release commit and tag (contents), opens and updates the release PR
+          # (pull-requests), and labels it (issues).
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
 
       - name: Run release-please
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
