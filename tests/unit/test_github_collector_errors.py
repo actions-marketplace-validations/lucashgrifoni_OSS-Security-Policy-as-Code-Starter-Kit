@@ -72,8 +72,9 @@ def test_collect_graceful_on_404_and_422(monkeypatch: pytest.MonkeyPatch) -> Non
 
 def test_collect_invalid_slug(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_client(monkeypatch, lambda r: httpx.Response(200, json={}))
+    collector = GitHubEvidenceCollector("tok")
     with pytest.raises(ValueError, match="Invalid GitHub repo slug"):
-        GitHubEvidenceCollector("tok").collect("bogus-no-slash")
+        collector.collect("bogus-no-slash")
 
 
 def test_collect_repo_metadata_422_returns_empty(monkeypatch: pytest.MonkeyPatch) -> None:

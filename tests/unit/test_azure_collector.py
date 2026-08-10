@@ -115,8 +115,9 @@ def test_permission_error_on_403(monkeypatch: pytest.MonkeyPatch) -> None:
         )
 
     monkeypatch.setattr(httpx, "Client", _client)
+    collector = AzureDevOpsEvidenceCollector(organization="o", personal_access_token="x")
     with pytest.raises(CollectionPermissionError):
-        AzureDevOpsEvidenceCollector(organization="o", personal_access_token="x").collect("P/r")
+        collector.collect("P/r")
 
 
 def test_rate_limit_on_429(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -132,8 +133,9 @@ def test_rate_limit_on_429(monkeypatch: pytest.MonkeyPatch) -> None:
         )
 
     monkeypatch.setattr(httpx, "Client", _client)
+    collector_2 = AzureDevOpsEvidenceCollector(organization="o", personal_access_token="x")
     with pytest.raises(RateLimitError):
-        AzureDevOpsEvidenceCollector(organization="o", personal_access_token="x").collect("P/r")
+        collector_2.collect("P/r")
 
 
 def test_collect_wraps_network_errors(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -141,8 +143,9 @@ def test_collect_wraps_network_errors(monkeypatch: pytest.MonkeyPatch) -> None:
         raise httpx.ConnectError("boom", request=httpx.Request("GET", "https://dev.azure.com/o/p/_apis"))
 
     monkeypatch.setattr(httpx, "Client", boom)
+    collector_3 = AzureDevOpsEvidenceCollector(organization="o", personal_access_token="x")
     with pytest.raises(CollectionNetworkError):
-        AzureDevOpsEvidenceCollector(organization="o", personal_access_token="x").collect("P/r")
+        collector_3.collect("P/r")
 
 
 def _azure_pat_only_handler(request: httpx.Request) -> httpx.Response:
@@ -221,5 +224,6 @@ def test_404_on_repositories_raises_permission_error(monkeypatch: pytest.MonkeyP
         )
 
     monkeypatch.setattr(httpx, "Client", _client)
+    collector_4 = AzureDevOpsEvidenceCollector(organization="o", personal_access_token="x")
     with pytest.raises(CollectionPermissionError):
-        AzureDevOpsEvidenceCollector(organization="o", personal_access_token="x").collect("P/r")
+        collector_4.collect("P/r")

@@ -164,8 +164,9 @@ def test_collect_raises_value_error_when_no_env(monkeypatch: pytest.MonkeyPatch)
 
     monkeypatch.delenv(_ENV_CODEBUILD, raising=False)
     monkeypatch.delenv(_ENV_CODEPIPELINE, raising=False)
+    collector = AWSEvidenceCollector(region_name="us-east-1")
     with pytest.raises(ValueError) as excinfo:
-        AWSEvidenceCollector(region_name="us-east-1").collect("")
+        collector.collect("")
     msg = str(excinfo.value)
     assert _ENV_CODEBUILD in msg
     assert _ENV_CODEPIPELINE in msg
@@ -194,8 +195,9 @@ def test_access_denied_on_codebuild_is_permission_error(monkeypatch: pytest.Monk
     monkeypatch.setenv(_ENV_CODEBUILD, "restricted-build")
     monkeypatch.delenv(_ENV_CODEPIPELINE, raising=False)
 
+    collector_2 = AWSEvidenceCollector(region_name="us-east-1")
     with pytest.raises(CollectionPermissionError) as excinfo:
-        AWSEvidenceCollector(region_name="us-east-1").collect("")
+        collector_2.collect("")
     # Error text must mention the operation name (actionable for IAM policy widening).
     assert "BatchGetProjects" in str(excinfo.value)
 
@@ -222,8 +224,9 @@ def test_throttling_on_codepipeline_is_rate_limit_error(monkeypatch: pytest.Monk
     monkeypatch.delenv(_ENV_CODEBUILD, raising=False)
     monkeypatch.setenv(_ENV_CODEPIPELINE, "busy-pipe")
 
+    collector_3 = AWSEvidenceCollector(region_name="us-east-1")
     with pytest.raises(RateLimitError):
-        AWSEvidenceCollector(region_name="us-east-1").collect("")
+        collector_3.collect("")
 
 
 def test_unmapped_codebuild_client_error_wrapped_as_network(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -248,5 +251,6 @@ def test_unmapped_codebuild_client_error_wrapped_as_network(monkeypatch: pytest.
     monkeypatch.setenv(_ENV_CODEBUILD, "some-build")
     monkeypatch.delenv(_ENV_CODEPIPELINE, raising=False)
 
+    collector_4 = AWSEvidenceCollector(region_name="us-east-1")
     with pytest.raises(CollectionNetworkError):
-        AWSEvidenceCollector(region_name="us-east-1").collect("")
+        collector_4.collect("")

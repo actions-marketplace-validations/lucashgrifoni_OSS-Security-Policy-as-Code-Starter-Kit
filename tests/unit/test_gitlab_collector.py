@@ -120,8 +120,9 @@ def test_collect_user_namespace_skips_org_mfa(monkeypatch: pytest.MonkeyPatch) -
 
 def test_collect_permission_error_on_project_403(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_client(monkeypatch, lambda r: httpx.Response(403, json={"message": "denied"}))
+    collector = GitLabEvidenceCollector("tok")
     with pytest.raises(CollectionPermissionError):
-        GitLabEvidenceCollector("tok").collect("group/project")
+        collector.collect("group/project")
 
 
 def test_collect_project_404_aborts(monkeypatch: pytest.MonkeyPatch) -> None:
