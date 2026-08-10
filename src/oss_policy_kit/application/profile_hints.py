@@ -665,10 +665,6 @@ def _append_gh_release_hardening(
     """Append the GitHub release-hardening-2/-1 suggestion when its signals are present."""
 
     if can_rh2:
-        gh_keys = ("github_actions_workflows", "github_evidence_json_files")
-        bo = [x for x in gh_keys if _bo_hit(x, wf_paths, github_ev)]
-        if not bo:
-            bo = ["github_actions_workflows"] if wf_paths else ["github_evidence_json_files"]
         out.append(
             (
                 300,
@@ -678,7 +674,7 @@ def _append_gh_release_hardening(
                     "present; evaluate declared release posture with github-release-hardening-2 "
                     "(verify evidence JSONs are filled, not templates)."
                 ),
-                _normalize_based_on(bo, wf_paths, github_ev),
+                list(("github_actions_workflows", "github_evidence_json_files")),
             )
         )
     elif can_rh1:
@@ -782,10 +778,6 @@ def _suggestions_gitlab(
     can_rh2 = bool(gl_paths) and bool(gitlab_ev)
     can_rh1 = empty_evidence_dir and bool(gl_paths) and not gitlab_ev
     if can_rh2:
-        gl_keys = ("gitlab_ci_yaml", "gitlab_evidence_json_files")
-        bo = [x for x in gl_keys if _bo_hit_gl(x, gl_paths, gitlab_ev)]
-        if not bo:
-            bo = ["gitlab_ci_yaml"] if gl_paths else ["gitlab_evidence_json_files"]
         out.append(
             (
                 300,
@@ -795,7 +787,7 @@ def _suggestions_gitlab(
                     "evaluate declared release posture with gitlab-release-hardening-2 "
                     "(verify evidence JSONs are filled, not templates)."
                 ),
-                _normalize_based_on_gl(bo, gl_paths, gitlab_ev),
+                list(("gitlab_ci_yaml", "gitlab_evidence_json_files")),
             )
         )
     elif can_rh1:
@@ -854,10 +846,6 @@ def _suggestions_azure(
     can_rh2 = bool(az_paths) and bool(azure_ev)
     can_rh1 = empty_evidence_dir and bool(az_paths) and not azure_ev
     if can_rh2:
-        az_keys = ("azure_pipelines_yaml", "azure_evidence_json_files")
-        bo = [x for x in az_keys if _bo_hit_az(x, az_paths, azure_ev)]
-        if not bo:
-            bo = ["azure_pipelines_yaml"] if az_paths else ["azure_evidence_json_files"]
         out.append(
             (
                 300,
@@ -867,7 +855,7 @@ def _suggestions_azure(
                     "present; evaluate declared release posture with azure-release-hardening-2 "
                     "(verify evidence JSONs are filled, not templates)."
                 ),
-                _normalize_based_on_az(bo, az_paths, azure_ev),
+                list(("azure_pipelines_yaml", "azure_evidence_json_files")),
             )
         )
     elif can_rh1:
@@ -927,10 +915,6 @@ def _suggestions_aws(
     can_rh2 = bool(buildspec) and bool(aws_ev)
     can_rh1 = empty_evidence_dir and bool(buildspec) and not aws_ev
     if can_rh2:
-        aws_keys = ("aws_codebuild_buildspec", "aws_evidence_json_files")
-        bo = [x for x in aws_keys if _bo_hit_aws(x, buildspec, aws_ev)]
-        if not bo:
-            bo = ["aws_codebuild_buildspec"] if buildspec else ["aws_evidence_json_files"]
         out.append(
             (
                 300,
@@ -940,7 +924,7 @@ def _suggestions_aws(
                     "evaluate declared release posture with aws-release-hardening-2 "
                     "(verify evidence JSONs are filled, not templates)."
                 ),
-                _normalize_based_on_aws(bo, buildspec, aws_ev),
+                list(("aws_codebuild_buildspec", "aws_evidence_json_files")),
             )
         )
     elif can_rh1:
@@ -1034,74 +1018,6 @@ def _suggestions_for_platform(
         az_paths=az_paths,
         empty_evidence_dir=empty_evidence_dir,
     )
-
-
-def _bo_hit(name: str, wf_paths: list[Path], github_ev: list[Path]) -> bool:
-    if name == "github_actions_workflows":
-        return bool(wf_paths)
-    if name == "github_evidence_json_files":
-        return bool(github_ev)
-    return False
-
-
-def _normalize_based_on(bo: list[str], wf_paths: list[Path], github_ev: list[Path]) -> list[str]:
-    out = list(bo)
-    if "github_actions_workflows" not in out and wf_paths:
-        out.insert(0, "github_actions_workflows")
-    if "github_evidence_json_files" not in out and github_ev:
-        out.append("github_evidence_json_files")
-    return out
-
-
-def _bo_hit_gl(name: str, gl_paths: list[Path], gitlab_ev: list[Path]) -> bool:
-    if name == "gitlab_ci_yaml":
-        return bool(gl_paths)
-    if name == "gitlab_evidence_json_files":
-        return bool(gitlab_ev)
-    return False
-
-
-def _normalize_based_on_gl(bo: list[str], gl_paths: list[Path], gitlab_ev: list[Path]) -> list[str]:
-    out = list(bo)
-    if "gitlab_ci_yaml" not in out and gl_paths:
-        out.insert(0, "gitlab_ci_yaml")
-    if "gitlab_evidence_json_files" not in out and gitlab_ev:
-        out.append("gitlab_evidence_json_files")
-    return out
-
-
-def _bo_hit_az(name: str, az_paths: list[Path], azure_ev: list[Path]) -> bool:
-    if name == "azure_pipelines_yaml":
-        return bool(az_paths)
-    if name == "azure_evidence_json_files":
-        return bool(azure_ev)
-    return False
-
-
-def _normalize_based_on_az(bo: list[str], az_paths: list[Path], azure_ev: list[Path]) -> list[str]:
-    out = list(bo)
-    if "azure_pipelines_yaml" not in out and az_paths:
-        out.insert(0, "azure_pipelines_yaml")
-    if "azure_evidence_json_files" not in out and azure_ev:
-        out.append("azure_evidence_json_files")
-    return out
-
-
-def _bo_hit_aws(name: str, buildspec: bool, aws_ev: list[Path]) -> bool:
-    if name == "aws_codebuild_buildspec":
-        return buildspec
-    if name == "aws_evidence_json_files":
-        return bool(aws_ev)
-    return False
-
-
-def _normalize_based_on_aws(bo: list[str], buildspec: bool, aws_ev: list[Path]) -> list[str]:
-    out = list(bo)
-    if "aws_codebuild_buildspec" not in out and buildspec:
-        out.insert(0, "aws_codebuild_buildspec")
-    if "aws_evidence_json_files" not in out and aws_ev:
-        out.append("aws_evidence_json_files")
-    return out
 
 
 def _merge_platform_suggestions(
