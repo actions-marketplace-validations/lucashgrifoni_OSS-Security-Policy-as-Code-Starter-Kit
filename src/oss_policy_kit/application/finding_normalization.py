@@ -50,7 +50,7 @@ _IAC_SEVERITY_PAIRS: tuple[tuple[str, str], ...] = (
     ("MEDIUM", "medium"),
     ("LOW", "low"),
 )
-_IAC_SEVERITY: dict[str, str] = {k: v for k, v in _IAC_SEVERITY_PAIRS}
+_IAC_SEVERITY: dict[str, str] = dict(_IAC_SEVERITY_PAIRS)
 
 # Semgrep passes through its own INFO/WARNING/ERROR vocabulary.
 _SEMGREP_SEVERITY_PAIRS: tuple[tuple[str, str], ...] = (
@@ -58,7 +58,7 @@ _SEMGREP_SEVERITY_PAIRS: tuple[tuple[str, str], ...] = (
     ("WARNING", "medium"),
     ("INFO", "info"),
 )
-_SEMGREP_SEVERITY: dict[str, str] = {k: v for k, v in _SEMGREP_SEVERITY_PAIRS}
+_SEMGREP_SEVERITY: dict[str, str] = dict(_SEMGREP_SEVERITY_PAIRS)
 
 
 def normalize_iac_severity(value: str) -> str:

@@ -13,7 +13,16 @@ _WORKFLOW_PATH = Path(__file__).parents[2] / ".github" / "workflows" / "publish-
 _CONTAINER_WORKFLOW_PATH = Path(__file__).parents[2] / ".github" / "workflows" / "publish-container.yml"
 _DOCKERFILE_PATH = Path(__file__).parents[2] / "Dockerfile"
 _DOCKERIGNORE_PATH = Path(__file__).parents[2] / ".dockerignore"
-_HARDEN_RUNNER_ACTION = "step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920"
+#: Matched on identity, deliberately not on the pinned SHA. This test owns "every publish
+#: job audits egress before it touches anything"; it does not own "the action is pinned".
+#: Pinning is enforced by the kit's own ``CI-PIN-008`` control, which the Quality job runs
+#: against this repository on every push -- a stronger check than a string here, because it
+#: covers every action rather than this one.
+#:
+#: The SHA used to be baked in, which made every legitimate harden-runner bump fail this
+#: assertion: Dependabot #162 (2.20.0 -> 2.20.1) is what surfaced it. A test that blocks the
+#: upgrade it is supposed to protect is worse than no test.
+_HARDEN_RUNNER_ACTION = "step-security/harden-runner@"
 
 
 def _load_workflow() -> dict:

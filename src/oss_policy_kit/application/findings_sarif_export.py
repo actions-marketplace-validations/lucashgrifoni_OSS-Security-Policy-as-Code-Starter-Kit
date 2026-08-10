@@ -25,7 +25,7 @@ _LEVEL_PAIRS: tuple[tuple[str, str], ...] = (
     ("info", "note"),
     ("unknown", "none"),
 )
-_LEVEL: dict[str, str] = {k: v for k, v in _LEVEL_PAIRS}
+_LEVEL: dict[str, str] = dict(_LEVEL_PAIRS)
 
 _DOUBLE_REPORTING_NOTE = (
     "This run aggregates findings already produced by the source tools named in each "

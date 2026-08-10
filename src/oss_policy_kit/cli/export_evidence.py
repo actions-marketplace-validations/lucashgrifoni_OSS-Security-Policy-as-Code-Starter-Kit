@@ -49,6 +49,8 @@ from oss_policy_kit.cli.help_text import CMD_PANEL_EXPORT
 from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
 from oss_policy_kit.domain.models import utc_now
 
+_GEMARA_NEEDS_REVIEW = "Needs Review"
+
 _DEFAULT_OUTPUT = Path("evidence-export.json")
 _DEFAULT_REPORT = Path("out/evaluation-report.json")
 
@@ -725,7 +727,7 @@ _GEMARA_MODEL_VERSION = "v0.17.0-dev"
 
 # The six Gemara `#Result` enum values (layer5/metadata schema).
 _GEMARA_RESULTS: frozenset[str] = frozenset(
-    {"Not Run", "Passed", "Failed", "Needs Review", "Not Applicable", "Unknown"}
+    {"Not Run", "Passed", "Failed", _GEMARA_NEEDS_REVIEW, "Not Applicable", "Unknown"}
 )
 
 # (reports/2.0 state, Gemara Result) pairs. ATTESTED is a (verified) pass.
@@ -736,12 +738,12 @@ _GEMARA_RESULTS: frozenset[str] = frozenset(
 _GEMARA_PAIRS: tuple[tuple[str, str], ...] = (
     ("PASS", "Passed"),
     ("FAIL", "Failed"),
-    ("UNKNOWN", "Needs Review"),
-    ("MANUAL_REVIEW_REQUIRED", "Needs Review"),
+    ("UNKNOWN", _GEMARA_NEEDS_REVIEW),
+    ("MANUAL_REVIEW_REQUIRED", _GEMARA_NEEDS_REVIEW),
     ("NOT_APPLICABLE", "Not Applicable"),
     ("ATTESTED", "Passed"),
 )
-_GEMARA_STATE_MAP: dict[str, str] = {state: result for state, result in _GEMARA_PAIRS}
+_GEMARA_STATE_MAP: dict[str, str] = dict(_GEMARA_PAIRS)
 
 # kit assurance grade -> Gemara ConfidenceLevel ("Undetermined"|"Low"|"Medium"|"High").
 _GEMARA_CONFIDENCE: dict[str, str] = {
@@ -764,8 +766,8 @@ def _gemara_aggregate(results: list[str]) -> str:
         return "Unknown"
     if "Failed" in results:
         return "Failed"
-    if "Needs Review" in results or "Unknown" in results:
-        return "Needs Review"
+    if _GEMARA_NEEDS_REVIEW in results or "Unknown" in results:
+        return _GEMARA_NEEDS_REVIEW
     return "Passed"  # all Passed / Not Applicable
 
 
@@ -1005,7 +1007,8 @@ def export_evidence_cmd(
         raise typer.Exit(code=2) from exc
     except typer.Exit:
         raise
-    except Exception as exc:  # noqa: BLE001 - last-resort user message, no traceback leak
+    # Last-resort user message, no traceback leak.
+    except Exception as exc:  # noqa: BLE001
         exit_for_unexpected(exc)
 
 

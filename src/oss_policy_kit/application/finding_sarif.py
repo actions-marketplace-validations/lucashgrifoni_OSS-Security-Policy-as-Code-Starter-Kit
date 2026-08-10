@@ -73,7 +73,7 @@ _SARIF_LEVEL_PAIRS: tuple[tuple[str, str], ...] = (
     ("note", "info"),
     ("none", "unknown"),
 )
-_SARIF_LEVEL: dict[str, str] = {k: v for k, v in _SARIF_LEVEL_PAIRS}
+_SARIF_LEVEL: dict[str, str] = dict(_SARIF_LEVEL_PAIRS)
 
 # zizmor's own vocabulary via result.properties.security_severity_level.
 _ZIZMOR_SEVERITY_PAIRS: tuple[tuple[str, str], ...] = (
@@ -84,7 +84,7 @@ _ZIZMOR_SEVERITY_PAIRS: tuple[tuple[str, str], ...] = (
     ("INFORMATIONAL", "info"),
     ("UNKNOWN", "unknown"),
 )
-_ZIZMOR_SEVERITY: dict[str, str] = {k: v for k, v in _ZIZMOR_SEVERITY_PAIRS}
+_ZIZMOR_SEVERITY: dict[str, str] = dict(_ZIZMOR_SEVERITY_PAIRS)
 
 #: Documented per-tool override slot — EMPTY by design in x-severity-map/v1.
 #: The kit never rewrites a source tool's severity to match its own gate
@@ -122,7 +122,7 @@ _DRIVER_IDENTITY_PAIRS: tuple[tuple[str, str], ...] = (
     ("trufflehog", "trufflehog"),
     ("checkmarx", "checkmarx"),
 )
-_DRIVER_IDENTITY: dict[str, str] = {k: v for k, v in _DRIVER_IDENTITY_PAIRS}
+_DRIVER_IDENTITY: dict[str, str] = dict(_DRIVER_IDENTITY_PAIRS)
 
 #: A driver name is echoed into every finding of the drop; cap it so a hostile
 #: or corrupt document cannot bloat the artifact through that field.

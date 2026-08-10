@@ -295,7 +295,6 @@ def redact_home(text: str) -> str:
             out.append("~")
             i = j + len(needle)
         text = "".join(out)
-        lowered = text.lower()
     return text
 
 

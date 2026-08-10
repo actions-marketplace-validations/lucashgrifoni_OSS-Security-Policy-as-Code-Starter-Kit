@@ -98,7 +98,8 @@ def _is_broken_pipe(exc: OSError) -> bool:
     return exc.errno in _BROKEN_PIPE_ERRNOS
 
 
-class _BrokenPipeExit(BaseException):  # noqa: N818 - control-flow signal, not a user-facing error
+# Control-flow signal, not a user-facing error.
+class _BrokenPipeExit(BaseException):  # noqa: N818
     """Raised the first time a stdout write hits a broken pipe, to unwind to ``main()``.
 
     A plain ``BrokenPipeError``/``OSError`` would be swallowed by the per-command

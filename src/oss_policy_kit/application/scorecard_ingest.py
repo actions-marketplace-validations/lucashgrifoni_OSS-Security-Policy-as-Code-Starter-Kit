@@ -143,16 +143,21 @@ def build_report(
     """Map a loaded Scorecard *bundle* onto the kit control crosswalk."""
 
     checks = checks_as_map(bundle)
+    # `check` is bound by a one-element `for` rather than by a walrus inside the argument
+    # list. In the walrus form the three arguments that read `check` depended on an
+    # assignment made in a sibling argument, so the code only worked because of argument
+    # evaluation order -- correct, but it reads like a bug.
     mapped = tuple(
         MappedCheck(
             scorecard_check=name,
             control_id=control_id,
             note=note,
-            present=(check := checks.get(name.lower())) is not None,
+            present=check is not None,
             score=check.score if check is not None else None,
             reason=check.reason if check is not None else None,
         )
         for name, control_id, note in SCORECARD_CONTROL_MAP
+        for check in (checks.get(name.lower()),)
     )
     return ScorecardIngestReport(
         found=True,

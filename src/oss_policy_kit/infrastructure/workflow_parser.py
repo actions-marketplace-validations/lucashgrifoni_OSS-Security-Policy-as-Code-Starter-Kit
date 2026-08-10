@@ -87,7 +87,7 @@ def _scan_reusable_workflow_pins(
 
 def _is_immutable_action_ref(ref: str) -> bool:
     r = ref.strip().strip("'\"")
-    if r.startswith("${{") or r.startswith("./") or r.startswith("docker://"):
+    if r.startswith(("${{", "./", "docker://")):
         return True
     if "@" not in r:
         return True

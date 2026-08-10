@@ -291,15 +291,25 @@ def _detect_container_stack(repo_root: Path, found: list[dict[str, str]]) -> boo
 _STACK_WEIGHT_DECLARES_PROJECT = 3
 _STACK_WEIGHT_MAY_BE_SIDECAR = 2
 
+#: Stack display labels, named once. Repeating them meant a typo in any single copy
+#: would split one stack into two the ranking treats as unrelated, with nothing failing.
+_LABEL_PYTHON = "Python"
+_LABEL_NODE = "Node.js"
+_LABEL_GO = "Go"
+_LABEL_JAVA_MAVEN = "Java/Maven"
+_LABEL_JAVA_GRADLE = "Java/Kotlin (Gradle)"
+_LABEL_RUST = "Rust"
+_LABEL_DOTNET = "C#/.NET"
+
 # Stable display order for stacks tied on weight, so the rationale is deterministic.
 _STACK_LABEL_ORDER: tuple[str, ...] = (
-    "Python",
-    "Node.js",
-    "Go",
-    "Java/Maven",
-    "Java/Kotlin (Gradle)",
-    "Rust",
-    "C#/.NET",
+    _LABEL_PYTHON,
+    _LABEL_NODE,
+    _LABEL_GO,
+    _LABEL_JAVA_MAVEN,
+    _LABEL_JAVA_GRADLE,
+    _LABEL_RUST,
+    _LABEL_DOTNET,
 )
 
 _NODE_LOCKFILE_NOTE = "Add package-lock.json or yarn.lock to enable reproducible builds."
@@ -309,19 +319,19 @@ _NODE_LOCKFILE_NOTE = "Add package-lock.json or yarn.lock to enable reproducible
 #: ``signals_detected``, so this mapping plus :func:`_stack_evidence_order` is what
 #: makes "first" and "strongest" the same thing.
 _STACK_SIGNAL_LABELS: dict[str, str] = {
-    "node_js": "Node.js",
-    "python_pyproject": "Python",
-    "python_requirements": "Python",
-    "python_setup": "Python",
-    "go_module": "Go",
-    "java_maven": "Java/Maven",
-    "java_gradle": "Java/Kotlin (Gradle)",
-    "rust_cargo": "Rust",
-    "dotnet_csproj": "C#/.NET",
+    "node_js": _LABEL_NODE,
+    "python_pyproject": _LABEL_PYTHON,
+    "python_requirements": _LABEL_PYTHON,
+    "python_setup": _LABEL_PYTHON,
+    "go_module": _LABEL_GO,
+    "java_maven": _LABEL_JAVA_MAVEN,
+    "java_gradle": _LABEL_JAVA_GRADLE,
+    "rust_cargo": _LABEL_RUST,
+    "dotnet_csproj": _LABEL_DOTNET,
 }
 
 #: Signals that qualify a stack without identifying it; they trail their own stack.
-_STACK_QUALIFIER_SIGNALS: dict[str, str] = {"node_lockfile": "Node.js"}
+_STACK_QUALIFIER_SIGNALS: dict[str, str] = {"node_lockfile": _LABEL_NODE}
 
 #: Public: signal id -> human label, for consumers that need to *name* the detected stack
 #: rather than rank it. Composed from the two definitions above so there is one place to edit.
@@ -357,8 +367,8 @@ def _detect_node_stack(
     if has_lockfile:
         _append_signal(found, "node_lockfile", "Node lockfile present (reproducible installs).")
     if weights is not None:
-        weights["Node.js"] = _STACK_WEIGHT_DECLARES_PROJECT if has_lockfile else _STACK_WEIGHT_MAY_BE_SIDECAR
-    return "Node.js"
+        weights[_LABEL_NODE] = _STACK_WEIGHT_DECLARES_PROJECT if has_lockfile else _STACK_WEIGHT_MAY_BE_SIDECAR
+    return _LABEL_NODE
 
 
 def _detect_python_stack(
@@ -372,7 +382,7 @@ def _detect_python_stack(
     if (repo_root / "pyproject.toml").is_file():
         _append_signal(found, "python_pyproject", "Python project detected via pyproject.toml")
         if weights is not None:
-            weights["Python"] = _STACK_WEIGHT_DECLARES_PROJECT
+            weights[_LABEL_PYTHON] = _STACK_WEIGHT_DECLARES_PROJECT
         try:
             body = (repo_root / "pyproject.toml").read_text(encoding="utf-8", errors="replace")
         except OSError:
@@ -382,32 +392,32 @@ def _detect_python_stack(
             notes.append("Ruff is configured under pyproject.toml - align CI quality gates with the same rules.")
         if "[tool.mypy]" in body or "python -m mypy" in bl:
             notes.append("Mypy is referenced - keep static type checks in CI for stronger supply-chain posture.")
-        return "Python"
+        return _LABEL_PYTHON
     if (repo_root / "requirements.txt").is_file():
         _append_signal(found, "python_requirements", "Python project detected via requirements.txt")
         if weights is not None:
             # Pinned dependencies alone; the file is often vendored beside another stack.
-            weights["Python"] = _STACK_WEIGHT_MAY_BE_SIDECAR
-        return "Python"
+            weights[_LABEL_PYTHON] = _STACK_WEIGHT_MAY_BE_SIDECAR
+        return _LABEL_PYTHON
     if (repo_root / "setup.py").is_file() or (repo_root / "setup.cfg").is_file():
         _append_signal(found, "python_setup", "Python project detected via setup.py/setup.cfg")
         if weights is not None:
-            weights["Python"] = _STACK_WEIGHT_DECLARES_PROJECT
-        return "Python"
+            weights[_LABEL_PYTHON] = _STACK_WEIGHT_DECLARES_PROJECT
+        return _LABEL_PYTHON
     return None
 
 
 # (marker filenames, primary label, signal id, signal detail) for single-file stacks.
 _SIMPLE_STACK_MARKERS: tuple[tuple[tuple[str, ...], str, str, str], ...] = (
-    (("go.mod",), "Go", "go_module", "Go module detected via go.mod"),
-    (("pom.xml",), "Java/Maven", "java_maven", "Java/Maven project detected via pom.xml"),
+    (("go.mod",), _LABEL_GO, "go_module", "Go module detected via go.mod"),
+    (("pom.xml",), _LABEL_JAVA_MAVEN, "java_maven", "Java/Maven project detected via pom.xml"),
     (
         ("build.gradle", "build.gradle.kts"),
-        "Java/Kotlin (Gradle)",
+        _LABEL_JAVA_GRADLE,
         "java_gradle",
         "Java/Kotlin project detected via build.gradle",
     ),
-    (("Cargo.toml",), "Rust", "rust_cargo", "Rust project detected via Cargo.toml"),
+    (("Cargo.toml",), _LABEL_RUST, "rust_cargo", "Rust project detected via Cargo.toml"),
 )
 
 
@@ -426,10 +436,10 @@ def _detect_simple_stacks(
             if weights is not None:
                 weights[label] = _STACK_WEIGHT_DECLARES_PROJECT
     if list(repo_root.glob("*.csproj")) or list(repo_root.glob("*.sln")):
-        primary = primary or "C#/.NET"
+        primary = primary or _LABEL_DOTNET
         _append_signal(found, "dotnet_csproj", "C#/.NET project detected via .csproj or .sln")
         if weights is not None:
-            weights["C#/.NET"] = _STACK_WEIGHT_DECLARES_PROJECT
+            weights[_LABEL_DOTNET] = _STACK_WEIGHT_DECLARES_PROJECT
     return primary
 
 
@@ -515,7 +525,7 @@ def _collect_tech_stack_signals(
     found = _stack_evidence_order(found, weights)
     primary_stacks = _primary_stacks(weights)
     signal_ids = {s["id"] for s in found}
-    if "Node.js" in primary_stacks and "node_lockfile" not in signal_ids:
+    if _LABEL_NODE in primary_stacks and "node_lockfile" not in signal_ids:
         # Only advise a lockfile when Node is what the repository actually is; on a
         # sidecar package.json this reads as advice for somebody else's project.
         notes.append(_NODE_LOCKFILE_NOTE)

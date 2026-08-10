@@ -31,8 +31,13 @@ from oss_policy_kit.domain.models import ControlStatus, EvalOutcome
 
 _DOCKER_FROM_RE = re.compile(r"^[ \t]*FROM[ \t]+([^\n]+)$", re.MULTILINE | re.IGNORECASE)
 _HEALTHCHECK_RE = re.compile(r"^\s*HEALTHCHECK\b", re.MULTILINE | re.IGNORECASE)
+# The repetition is bounded rather than open-ended. ``[^|\n]+`` cannot match the ``|`` that
+# has to follow it, so on a long RUN line with no pipe the engine walks the whole tail, fails,
+# and retries from the next start position -- quadratic in the line length, on a Dockerfile
+# the caller chose to scan. 400 characters is far past any real `curl ... | bash`, and past it
+# the match is not worth the scan.
 _CURL_BASH_RE = re.compile(
-    r"(curl|wget)[^|\n]+\|\s*(bash|sh|zsh|ksh)\b",
+    r"(curl|wget)[^|\n]{1,400}\|\s*(bash|sh|zsh|ksh)\b",
     re.IGNORECASE,
 )
 _APT_INSTALL_RE = re.compile(

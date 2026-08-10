@@ -60,6 +60,8 @@ from oss_policy_kit.cli.help_text import CMD_PANEL_EXPORT
 from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
 from oss_policy_kit.domain.models import utc_now
 
+_BULLET = "\n  - "
+
 # Test-visible back-compat hooks for the historical private helper names (A-S7 hoist).
 # Plain assignments (not imports) so lint autofix never strips them.
 _parse_waiver_expiry = _vuln_waivers_mod.parse_waiver_expiry
@@ -369,7 +371,7 @@ def _sarif_structure_error(sarif_path: Path, errors: list[str]) -> str:
 
     return (
         f"OSV-Scanner SARIF '{sarif_path.name}' is not a structurally valid SARIF document:\n  - "
-        + "\n  - ".join(errors)
+        + _BULLET.join(errors)
         + "\nRefusing to emit a VEX document from it: an empty or partial VEX reads to a "
         "consumer as 'the manufacturer has nothing to declare'. Re-run "
         "`osv-scanner --format sarif --recursive .` and keep its output verbatim."
@@ -931,14 +933,14 @@ def _run_emit_vex(
         if validate_output:
             errors = _validate_openvex_structure(doc)
             if errors:
-                raise InvalidInputError("OpenVEX structural validation failed:\n  - " + "\n  - ".join(errors))
+                raise InvalidInputError("OpenVEX structural validation failed:\n  - " + _BULLET.join(errors))
         doc_label = "OpenVEX"
     else:
         doc = _build_vex_document(vuln_ids, osv_sarif, waivers=vuln_waivers or None, references=refs_arg)
         if validate_output:
             errors = _validate_vex_structure(doc)
             if errors:
-                raise InvalidInputError("CycloneDX VEX 1.6 structural validation failed:\n  - " + "\n  - ".join(errors))
+                raise InvalidInputError("CycloneDX VEX 1.6 structural validation failed:\n  - " + _BULLET.join(errors))
         doc_label = "CycloneDX VEX 1.6"
 
     payload = json.dumps(doc, indent=2, sort_keys=False) + "\n"

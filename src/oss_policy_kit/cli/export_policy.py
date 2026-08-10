@@ -302,5 +302,6 @@ def export_policy_cmd(
         raise typer.Exit(code=2) from exc
     except typer.Exit:
         raise
-    except Exception as exc:  # noqa: BLE001 - last-resort user message, no traceback leak
+    # Last-resort user message, no traceback leak.
+    except Exception as exc:  # noqa: BLE001
         exit_for_unexpected(exc)

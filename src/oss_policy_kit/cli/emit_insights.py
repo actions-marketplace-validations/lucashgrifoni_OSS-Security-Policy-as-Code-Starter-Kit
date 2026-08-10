@@ -329,5 +329,6 @@ def emit_insights_cmd(
             f"[red]Error:[/red] cannot write output ({markup_safe(exc.strerror or 'filesystem error')})."
         )
         raise typer.Exit(code=2) from exc
-    except Exception as exc:  # noqa: BLE001 - last-resort user message, no traceback leak
+    # Last-resort user message, no traceback leak.
+    except Exception as exc:  # noqa: BLE001
         exit_for_unexpected(exc)

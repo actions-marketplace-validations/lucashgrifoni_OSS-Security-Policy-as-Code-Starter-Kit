@@ -248,7 +248,8 @@ def scaffold_evidence_cmd(
         detail = exc.strerror or "filesystem error"
         stderr_console().print(f"[red]Error:[/red] cannot write output ({markup_safe(detail)}).")
         raise typer.Exit(code=2) from exc
-    except Exception as exc:  # noqa: BLE001 - last-resort user message, no traceback leak
+    # Last-resort user message, no traceback leak.
+    except Exception as exc:  # noqa: BLE001
         exit_for_unexpected(exc)
 
 

@@ -466,11 +466,11 @@ def _profile_level(pid: str) -> str | None:
 def _profile_posture(pid: str) -> str | None:
     if pid.startswith(("github-aws-", "github-azure-")):
         return "multi_platform_advisory_hybrid"
-    if pid.endswith("-level-1") or pid.endswith("release-hardening-1"):
+    if pid.endswith(("-level-1", "release-hardening-1")):
         return "starter"
     if pid.endswith("-level-2"):
         return "advisory"
-    if pid.endswith("-level-3") or pid.endswith("release-hardening-3"):
+    if pid.endswith(("-level-3", "release-hardening-3")):
         return "hard_gate"
     if pid.endswith("release-hardening-2"):
         return "release_track"
@@ -542,9 +542,9 @@ def _live_collection_dict(lc: LiveCollectionMetadata | None) -> dict[str, Any] |
 
 
 def _structural_bucket(control_id: str) -> str:
-    if control_id.startswith("GOV-") or control_id.startswith("REL-"):
+    if control_id.startswith(("GOV-", "REL-")):
         return "Governance and release artifacts (README, LICENSE, SECURITY, changelog)"
-    if control_id.startswith("CI-") or control_id.startswith("GH-"):
+    if control_id.startswith(("CI-", "GH-")):
         return "GitHub Actions CI/CD (workflows, permissions, pins)"
     if control_id.startswith("SEC-"):
         return "Security scanning and vulnerability management in CI"

@@ -157,9 +157,27 @@ def test_sarif_render_is_byte_identical_across_runs() -> None:
 
     Serialized the way the command actually writes the file (``indent=2``, no key
     sorting), so a difference in emitted order is a difference in the artifact.
+
+    Two renders of the *same* report must agree byte for byte. That is what catches a
+    ``uuid4`` or a wall-clock read creeping back into the renderer -- the exact class
+    v10.0.2 fixed by routing every timestamp through ``SOURCE_DATE_EPOCH`` and swapping
+    ``uuid4`` for ``uuid5`` over stable content.
+
+    A second render of a *separately built* report is asserted too. The first pair alone
+    would pass if the renderer cached its output on the report object; rendering a
+    freshly built but equal report proves the determinism is in the rendering, not in a
+    memo.
     """
     report = _perfect_report(3)
-    assert json.dumps(ee._render_sarif(report), indent=2) == json.dumps(ee._render_sarif(report), indent=2)
+    first = json.dumps(ee._render_sarif(report), indent=2)
+    second = json.dumps(ee._render_sarif(report), indent=2)
+    assert first == second, "two renders of one report disagree; the renderer is not deterministic"
+
+    rebuilt = json.dumps(ee._render_sarif(_perfect_report(3)), indent=2)
+    assert first == rebuilt, (
+        "an equal report rendered from scratch produced different bytes, so the output "
+        "depends on something outside the report -- a clock, a uuid, or shared state"
+    )
 
 
 def test_cli_perfect_report_writes_alert_free_sarif_and_validates(tmp_path: Path) -> None:

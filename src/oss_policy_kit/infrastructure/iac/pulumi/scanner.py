@@ -204,7 +204,7 @@ def _extract_pulumi_calls(tree: ast.AST, source: Path) -> list[PulumiCall]:
 
 
 def _is_s3_bucket(c: PulumiCall) -> bool:
-    return c.resource_type.endswith(".s3.Bucket") or c.resource_type.endswith(".s3.BucketV2")
+    return c.resource_type.endswith((".s3.Bucket", ".s3.BucketV2"))
 
 
 def _is_security_group(c: PulumiCall) -> bool:
