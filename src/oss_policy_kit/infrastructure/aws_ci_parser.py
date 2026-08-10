@@ -141,6 +141,19 @@ def _raw_env_fallback(path: Path, raw_lower: str, result: AwsCiAnalysis) -> None
 
 
 def _plaintext_env_variables_risk(values: dict[str, Any], path: Path, result: AwsCiAnalysis) -> None:
+    """Record *path* once when any plaintext env value looks like a credential.
+
+    The finding is about the file, not the variable, and the list reaches the operator as
+    the control's ``evidence_sources``. Appending per matching value listed the same
+    buildspec several times over, which reads as several independent pieces of evidence for
+    one file. The same guard also covers the recursive walk visiting one file's ``env``
+    block more than once.
+    """
+
+    def _flag() -> None:
+        if path not in result.inline_secret_risk_paths:
+            result.inline_secret_risk_paths.append(path)
+
     for key, val in values.items():
         if not isinstance(val, str):
             continue
@@ -148,13 +161,13 @@ def _plaintext_env_variables_risk(values: dict[str, Any], path: Path, result: Aw
         if not s:
             continue
         if _AKIA_PATTERN.search(s):
-            result.inline_secret_risk_paths.append(path)
+            _flag()
             continue
         if len(s) >= 64 and re.fullmatch(r"[A-Za-z0-9+/=_-]+", s):
-            result.inline_secret_risk_paths.append(path)
+            _flag()
             continue
         if _SECRETISH_KEY.search(str(key)) and len(s) > 12:
-            result.inline_secret_risk_paths.append(path)
+            _flag()
 
 
 def _record_env_block_signals(env_block: dict[str, Any], path: Path, result: AwsCiAnalysis) -> None:
