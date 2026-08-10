@@ -135,31 +135,6 @@ class InitPlan:
     notes: list[str] = field(default_factory=list)
     recommendation: ProfileRecommendation | None = None
 
-    def planned_paths(self) -> list[tuple[str, Path]]:
-        """Return ``[(label, absolute_path), ...]`` for every artifact the
-        writer would create. Used by the human and JSON renderers.
-
-        The list is intentionally ordered so the human-facing summary feels
-        natural: config first, then waivers, then evidence directory, then
-        workflow file.
-        """
-
-        out: list[tuple[str, Path]] = []
-        if self.write_config:
-            out.append(("config", self.target / CONFIG_FILENAME))
-        if self.write_waivers:
-            out.append(("waivers", self.target / WAIVERS_FILENAME))
-        if self.scaffold_evidence:
-            out.append(("evidence_dir", self.target / ".oss-policy-kit" / "evidence"))
-        if self.write_workflow:
-            out.append(
-                (
-                    "workflow",
-                    self.target / ".github" / "workflows" / self.workflow_filename,
-                )
-            )
-        return out
-
 
 def _validate_fail_on(value: str) -> str:
     """Normalize and validate ``--fail-on``.
