@@ -96,8 +96,8 @@ def test_subprocess_show_profiles_short_flag_sp() -> None:
 def test_subprocess_evaluate_help_distinct_from_root() -> None:
     root_help = _run_module(["--help"])
     eval_help = _run_module(["evaluate", "--help"])
-    assert root_help.returncode == 0
-    assert eval_help.returncode == 0
+    assert root_help.returncode == 0, root_help.stderr + root_help.stdout
+    assert eval_help.returncode == 0, eval_help.stderr + eval_help.stdout
     assert "Evaluate a local repository clone" in eval_help.stdout
     assert "evaluate" in root_help.stdout.lower()
     assert "FAIL-ON MODES" in eval_help.stdout or "fail-on" in eval_help.stdout.lower()
@@ -337,7 +337,7 @@ def test_subprocess_missing_target_exit_code_2(tmp_path: Path) -> None:
             str(tmp_path / "pytest-subprocess-missing"),
         ]
     )
-    assert proc.returncode == 2
+    assert proc.returncode == 2, proc.stderr + proc.stdout
 
 
 def test_subprocess_missing_waivers_exit_code_2(tmp_path: Path) -> None:
@@ -354,7 +354,7 @@ def test_subprocess_missing_waivers_exit_code_2(tmp_path: Path) -> None:
             str(tmp_path / "pytest-subprocess-missing-waivers"),
         ]
     )
-    assert proc.returncode == 2
+    assert proc.returncode == 2, proc.stderr + proc.stdout
 
 
 def test_subprocess_invalid_workflow_emits_operational_warnings(tmp_path: Path) -> None:
@@ -449,11 +449,15 @@ def test_subprocess_scaffold_evidence_skip_then_force(tmp_path: Path) -> None:
     bp.write_text(bp.read_text(encoding="utf-8").replace("REPLACE_ME", "KEEP"), encoding="utf-8")
 
     p2 = _run_module(["scaffold-evidence", "--target", str(repo), "--platform", "github"])
-    assert p2.returncode == 0
+    # Carry the child's output into the message, like the first assertion does. This test
+    # failed once in a full-suite run and passed on every rerun and in isolation; the two
+    # bare assertions here meant the report said only "assert 1 == 0", which is not enough
+    # to tell a real regression from a transient. Diagnosable now if it recurs.
+    assert p2.returncode == 0, p2.stderr + p2.stdout
     assert "KEEP" in bp.read_text(encoding="utf-8")
 
     p3 = _run_module(["scaffold-evidence", "--target", str(repo), "--platform", "github", "--force"])
-    assert p3.returncode == 0
+    assert p3.returncode == 0, p3.stderr + p3.stdout
     assert "KEEP" not in bp.read_text(encoding="utf-8")
 
 

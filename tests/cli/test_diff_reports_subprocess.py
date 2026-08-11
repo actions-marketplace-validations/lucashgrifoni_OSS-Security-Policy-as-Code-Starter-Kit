@@ -91,7 +91,7 @@ def test_diff_reports_before_missing_exits_2(tmp_path: Path) -> None:
     after = tmp_path / "after.json"
     after.write_text(json.dumps(_minimal_report(results=[_result_row("A", "pass")])), encoding="utf-8")
     proc = _run_module(["diff-reports", "--before", str(missing), "--after", str(after)])
-    assert proc.returncode == 2
+    assert proc.returncode == 2, proc.stderr + proc.stdout
     assert "before" in (proc.stderr + proc.stdout).lower()
 
 

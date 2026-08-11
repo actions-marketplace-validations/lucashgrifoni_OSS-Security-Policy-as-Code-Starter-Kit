@@ -274,4 +274,4 @@ def test_cli_default_format_still_cyclonedx(tmp_path: Path) -> None:
 def test_cli_unknown_format_exits_2(tmp_path: Path) -> None:
     sarif = _write_sarif(tmp_path, _sarif_with_rules("CVE-2024-1"))
     proc = _run_cli(["emit-vex", "--osv-sarif", str(sarif), "--format", "csaf"])
-    assert proc.returncode == 2
+    assert proc.returncode == 2, proc.stderr + proc.stdout

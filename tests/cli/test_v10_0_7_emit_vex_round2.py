@@ -264,7 +264,7 @@ def test_big_integer_refusal_does_not_leak_an_absolute_path(tmp_path: Path) -> N
 
     proc = _run_cli(["emit-vex", "--osv-sarif", "big.sarif.json", "--waivers", "ws.yaml"], cwd=lab)
 
-    assert proc.returncode == 2
+    assert proc.returncode == 2, proc.stderr + proc.stdout
     assert "big.sarif.json" in _norm(proc.stderr)
     assert lab.name not in proc.stderr, proc.stderr
     assert str(lab) not in proc.stderr
@@ -407,7 +407,7 @@ def test_wrong_input_refusal_does_not_leak_an_absolute_path(tmp_path: Path) -> N
 
     proc = _run_cli(["emit-vex", "--osv-sarif", "kit.sarif.json", "--waivers", "ws.yaml"], cwd=lab)
 
-    assert proc.returncode == 2
+    assert proc.returncode == 2, proc.stderr + proc.stdout
     assert "kit.sarif.json" in _norm(proc.stderr)
     assert lab.name not in proc.stderr, proc.stderr
     assert str(lab) not in proc.stderr

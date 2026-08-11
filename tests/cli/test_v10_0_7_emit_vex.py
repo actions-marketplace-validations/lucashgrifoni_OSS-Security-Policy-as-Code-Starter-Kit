@@ -360,7 +360,7 @@ def test_structure_refusal_does_not_leak_an_absolute_path(tmp_path: Path) -> Non
     _write(tmp_path, "bad.sarif.json", {"runs": [1]})
     proc = _run_cli(["emit-vex", "--osv-sarif", "bad.sarif.json", "--waivers", "ws.yaml"], cwd=tmp_path)
 
-    assert proc.returncode == 2
+    assert proc.returncode == 2, proc.stderr + proc.stdout
     assert "bad.sarif.json" in _norm(proc.stderr)
     assert str(tmp_path) not in proc.stderr
     assert tmp_path.as_posix() not in proc.stderr

@@ -154,7 +154,7 @@ def test_emit_vex_utf16_error_message_does_not_leak_absolute_path(tmp_path: Path
 
     sarif = _write_encoded_sarif(tmp_path, "osv.sarif.json", "utf-16")
     proc = _run_cli(["emit-vex", "--osv-sarif", str(sarif), "--waivers", str(tmp_path / "none.yaml")])
-    assert proc.returncode == 2
+    assert proc.returncode == 2, proc.stderr + proc.stdout
     assert str(sarif.resolve()) not in proc.stderr
 
 
