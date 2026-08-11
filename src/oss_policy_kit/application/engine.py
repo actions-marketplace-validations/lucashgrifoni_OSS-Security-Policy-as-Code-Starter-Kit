@@ -97,7 +97,10 @@ REPORT_JSON_SCHEMA_URL_V2_0 = "https://github.com/lucashgrifoni/OSS-Security-Pol
 REPORTS_V2_STATUS_MAP: dict[str, tuple[str, str | None]] = {
     "pass": ("PASS", None),
     "fail": ("FAIL", None),
-    "degraded": ("FAIL", None),  # consumers also read per-control 'degraded' flag
+    # Kept so a v5.x report still maps, but `ControlStatus` has had no `degraded` member
+    # since the 2.0 flip: no evaluator produces it and nothing writes a per-control
+    # `degraded` flag. `--fail-on degraded` is a separate, still-live policy value.
+    "degraded": ("FAIL", None),
     "manual-review-required": ("UNKNOWN", "manual-review-required"),
     "not-applicable": ("NOT_APPLICABLE", None),
     "skipped": ("UNKNOWN", "skipped-by-flag"),

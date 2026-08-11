@@ -669,8 +669,6 @@ def _result_to_dict_v2_0(r: ControlResult, *, include_absolute_path: bool = Fals
     }
     if reason is not None:
         payload["reason"] = reason
-    if r.status.value == "degraded":
-        payload["degraded"] = True
     if r.waiver:
         payload["waiver"] = {
             "control_id": r.waiver.control_id,
