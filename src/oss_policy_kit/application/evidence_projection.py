@@ -287,10 +287,11 @@ def _trust_level(
     if source_type == "user_supplied":
         return "declared"
     if source_type == "api_collected":
+        # Only a fresh, attested collection is verified. Everything else -- stale, unattested,
+        # or freshness we could not establish -- lands on "declared" alike, so there is no
+        # separate stale branch to take: it returned the same value as the fall-through.
         if freshness == "fresh" and attestation in {"signed", "self_attested"}:
             return "verified"
-        if freshness == "stale":
-            return "declared"
         return "declared"
     if source_type == "derived":
         return "inferred"
