@@ -406,10 +406,25 @@ def _has_separate_s3_encryption(bucket_name: str, index: TfResourceIndex) -> boo
     return False
 
 
+def _first_declared(block: TfBlock, *keys: str) -> Any:
+    """Return the first of *keys* the block actually declares, preserving a literal ``false``.
+
+    ``a or b`` cannot be used here: the value being looked for is a boolean, so an explicit
+    ``encrypted = false`` is falsy and would be skipped in favour of the next key, arriving as
+    ``None`` and reading as "never configured" instead of "deliberately turned off".
+    """
+
+    for key in keys:
+        value = block.get(key)
+        if value is not None:
+            return value
+    return None
+
+
 def _encryption_finding(rt: str, block: TfBlock, index: TfResourceIndex, repo_root: Path) -> IacFinding | None:
     """Return an IAC-TF-004 finding for one resource block, or None when encryption looks present."""
 
-    encrypted = block.get("storage_encrypted") or block.get("encrypted") or block.get("enable_kms_encryption")
+    encrypted = _first_declared(block, "storage_encrypted", "encrypted", "enable_kms_encryption")
     sse = block.get("server_side_encryption_configuration")
     kms_key = block.get("kms_key_id") or block.get("kms_master_key_id")
     # AWS S3 modern pattern: encryption can live in a separate resource.
