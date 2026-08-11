@@ -23,8 +23,6 @@ from __future__ import annotations
 import json as _json
 from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass, field
-from importlib.metadata import PackageNotFoundError
-from importlib.metadata import version as _pkg_version
 from pathlib import Path
 from typing import Any
 
@@ -83,15 +81,17 @@ class CfnScanOutcome:
 
 
 def _kit_version() -> str:
+    """The version this scanner stamps into its evidence.
+
+    The source constant is authoritative on purpose: a stale installed distribution must
+    never relabel evidence it did not produce. Looking the installed version up and then
+    discarding it whenever it differs is the same as not looking it up at all, so the
+    lookup is gone -- both former branches returned this exact value.
+    """
+
     from oss_policy_kit import __version__ as _src_version
 
-    try:
-        installed = _pkg_version("oss-policy-kit")
-    except PackageNotFoundError:  # pragma: no cover - dev-only fallback
-        return _src_version
-    if installed != _src_version:
-        return _src_version
-    return installed
+    return _src_version
 
 
 def _utc_iso() -> str:
