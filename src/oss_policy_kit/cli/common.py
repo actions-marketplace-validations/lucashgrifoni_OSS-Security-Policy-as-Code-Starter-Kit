@@ -58,7 +58,11 @@ class OssPolicyKitTyperGroup(TyperGroup):
         from typer import rich_utils as typer_rich_utils
 
         rich_mode = self.rich_markup_mode
-        if rich_mode is None:
+        # Unreachable at runtime -- `use_rich` above is exactly `rich_markup_mode is not None`
+        # and the plain path already returned -- but it is what narrows `MarkupMode` to
+        # `MarkupModeStrict` for `rich_format_help` below. Deleting it trades a dead branch for
+        # a type error, so it stays.
+        if rich_mode is None:  # pragma: no cover
             return super().format_help(ctx, formatter)
         # Suppress Typer's flat plain-text epilog on the Rich path; we render it as
         # soft-bordered panels below so the whole screen shares one visual language.
@@ -315,9 +319,9 @@ def print_operational_warning_summary(warnings: list[str]) -> None:
     c.print(f"[dim]Operational warnings ({count})[/dim] [dim]-- see Markdown/JSON reports[/dim]")
     for msg in warnings[:3]:
         wrapped = terminal_ui.human_wrap_lines(msg, stream=sys.stderr, subtract=4)
+        # `str.split` always yields at least one element -- `"".split("\n")` is `[""]` -- so
+        # `lines[0]` is safe without an emptiness check, which could never have been taken.
         lines = wrapped.split("\n")
-        if not lines:
-            continue
         c.print(f"[dim]-[/dim] [dim]{markup_safe(lines[0])}[/dim]")
         for cont in lines[1:]:
             c.print(f"[dim]  {markup_safe(cont)}[/dim]")
