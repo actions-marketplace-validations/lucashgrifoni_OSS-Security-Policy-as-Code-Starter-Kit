@@ -277,9 +277,8 @@ def redact_home(text: str) -> str:
 
     if _ABSOLUTE_PATHS_ALLOWED or not text:
         return text
+    # `_home_forms()` already drops empty forms, so every entry here is usable.
     for home in _home_forms():
-        if not home:
-            continue
         lowered = text.lower()
         needle = home.lower()
         if needle not in lowered:
@@ -518,29 +517,31 @@ def profile_table_layout_for_width(
     title_w = max(_PROFILE_COL_MIN_TITLE, (flex * title_pct) // denom)
     aud_w = max(_PROFILE_COL_MIN_AUDIENCE, (flex * aud_pct) // denom)
     desc_w = flex - title_w - aud_w
+    # Each shave below is written unconditionally: when the column ahead already absorbed
+    # the whole deficit the remaining amount is 0, and `max(MIN, w - 0)` leaves `w` alone
+    # (every width here was floored at its minimum on the way in). Guarding them with
+    # `if amount > 0:` only adds branches that the arithmetic can never take.
     if desc_w < _PROFILE_COL_MIN_DESCRIPTION:
         deficit = _PROFILE_COL_MIN_DESCRIPTION - desc_w
         shave = min(deficit, max(0, aud_w - _PROFILE_COL_MIN_AUDIENCE))
         aud_w -= shave
         deficit -= shave
-        if deficit > 0:
-            title_w = max(_PROFILE_COL_MIN_TITLE, title_w - deficit)
+        title_w = max(_PROFILE_COL_MIN_TITLE, title_w - deficit)
         desc_w = flex - title_w - aud_w
 
     remainder = usable - (profile_w + title_w + platform_w + level_w + gate_w + aud_w + desc_w)
-    if remainder > 0:
-        desc_w += remainder
-    elif remainder < 0:
+    if remainder < 0:
         need = -remainder
         take = min(need, max(0, desc_w - _PROFILE_COL_MIN_DESCRIPTION))
         desc_w -= take
         need -= take
-        if need > 0:
-            take_a = min(need, max(0, aud_w - _PROFILE_COL_MIN_AUDIENCE))
-            aud_w -= take_a
-            need -= take_a
-        if need > 0:
-            title_w = max(_PROFILE_COL_MIN_TITLE, title_w - need)
+        take_a = min(need, max(0, aud_w - _PROFILE_COL_MIN_AUDIENCE))
+        aud_w -= take_a
+        need -= take_a
+        title_w = max(_PROFILE_COL_MIN_TITLE, title_w - need)
+    else:
+        # Slack left over by the integer division goes to the description column.
+        desc_w += remainder
 
     return ProfileTableLayout(
         profile=profile_w,
@@ -1207,12 +1208,12 @@ def _build_recommend_decision(suggestions: list[dict[str, Any]], ctx_line: str) 
     if ctx_line:
         decision.append("Recommendation path\n", style=f"bold {STYLE_EMPHASIS}")
         decision.append(f"{ctx_line}\n\n", style=STYLE_MUTED)
-    if journey_ids:
-        decision.append("Suggested journey\n", style=f"bold {STYLE_EMPHASIS}")
-        labels = ("Now", "Next", "Later")
-        for i, jid in enumerate(journey_ids[:3]):
-            decision.append(f"  [{labels[i]}]  {jid}\n", style="default")
-        decision.append("\n", style="default")
+    # `now_id` is in `cand_ids` by construction, so the journey always has at least itself.
+    decision.append("Suggested journey\n", style=f"bold {STYLE_EMPHASIS}")
+    labels = ("Now", "Next", "Later")
+    for i, jid in enumerate(journey_ids[:3]):
+        decision.append(f"  [{labels[i]}]  {jid}\n", style="default")
+    decision.append("\n", style="default")
     if raw_second and (journey_next is None or raw_second != journey_next):
         decision.append("Also consider\n", style=f"bold {STYLE_WARN}")
         decision.append(Text.from_markup(f"  {raw_second}  [dim](parallel heuristic pick)[/dim]\n\n"))
