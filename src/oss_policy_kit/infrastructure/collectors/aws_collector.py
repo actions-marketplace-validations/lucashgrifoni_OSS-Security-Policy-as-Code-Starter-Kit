@@ -74,10 +74,10 @@ def _manual_approval_before_production(stages: list[dict[str, Any]]) -> bool:
 
     if len(stages) < 2:
         return False
-    last_idx = len(stages) - 1
-    for idx, stage in enumerate(stages):
-        if idx >= last_idx:
-            break
+    # Every stage but the last: an approval in the final stage gates nothing. Slicing says
+    # that directly; the enumerate/break form it replaces could never exhaust its loop,
+    # because the break always fired on the last index.
+    for stage in stages[:-1]:
         for action in cast(list[Any], stage.get("actions") or []):
             if not isinstance(action, dict):
                 continue
