@@ -28,6 +28,12 @@ def test_packaged_branch_protection_schema_matches_public_copy() -> None:
 
 
 def test_invalid_branch_protection_schema_surfaces_validation_message(tmp_path: Path) -> None:
+    """ADR-045: a schema violation asks for review, and the reason names the schema.
+
+    The verdict matches the two branches above it in the same reader -- unreadable JSON and a
+    non-object root -- because all three say the same thing: this reader cannot use this file.
+    """
+
     p = tmp_path / "branch-protection.json"
     p.write_text(
         json.dumps(
@@ -40,7 +46,7 @@ def test_invalid_branch_protection_schema_surfaces_validation_message(tmp_path: 
         encoding="utf-8",
     )
     out = _parse_branch_protection_evidence(p)
-    assert out.status == ControlStatus.FAIL
+    assert out.status == ControlStatus.MANUAL_REVIEW_REQUIRED
     assert "evidence-branch-protection.schema.json" in out.reason
 
 

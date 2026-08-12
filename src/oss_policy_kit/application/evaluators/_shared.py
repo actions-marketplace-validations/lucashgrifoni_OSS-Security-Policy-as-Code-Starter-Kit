@@ -582,8 +582,11 @@ def _parse_branch_protection_evidence(evidence: Path) -> EvalOutcome:
         Draft202012Validator(_branch_protection_schema()).validate(data)
     except ValidationError as exc:
         loc = "/".join(str(p) for p in exc.absolute_path) if exc.absolute_path else "root"
+        # ADR-045: the two branches above already answer `manual-review-required` for a file
+        # this reader cannot use; a schema violation is the same kind of fact and now agrees
+        # with them. `--fail-on degraded` is how an operator makes it block.
         return EvalOutcome(
-            status=ControlStatus.FAIL,
+            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
             reason=(
                 f"Branch protection evidence does not match evidence-branch-protection.schema.json: {exc.message} "
                 f"(at {loc})"

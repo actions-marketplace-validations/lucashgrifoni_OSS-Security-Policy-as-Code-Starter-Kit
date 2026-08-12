@@ -399,8 +399,12 @@ def eval_gh_plat_024(ctx: EvalContext) -> EvalOutcome:
         evidence_name="GitHub rulesets",
     )
     if error:
+        # ADR-045: unreadable evidence is `manual-review-required`, never `fail`. A schema
+        # violation is a fact about the FILE, not about the repository -- the kit did not
+        # find the control unsatisfied, it failed to read the document that would say.
+        # Operators who want that to block a merge use `--fail-on degraded`.
         return EvalOutcome(
-            status=ControlStatus.FAIL,
+            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
             reason=error,
             remediation=(
                 "Regenerate github-rulesets evidence using reports/schema/evidence-github-rulesets.schema.json."
@@ -491,8 +495,12 @@ def eval_gh_immutrel_070(ctx: EvalContext) -> EvalOutcome:
         evidence_name="GitHub release immutability",
     )
     if error:
+        # ADR-045: unreadable evidence is `manual-review-required`, never `fail`. A schema
+        # violation is a fact about the FILE, not about the repository -- the kit did not
+        # find the control unsatisfied, it failed to read the document that would say.
+        # Operators who want that to block a merge use `--fail-on degraded`.
         return EvalOutcome(
-            status=ControlStatus.FAIL,
+            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
             reason=error,
             remediation=(
                 "Regenerate github-release-immutability evidence using "
@@ -587,8 +595,12 @@ def eval_org_actpol_071(ctx: EvalContext) -> EvalOutcome:
         evidence_name="GitHub organization Actions policy",
     )
     if error:
+        # ADR-045: unreadable evidence is `manual-review-required`, never `fail`. A schema
+        # violation is a fact about the FILE, not about the repository -- the kit did not
+        # find the control unsatisfied, it failed to read the document that would say.
+        # Operators who want that to block a merge use `--fail-on degraded`.
         return EvalOutcome(
-            status=ControlStatus.FAIL,
+            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
             reason=error,
             remediation=(
                 "Regenerate github-actions-policy evidence using "
@@ -658,8 +670,12 @@ def eval_gh_plat_025(ctx: EvalContext) -> EvalOutcome:
         evidence_name="GitHub environment protection",
     )
     if error:
+        # ADR-045: unreadable evidence is `manual-review-required`, never `fail`. A schema
+        # violation is a fact about the FILE, not about the repository -- the kit did not
+        # find the control unsatisfied, it failed to read the document that would say.
+        # Operators who want that to block a merge use `--fail-on degraded`.
         return EvalOutcome(
-            status=ControlStatus.FAIL,
+            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
             reason=error,
             remediation=(
                 "Regenerate environment protection evidence using "
@@ -734,8 +750,12 @@ def eval_gh_plat_026(ctx: EvalContext) -> EvalOutcome:
         evidence_name="GitHub secret scanning",
     )
     if error:
+        # ADR-045: unreadable evidence is `manual-review-required`, never `fail`. A schema
+        # violation is a fact about the FILE, not about the repository -- the kit did not
+        # find the control unsatisfied, it failed to read the document that would say.
+        # Operators who want that to block a merge use `--fail-on degraded`.
         return EvalOutcome(
-            status=ControlStatus.FAIL,
+            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
             reason=error,
             remediation=(
                 "Regenerate secret scanning evidence using reports/schema/evidence-github-secret-scanning.schema.json."

@@ -101,9 +101,11 @@ def test_immutrel_fail_both_off(tmp_path: Path) -> None:
     assert gh.eval_gh_immutrel_070(_ctx(tmp_path)).status == ControlStatus.FAIL
 
 
-def test_immutrel_malformed_is_fail(tmp_path: Path) -> None:
+def test_immutrel_malformed_asks_for_review(tmp_path: Path) -> None:
+    """ADR-045: a file the kit cannot read is `manual-review-required` on every platform."""
+
     _ev(tmp_path, "github-release-immutability.json", {"schema_version": "wrong", "posture": {}})
-    assert gh.eval_gh_immutrel_070(_ctx(tmp_path)).status == ControlStatus.FAIL
+    assert gh.eval_gh_immutrel_070(_ctx(tmp_path)).status == ControlStatus.MANUAL_REVIEW_REQUIRED
 
 
 # --------------------------------------------------------------------------- #

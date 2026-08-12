@@ -12,6 +12,20 @@ Each control in an evaluation report resolves to one of these states:
 | `not-applicable` | The control does not apply to the evaluated repository shape |
 | `waived` | A documented exception overrode a non-pass outcome |
 
+`fail` and `manual-review-required` answer different questions, and the distinction decides what
+you do next. `fail` is a statement about **your repository**: a control is not satisfied.
+`manual-review-required` is a statement about the **evidence**: the kit could not establish an
+answer either way.
+
+So when an evidence file is present but does not match its schema — an outdated collector, a
+hand-edit, a payload from another tool — every control answers `manual-review-required`, on every
+platform, with a reason naming the schema. It would be wrong to call that `fail`: the kit did not
+find the control unsatisfied, it failed to read the document that would say. See
+[ADR-045](decisions/adr-045-schema-invalid-evidence-is-manual-review-everywhere.md).
+
+If unreadable evidence should stop a build in your context, that is a gate policy rather than a
+control verdict: `--fail-on degraded` exits 1 on `fail` **or** `manual-review-required`.
+
 Reports include:
 
 - evidence sources

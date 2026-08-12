@@ -5,14 +5,20 @@ the file is well-formed and honestly unfilled, here it is the wrong shape entire
 outdated collector, a hand-edited file, a payload from a different tool. The invariant is the
 same and is asserted first for every control: malformed evidence never earns credit.
 
-**The verdicts are not consistent across platforms, and this file says so out loud.** For the
-same situation -- evidence present, evidence unreadable against its schema -- the GitHub
-controls answer `fail` while the Azure and AWS ones answer `manual-review-required`. That
-difference matters to anyone running a gate: `fail` blocks, `manual-review-required` asks a
-human. No ADR records the choice, so this test pins the behaviour as it is rather than
-quietly changing it, and the asymmetry is written into `_EXPECTED` where it is visible instead
-of buried. If it turns out to be unintended, changing it is a contract decision: one direction
-loosens gates for existing users, the other tightens them.
+**Every platform answers `manual-review-required`, and that is the rule ADR-045 settled.** A
+schema violation is a fact about the file, not about the repository: the kit did not find the
+control unsatisfied, it failed to read the document that would say. Reporting `fail` would have
+the gate assert something it never established -- the mirror of the `SAST-SEMGREP-064` defect,
+where unreadable evidence was reported as `pass`.
+
+Until 2026-08-12 the five GitHub ruleset/environment/secret-scanning controls plus
+`PLAT-BRPROT-015` answered `fail` here while Azure and AWS answered `manual-review-required`,
+and the split was accidental -- `_parse_branch_protection_evidence` even disagreed with itself,
+answering `manual-review-required` for unreadable JSON and a non-object root but `fail` for a
+schema violation three branches later.
+
+`_EXPECTED` still names the status per control rather than asserting one constant, so a future
+divergence shows up as a diff on the row that moved instead of a silent flip.
 """
 
 from __future__ import annotations
@@ -35,9 +41,8 @@ from oss_policy_kit.infrastructure.workflow_parser import WorkflowAnalysis
 Evaluator = Callable[[EvalContext], EvalOutcome]
 
 _MRR = ControlStatus.MANUAL_REVIEW_REQUIRED
-_FAIL = ControlStatus.FAIL
 
-#: platform -> (profile, [(evaluator, status it currently returns for malformed evidence)])
+#: platform -> (profile, [(evaluator, status it returns for malformed evidence)])
 _EXPECTED: dict[str, tuple[str, list[tuple[Evaluator, ControlStatus]]]] = {
     "azure": (
         "azure-level-2",
@@ -53,12 +58,12 @@ _EXPECTED: dict[str, tuple[str, list[tuple[Evaluator, ControlStatus]]]] = {
     "github": (
         "github-level-2",
         [
-            (github.eval_gh_plat_024, _FAIL),
-            (github.eval_gh_immutrel_070, _FAIL),
-            (github.eval_org_actpol_071, _FAIL),
-            (github.eval_gh_plat_025, _FAIL),
-            (github.eval_gh_plat_026, _FAIL),
-            (governance.eval_plat_brprot_015, _FAIL),
+            (github.eval_gh_plat_024, _MRR),
+            (github.eval_gh_immutrel_070, _MRR),
+            (github.eval_org_actpol_071, _MRR),
+            (github.eval_gh_plat_025, _MRR),
+            (github.eval_gh_plat_026, _MRR),
+            (governance.eval_plat_brprot_015, _MRR),
             (governance.eval_org_mfa_001, _MRR),
         ],
     ),
@@ -116,7 +121,7 @@ def test_the_refusal_says_the_evidence_did_not_match_its_schema(platform: str, t
 
 @pytest.mark.parametrize("platform", sorted(_EXPECTED))
 def test_the_current_per_platform_verdict_is_pinned(platform: str, tmp_path: Path) -> None:
-    """Pins the fail-vs-manual-review split described in this module's docstring."""
+    """Pins the per-control verdict, so a divergence shows up as a diff on the row that moved."""
 
     ctx = _malformed_evidence(tmp_path, platform)
     actual = {evaluate.__name__: evaluate(ctx).status for evaluate, _ in _EXPECTED[platform][1]}
