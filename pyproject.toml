@@ -177,4 +177,8 @@ exclude_lines = [
   "pragma: no cover",
   "if TYPE_CHECKING:",
   "raise NotImplementedError",
+  # A bare `...` is the body of a Protocol method or an abstract stub. It is
+  # unexecutable by construction -- nothing ever calls the declaration itself --
+  # so counting it as a missed line reports untestable syntax as untested code.
+  "^\\s*\\.\\.\\.$",
 ]

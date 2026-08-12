@@ -129,3 +129,24 @@ def test_legacy_rows_sort_after_their_platform_peers(injected_alias: None) -> No
 
     assert rows
     assert rows[-1].is_legacy_alias is True
+
+
+def test_a_legacy_id_that_still_has_its_own_directory_row_is_not_added_twice(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The two maps can disagree, and the listing has to survive it.
+
+    `BUNDLED_PROFILE_LEGACY_IDS` says which ids are deprecated; `_PROFILE_DISPLAY_ALIAS_TARGETS`
+    says which canonical profile each points at, and it is the second one that suppresses the
+    directory row. Deprecate an id in the first without adding it to the second -- one line of a
+    two-line change -- and the id would be listed once as an ordinary profile and again as a
+    legacy alias, reading as two profiles with identical contents.
+    """
+
+    monkeypatch.setattr(pr, "BUNDLED_PROFILE_LEGACY_IDS", frozenset({_DEPRECATED}))
+    monkeypatch.setattr(pr, "_PROFILE_DISPLAY_ALIAS_TARGETS", {})
+
+    ids = [r.profile_id for r in pr._iter_bundled_profiles()]
+
+    assert ids.count(_DEPRECATED) == 1
+    assert all(r.is_legacy_alias is False for r in pr._iter_bundled_profiles())
