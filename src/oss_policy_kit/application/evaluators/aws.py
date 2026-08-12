@@ -17,15 +17,12 @@ from oss_policy_kit.application.evaluators._shared import (
     _aws_codepipeline_schema,
     _aws_provenance_artifact_schema,
     _aws_sbom_artifact_schema,
-    _digest_invalid_not_evaluated,
-    _digest_placeholder_manual_review,
+    _digest_gate_outcome,
     _evidence_is_api_backed,
     _evidence_placeholder_outcome,
-    _is_valid_sha256_digest,
     _provenance_artifact_digest_strings,
     _sbom_artifact_digest_strings,
     _validate_json_evidence,
-    is_placeholder_digest,
 )
 
 _KIT_DIR = ".oss-policy-kit"
@@ -595,11 +592,9 @@ def eval_aws_sbomart_058(ctx: EvalContext) -> EvalOutcome:
     if blocked is not None:
         return blocked
     assert data is not None
-    for d in _sbom_artifact_digest_strings(data):
-        if is_placeholder_digest(d):
-            return _digest_placeholder_manual_review(evidence)
-        if not _is_valid_sha256_digest(d):
-            return _digest_invalid_not_evaluated(evidence)
+    unusable_digest = _digest_gate_outcome(evidence, _sbom_artifact_digest_strings(data))
+    if unusable_digest is not None:
+        return unusable_digest
     posture = data["posture"]
     assert isinstance(posture, dict)
     required = ("sbom_covers_release_artifact", "sbom_digest_recorded", "artifact_digest_recorded")
@@ -663,11 +658,9 @@ def eval_aws_provart_059(ctx: EvalContext) -> EvalOutcome:
     if blocked is not None:
         return blocked
     assert data is not None
-    for d in _provenance_artifact_digest_strings(data):
-        if is_placeholder_digest(d):
-            return _digest_placeholder_manual_review(evidence)
-        if not _is_valid_sha256_digest(d):
-            return _digest_invalid_not_evaluated(evidence)
+    unusable_digest = _digest_gate_outcome(evidence, _provenance_artifact_digest_strings(data))
+    if unusable_digest is not None:
+        return unusable_digest
     posture = data["posture"]
     assert isinstance(posture, dict)
     required = ("attestation_covers_release_artifact", "attestation_digest_recorded", "artifact_digest_recorded")

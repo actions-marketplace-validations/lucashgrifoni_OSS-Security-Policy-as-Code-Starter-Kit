@@ -12,7 +12,7 @@ import importlib.metadata
 import json
 import math
 import re
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -690,6 +690,27 @@ def _digest_invalid_not_evaluated(evidence: Path) -> EvalOutcome:
         evidence_sources=[str(evidence.resolve())],
         confidence="low",
     )
+
+
+def _digest_gate_outcome(evidence: Path, digests: Iterable[str]) -> EvalOutcome | None:
+    """Refuse the first digest that is a template or is not a real SHA-256; ``None`` when all pass.
+
+    The two refusals stay apart on purpose. A placeholder digest is a scaffold nobody filled in,
+    so a human has to go and look (``manual-review-required``); a malformed one is evidence the
+    kit cannot interpret at all, and claiming anything about it would be a guess
+    (``not-evaluated``). Collapsing them would tell an adopter the same thing about two quite
+    different problems.
+
+    Four artifact-attestation controls -- SBOM and provenance, on AWS and on Azure -- ran
+    identical copies of this loop. One copy is one place to keep the distinction correct.
+    """
+
+    for digest in digests:
+        if is_placeholder_digest(digest):
+            return _digest_placeholder_manual_review(evidence)
+        if not _is_valid_sha256_digest(digest):
+            return _digest_invalid_not_evaluated(evidence)
+    return None
 
 
 def _sbom_artifact_digest_strings(data: dict[str, Any]) -> list[str]:
@@ -2150,6 +2171,7 @@ __all__ = [
     "_codeowners_text",
     "_detect_sbom_format",
     "_detect_sbom_format_and_version",
+    "_digest_gate_outcome",
     "_digest_invalid_not_evaluated",
     "_digest_placeholder_manual_review",
     "_disclosure_policy_schema",
