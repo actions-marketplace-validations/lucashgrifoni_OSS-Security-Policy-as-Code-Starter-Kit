@@ -13,11 +13,22 @@ from oss_policy_kit.infrastructure.collectors.github_collector import GitHubEvid
 # --------------------------------------------------------------------------- #
 
 
-def test_parse_owner_repo() -> None:
+def test_a_valid_slug_splits_into_owner_and_repo() -> None:
     assert gc._parse_owner_repo("o/r") == ("o", "r")
-    for bad in ("noslash", "o/", "/r", "a/b/c"):
-        with pytest.raises(ValueError, match="Invalid GitHub repo slug"):
-            gc._parse_owner_repo(bad)
+
+
+@pytest.mark.parametrize("bad", ["noslash", "o/", "/r", "a/b/c"])
+def test_a_slug_that_is_not_owner_slash_repo_is_refused(bad: str) -> None:
+    """One case per run, rather than a loop inside one test.
+
+    A loop stops at the first value that fails, so the three after it are never tried, and the
+    failure says only that a `ValueError` was expected -- not which slug slipped through. Each
+    of these is a distinct way to malform a slug: no separator, a missing half on either side,
+    and one separator too many.
+    """
+
+    with pytest.raises(ValueError, match="Invalid GitHub repo slug"):
+        gc._parse_owner_repo(bad)
 
 
 def test_status_block_enabled() -> None:
