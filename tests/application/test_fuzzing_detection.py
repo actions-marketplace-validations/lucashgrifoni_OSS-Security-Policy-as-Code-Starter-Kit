@@ -71,7 +71,8 @@ def test_a_fuzzing_check_at_or_above_the_threshold_is_a_signal(score: int) -> No
     bundle = _bundle(ScorecardCheck(name="Fuzzing", score=score))
     matched, reason = fz._scorecard_fuzzing_signal(_ctx(bundle))
     assert matched is True
-    assert reason is not None and str(score) in reason
+    assert reason is not None
+    assert str(score) in reason
 
 
 # --------------------------------------------------------------------------- #

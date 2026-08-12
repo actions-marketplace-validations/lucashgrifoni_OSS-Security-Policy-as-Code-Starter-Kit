@@ -114,23 +114,26 @@ def test_a_denied_call_is_a_permission_problem(code: str, monkeypatch: pytest.Mo
 
     _codebuild_only(monkeypatch)
     _install_session(monkeypatch, _FailingClient(_client_error(code)))
+    collector = AWSEvidenceCollector()
     with pytest.raises(CollectionPermissionError):
-        AWSEvidenceCollector().collect("")
+        collector.collect("")
 
 
 @pytest.mark.parametrize("code", ["ThrottlingException", "TooManyRequestsException", "RequestLimitExceeded"])
 def test_a_throttled_call_is_a_rate_limit_not_a_permission_problem(code: str, monkeypatch: pytest.MonkeyPatch) -> None:
     _codebuild_only(monkeypatch)
     _install_session(monkeypatch, _FailingClient(_client_error(code)))
+    collector = AWSEvidenceCollector()
     with pytest.raises(RateLimitError):
-        AWSEvidenceCollector().collect("")
+        collector.collect("")
 
 
 def test_an_unrecognised_api_error_is_reported_as_a_collection_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     _codebuild_only(monkeypatch)
     _install_session(monkeypatch, _FailingClient(_client_error("SomethingNew")))
+    collector = AWSEvidenceCollector()
     with pytest.raises(CollectionNetworkError):
-        AWSEvidenceCollector().collect("")
+        collector.collect("")
 
 
 @pytest.mark.parametrize("setup", [_codebuild_only, _codepipeline_only])
@@ -139,8 +142,9 @@ def test_a_transport_failure_never_reached_aws_and_says_so(setup: Any, monkeypat
 
     setup(monkeypatch)
     _install_session(monkeypatch, _FailingClient(_transport_error()))
+    collector = AWSEvidenceCollector()
     with pytest.raises(CollectionNetworkError, match="transport"):
-        AWSEvidenceCollector().collect("")
+        collector.collect("")
 
 
 def test_an_unexpected_exception_still_becomes_a_collection_failure(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -148,8 +152,9 @@ def test_an_unexpected_exception_still_becomes_a_collection_failure(monkeypatch:
 
     _codebuild_only(monkeypatch)
     _install_session(monkeypatch, _FailingClient(TypeError("unexpected")))
+    collector = AWSEvidenceCollector()
     with pytest.raises(CollectionNetworkError):
-        AWSEvidenceCollector().collect("")
+        collector.collect("")
 
 
 # --------------------------------------------------------------------------- #
@@ -162,8 +167,9 @@ def test_an_empty_pipeline_response_is_a_not_found(monkeypatch: pytest.MonkeyPat
 
     _codepipeline_only(monkeypatch)
     _install_session(monkeypatch, _EmptyClient())
+    collector = AWSEvidenceCollector()
     with pytest.raises(ValueError, match="not found"):
-        AWSEvidenceCollector().collect("")
+        collector.collect("")
 
 
 def test_a_missing_codebuild_project_is_named_in_the_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -171,8 +177,9 @@ def test_a_missing_codebuild_project_is_named_in_the_error(monkeypatch: pytest.M
 
     _codebuild_only(monkeypatch)
     _install_session(monkeypatch, _FailingClient(_client_error("ResourceNotFoundException")))
+    collector = AWSEvidenceCollector()
     with pytest.raises(ValueError, match="proj"):
-        AWSEvidenceCollector().collect("")
+        collector.collect("")
 
 
 def test_a_transport_failure_while_opening_the_client_is_still_a_collection_error(
@@ -190,8 +197,9 @@ def test_a_transport_failure_while_opening_the_client_is_still_a_collection_erro
 
     _codebuild_only(monkeypatch)
     monkeypatch.setattr(boto3, "Session", _Session)
+    collector = AWSEvidenceCollector()
     with pytest.raises(CollectionNetworkError, match="transport"):
-        AWSEvidenceCollector().collect("")
+        collector.collect("")
 
 
 # --------------------------------------------------------------------------- #

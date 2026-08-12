@@ -661,8 +661,6 @@ def _append_gh_release_hardening(
     *,
     can_rh2: bool,
     can_rh1: bool,
-    wf_paths: list[Path],
-    github_ev: list[Path],
 ) -> None:
     """Append the GitHub release-hardening-2/-1 suggestion when its signals are present."""
 
@@ -676,7 +674,7 @@ def _append_gh_release_hardening(
                     "present; evaluate declared release posture with github-release-hardening-2 "
                     "(verify evidence JSONs are filled, not templates)."
                 ),
-                list(("github_actions_workflows", "github_evidence_json_files")),
+                ["github_actions_workflows", "github_evidence_json_files"],
             )
         )
     elif can_rh1:
@@ -721,7 +719,7 @@ def _suggestions_github(
                 ["github_actions_workflows"],
             )
         )
-    _append_gh_release_hardening(out, can_rh2=can_rh2, can_rh1=can_rh1, wf_paths=wf_paths, github_ev=github_ev)
+    _append_gh_release_hardening(out, can_rh2=can_rh2, can_rh1=can_rh1)
     if wf_paths and github_ev:
         tier = "github-level-2" if len(wf_paths) >= 2 else "github-level-1"
         out.append(
@@ -789,7 +787,7 @@ def _suggestions_gitlab(
                     "evaluate declared release posture with gitlab-release-hardening-2 "
                     "(verify evidence JSONs are filled, not templates)."
                 ),
-                list(("gitlab_ci_yaml", "gitlab_evidence_json_files")),
+                ["gitlab_ci_yaml", "gitlab_evidence_json_files"],
             )
         )
     elif can_rh1:
@@ -857,7 +855,7 @@ def _suggestions_azure(
                     "present; evaluate declared release posture with azure-release-hardening-2 "
                     "(verify evidence JSONs are filled, not templates)."
                 ),
-                list(("azure_pipelines_yaml", "azure_evidence_json_files")),
+                ["azure_pipelines_yaml", "azure_evidence_json_files"],
             )
         )
     elif can_rh1:
@@ -926,7 +924,7 @@ def _suggestions_aws(
                     "evaluate declared release posture with aws-release-hardening-2 "
                     "(verify evidence JSONs are filled, not templates)."
                 ),
-                list(("aws_codebuild_buildspec", "aws_evidence_json_files")),
+                ["aws_codebuild_buildspec", "aws_evidence_json_files"],
             )
         )
     elif can_rh1:

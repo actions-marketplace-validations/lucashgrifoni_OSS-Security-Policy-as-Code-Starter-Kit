@@ -98,7 +98,9 @@ def test_the_scan_stops_once_all_three_signals_are_found(tmp_path: Path) -> None
         _source(tmp_path, f"filler{i}.py", "nothing here")
 
     has_route, _rh, has_sig, _sh, has_replay, _ph = wh._scan_signals(tmp_path)
-    assert has_route and has_sig and has_replay
+    assert has_route
+    assert has_sig
+    assert has_replay
 
 
 def test_scan_for_any_skips_an_unreadable_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

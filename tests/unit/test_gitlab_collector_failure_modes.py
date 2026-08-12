@@ -55,15 +55,17 @@ class _FakeResponse:
 def test_a_rate_limited_response_becomes_a_typed_error() -> None:
     """429 is not a collection result; it is the API asking us to stop."""
 
+    response = _FakeResponse(429)
     with pytest.raises(RateLimitError):
-        g._enforce_rate_limit(_FakeResponse(429))
+        g._enforce_rate_limit(response)
 
 
 def test_the_retry_after_hint_is_passed_through_when_the_api_sends_one() -> None:
     """The operator needs to know how long to wait; dropping it wastes their next attempt."""
 
+    response = _FakeResponse(429, {"retry-after": "120"})
     with pytest.raises(RateLimitError) as excinfo:
-        g._enforce_rate_limit(_FakeResponse(429, {"retry-after": "120"}))
+        g._enforce_rate_limit(response)
 
     assert "120" in str(excinfo.value)
 
@@ -71,8 +73,9 @@ def test_the_retry_after_hint_is_passed_through_when_the_api_sends_one() -> None
 def test_no_retry_after_header_still_produces_a_clean_message() -> None:
     """The hint is optional; its absence must not leave a dangling fragment."""
 
+    response = _FakeResponse(429)
     with pytest.raises(RateLimitError) as excinfo:
-        g._enforce_rate_limit(_FakeResponse(429))
+        g._enforce_rate_limit(response)
 
     assert "Retry-After" not in str(excinfo.value)
 

@@ -50,7 +50,8 @@ def hcl2_missing(monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
         return real_import(name, *args, **kwargs)  # type: ignore[arg-type]
 
     spec = importlib.util.spec_from_file_location("_hcl_loader_without_hcl2", hcl_loader.__file__)
-    assert spec is not None and spec.loader is not None
+    assert spec is not None
+    assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
 
     monkeypatch.setattr(builtins, "__import__", _refuse)

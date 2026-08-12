@@ -218,16 +218,18 @@ def test_a_very_long_reason_is_truncated_in_the_verbose_line() -> None:
 def test_a_profile_naming_an_unknown_control_fails_loudly() -> None:
     """Skipping it would silently shrink the profile the operator thinks they ran."""
 
+    ctx, profile = _min_ctx(), _min_profile()
     with pytest.raises(LoadError, match="unknown control"):
-        engine._evaluate_control("NO-SUCH-001", _min_ctx(), _min_profile(), {}, {}, [])
+        engine._evaluate_control("NO-SUCH-001", ctx, profile, {}, {}, [])
 
 
 def test_a_control_with_no_evaluator_behind_it_fails_loudly() -> None:
     """A catalog entry without an implementation must not evaluate to nothing."""
 
     spec = ControlSpec(id="GOV-GHOST-999", title="Ghost", category="governance", automation="manual")
+    ctx, profile = _min_ctx(), _min_profile()
     with pytest.raises(LoadError, match="No evaluator implemented"):
-        engine._evaluate_control("GOV-GHOST-999", _min_ctx(), _min_profile(), {"GOV-GHOST-999": spec}, {}, [])
+        engine._evaluate_control("GOV-GHOST-999", ctx, profile, {"GOV-GHOST-999": spec}, {}, [])
 
 
 def _min_ctx() -> engine.EvalContext:

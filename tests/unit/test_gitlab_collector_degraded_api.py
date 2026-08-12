@@ -53,14 +53,16 @@ def test_an_optional_endpoint_degrades_to_the_conservative_default(status: int) 
 def test_a_required_endpoint_answering_404_is_a_permission_problem(status: int) -> None:
     """GitLab answers 404 for resources a token may not see; that is not absence."""
 
+    client, meta = _client(status), _meta()
     with pytest.raises(CollectionPermissionError):
-        gl._gitlab_get(_client(status), _meta(), "/projects/1", optional=False, default=None)
+        gl._gitlab_get(client, meta, "/projects/1", optional=False, default=None)
 
 
 @pytest.mark.parametrize("status", [401, 403])
 def test_an_outright_refusal_is_a_permission_problem_either_way(status: int) -> None:
+    client, meta = _client(status), _meta()
     with pytest.raises(CollectionPermissionError):
-        gl._gitlab_get(_client(status), _meta(), "/projects/1", optional=True, default={})
+        gl._gitlab_get(client, meta, "/projects/1", optional=True, default={})
 
 
 # --------------------------------------------------------------------------- #

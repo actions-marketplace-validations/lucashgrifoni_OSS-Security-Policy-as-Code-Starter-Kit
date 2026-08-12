@@ -99,7 +99,8 @@ def test_a_newer_schema_version_is_a_warning_not_an_error() -> None:
     )
 
     assert errors == []
-    assert warnings and "9.9.9" in warnings[0]
+    assert warnings
+    assert "9.9.9" in warnings[0]
 
 
 # --------------------------------------------------------------------------- #

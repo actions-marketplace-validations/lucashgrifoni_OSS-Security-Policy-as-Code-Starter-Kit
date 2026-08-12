@@ -134,7 +134,8 @@ def test_no_live_collection_metadata_yields_no_block() -> None:
 )
 def test_a_control_id_maps_to_its_structural_bucket(control_id: str, fragment: str) -> None:
     bucket = reporting._structural_bucket(control_id)
-    assert isinstance(bucket, str) and bucket
+    assert isinstance(bucket, str)
+    assert bucket
     if fragment:
         assert fragment in bucket
 

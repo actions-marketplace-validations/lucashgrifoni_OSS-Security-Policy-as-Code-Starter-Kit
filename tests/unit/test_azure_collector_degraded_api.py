@@ -155,15 +155,17 @@ def test_policy_api_refusing_the_pat_is_a_permission_error(status: int, monkeypa
     """A PAT without Code(read) must fail loudly, not yield an empty policy set."""
 
     _install(monkeypatch, _routed(policies=httpx.Response(status, json={"message": "nope"})))
+    collector = _collector()
     with pytest.raises(CollectionPermissionError):
-        _collector().collect("Proj/myrepo")
+        collector.collect("Proj/myrepo")
 
 
 @pytest.mark.parametrize("status", [401, 403])
 def test_pipelines_api_refusing_the_pat_is_a_permission_error(status: int, monkeypatch: pytest.MonkeyPatch) -> None:
     _install(monkeypatch, _routed(pipelines=httpx.Response(status, json={"message": "nope"})))
+    collector = _collector()
     with pytest.raises(CollectionPermissionError):
-        _collector().collect("Proj/myrepo")
+        collector.collect("Proj/myrepo")
 
 
 # --------------------------------------------------------------------------- #
@@ -255,8 +257,9 @@ def test_repository_without_an_id_is_rejected_by_name(monkeypatch: pytest.Monkey
     """Every later call keys off the repo id; continuing without one would query nothing."""
 
     _install(monkeypatch, _routed(repositories=httpx.Response(200, json={"value": [{"name": "myrepo"}]})))
+    collector = _collector()
     with pytest.raises(ValueError, match="missing id"):
-        _collector().collect("Proj/myrepo")
+        collector.collect("Proj/myrepo")
 
 
 def test_a_json_array_where_an_object_was_expected_becomes_a_network_error(
@@ -269,5 +272,6 @@ def test_a_json_array_where_an_object_was_expected_becomes_a_network_error(
     """
 
     _install(monkeypatch, _routed(repositories=httpx.Response(200, json=[])))
+    collector = _collector()
     with pytest.raises(CollectionNetworkError):
-        _collector().collect("Proj/myrepo")
+        collector.collect("Proj/myrepo")

@@ -133,7 +133,8 @@ def test_a_well_formed_run_beside_them_is_still_counted(tmp_path: Path) -> None:
     levels, error = _parse_sarif_findings(path)
 
     assert error is None
-    assert levels is not None and levels["error"] == 1
+    assert levels is not None
+    assert levels["error"] == 1
 
 
 # --------------------------------------------------------------------------- #

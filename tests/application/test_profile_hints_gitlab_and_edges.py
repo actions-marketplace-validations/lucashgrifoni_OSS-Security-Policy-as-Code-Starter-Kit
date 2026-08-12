@@ -143,7 +143,7 @@ def test_release_hardening_2_names_both_signals_on_every_platform(tmp_path: Path
     ev = [tmp_path / "ev.json"]
 
     gh: list[tuple[int, str, str, list[str]]] = []
-    ph._append_gh_release_hardening(gh, can_rh2=True, can_rh1=False, wf_paths=ci, github_ev=ev)
+    ph._append_gh_release_hardening(gh, can_rh2=True, can_rh1=False)
 
     cases = {
         "github-release-hardening-2": (

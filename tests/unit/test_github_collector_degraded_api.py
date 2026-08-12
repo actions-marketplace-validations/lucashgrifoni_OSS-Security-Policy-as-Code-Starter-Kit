@@ -294,8 +294,9 @@ def test_a_runtime_error_from_inside_collection_is_not_reclassified(monkeypatch:
 
     _install(monkeypatch, lambda r: httpx.Response(200, json={}))
     monkeypatch.setattr(gh, "_fetch_optional_json", _boom)
+    collector = GitHubEvidenceCollector("tok")
     with pytest.raises(RuntimeError, match="kit invariant"):
-        GitHubEvidenceCollector("tok").collect("o/r")
+        collector.collect("o/r")
 
 
 def test_an_unexpected_exception_becomes_a_collection_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -306,5 +307,6 @@ def test_an_unexpected_exception_becomes_a_collection_error(monkeypatch: pytest.
 
     _install(monkeypatch, lambda r: httpx.Response(200, json={}))
     monkeypatch.setattr(gh, "_fetch_optional_json", _boom)
+    collector = GitHubEvidenceCollector("tok")
     with pytest.raises(CollectionNetworkError):
-        GitHubEvidenceCollector("tok").collect("o/r")
+        collector.collect("o/r")
