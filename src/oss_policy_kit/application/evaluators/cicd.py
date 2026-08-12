@@ -546,6 +546,46 @@ def eval_ci_wfcallsha_055(ctx: EvalContext) -> EvalOutcome:
     )
 
 
+def _semgrep_count(value: Any) -> int | None:
+    """One count from the evidence file, or ``None`` when the value is not a count.
+
+    ``bool`` is rejected explicitly because it is an ``int`` subclass, so ``true`` would
+    otherwise be counted as one finding.
+    """
+
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
+
+
+def _semgrep_counts(data: dict[str, Any]) -> tuple[dict[str, int], int] | None:
+    """Severity counts and total from Semgrep evidence, or ``None`` when they cannot be read.
+
+    The schema is explicit: ``findings_by_severity`` is an object of non-negative integers and
+    ``findings_total`` is a non-negative integer. Anything else is a file the reader cannot
+    count, and an uncountable file is *unknown*. Unknown must not reach the adopter as a clean
+    scan -- coercing the wrong shape to ``{}`` reported ``pass`` at high confidence on evidence
+    nobody could read -- and must not reach them as ``exit 3`` either, which is what ``int()``
+    on a non-numeric count did.
+    """
+
+    raw_counts = data.get("findings_by_severity")
+    if raw_counts is None:
+        raw_counts = {}
+    if not isinstance(raw_counts, dict):
+        return None
+    counts: dict[str, int] = {}
+    for key, value in raw_counts.items():
+        count = _semgrep_count(value)
+        if count is None:
+            return None
+        counts[str(key)] = count
+    total = _semgrep_count(data.get("findings_total", 0))
+    if total is None:
+        return None
+    return counts, total
+
+
 def eval_sast_semgrep_064(ctx: EvalContext) -> EvalOutcome:
     """SAST-SEMGREP-064: SAST evidence (Semgrep) is present and current.
 
@@ -619,11 +659,21 @@ def eval_sast_semgrep_064(ctx: EvalContext) -> EvalOutcome:
             confidence="low",
         )
 
-    severity_counts = data.get("findings_by_severity", {}) or {}
-    if not isinstance(severity_counts, dict):
-        severity_counts = {}
-    high = int(severity_counts.get("ERROR", 0) or 0) + int(severity_counts.get("HIGH", 0) or 0)
-    critical = int(severity_counts.get("CRITICAL", 0) or 0)
+    countable = _semgrep_counts(data)
+    if countable is None:
+        return EvalOutcome(
+            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
+            reason=(
+                f"{evidence.name} carries no countable finding tally; `findings_by_severity` must be an "
+                "object of non-negative integers and `findings_total` a non-negative integer."
+            ),
+            remediation="Re-run `oss-policy-kit scan-sast` to regenerate the evidence file.",
+            evidence_sources=[str(evidence.resolve())],
+            confidence="low",
+        )
+    severity_counts, findings_total = countable
+    high = severity_counts.get("ERROR", 0) + severity_counts.get("HIGH", 0)
+    critical = severity_counts.get("CRITICAL", 0)
     if critical or high:
         return EvalOutcome(
             status=ControlStatus.FAIL,
@@ -642,10 +692,7 @@ def eval_sast_semgrep_064(ctx: EvalContext) -> EvalOutcome:
 
     return EvalOutcome(
         status=ControlStatus.PASS,
-        reason=(
-            f"Semgrep completed cleanly: {int(data.get('findings_total', 0) or 0)} total finding(s), "
-            "no HIGH or CRITICAL severity entries."
-        ),
+        reason=(f"Semgrep completed cleanly: {findings_total} total finding(s), no HIGH or CRITICAL severity entries."),
         remediation="Keep Semgrep up to date and re-scan at least once per release.",
         evidence_sources=[str(evidence.resolve())],
         confidence="high",
