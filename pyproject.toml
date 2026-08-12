@@ -161,21 +161,23 @@ branch = true
 [tool.coverage.report]
 show_missing = true
 skip_covered = false
-# Floor, not a target. Measured 94.55% locally and 94.23% in CI on the same tree, so the
-# Windows/Linux difference the old comment budgeted for is ~0.01 points, not "a few"; the
-# remaining headroom is for Hypothesis-seed variance in the property suite.
+# 100 is the measured state, not an aspiration: every statement and every branch in src/ is
+# exercised. The floor sits there so a new uncovered line fails the run that introduced it,
+# which is the only moment covering it is cheap. Restate it in
+# .github/workflows/github-ci-cd.yml too -- CI passes --cov-fail-under on the command line,
+# so changing only one leaves the gate at the old value.
 #
-# Deliberately below 100 and staying there. Chasing the last points in this codebase does
-# not buy tests, it buys the opposite: two audited cases (the release-hardening fallbacks
-# in profile_hints, the emptied PROFILE_DIRECTORY_ALIASES) were unreachable by
-# construction, and the four tests that "covered" one of them asserted
-# `isinstance(result, list)` on a state the caller cannot produce -- executing the line
-# while checking nothing. They were deleted along with the code. Raise this as real
-# coverage grows; never lower it to accommodate a regression.
-# 100 is the measured state, not an aspiration: every statement and every branch in
-# src/ is exercised. The floor is set there so a new uncovered line fails the run that
-# introduced it, which is the only moment it is cheap to cover. Branches that cannot be
-# reached carry `# pragma: no cover` (or `no branch`) with the reason written beside them.
+# What the last points cost, and why they were still worth taking. The earlier note here
+# argued for staying below 100, because two audited cases (the release-hardening fallbacks in
+# profile_hints, the emptied PROFILE_DIRECTORY_ALIASES) were unreachable by construction and
+# the four tests that "covered" one of them asserted `isinstance(result, list)` on a state the
+# caller cannot produce -- executing the line while checking nothing. That danger is real and
+# the answer is not a lower floor: it is to prove unreachability rather than assert it, then
+# delete the code or mark it. Fourteen branches survive that way, each carrying
+# `# pragma: no cover` (or `no branch`, where only one arm is dead) and the reason beside it.
+# The push to 100 also found two live defects, so the last points bought more than a number.
+#
+# Never lower this to accommodate a regression.
 fail_under = 100
 exclude_lines = [
   "pragma: no cover",
