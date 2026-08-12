@@ -1,9 +1,9 @@
-"""What the four scanners say when the scan does not go cleanly.
+"""What the five scanners say when the scan does not go cleanly.
 
-`scan-cfn`, `scan-bicep`, `scan-pulumi` and `scan-sast` share one tail: an `OSError` while
+`scan-cfn`, `scan-bicep`, `scan-pulumi`, `scan-iac` and `scan-sast` share one tail: an `OSError` while
 writing evidence is the adopter's to fix and exits 2; anything else is the kit's fault and exits
 3 with a message rather than a traceback; and a deliberate exit raised deeper survives both.
-Four copies of that tail means four chances for one of them to drift, so all four are asserted.
+Five copies of that tail means five chances for one of them to drift, so all five are asserted.
 
 The parse-error warning is the other half. A scanner that skips files it could not read and says
 nothing produces a report an adopter reads as "these templates are clean" -- so when files fail
@@ -21,7 +21,7 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from oss_policy_kit.cli import scan_bicep, scan_cfn, scan_pulumi, scan_sast
+from oss_policy_kit.cli import scan_bicep, scan_cfn, scan_iac, scan_pulumi, scan_sast
 from oss_policy_kit.cli.main import app
 from oss_policy_kit.infrastructure.scanners.semgrep_adapter import SemgrepRunOutcome
 
@@ -31,6 +31,7 @@ _COMMANDS = [
     ("scan-cfn", scan_cfn, "run_scan"),
     ("scan-bicep", scan_bicep, "run_scan"),
     ("scan-pulumi", scan_pulumi, "run_scan"),
+    ("scan-iac", scan_iac, "run_scan"),
     ("scan-sast", scan_sast, "run_semgrep"),
 ]
 _IDS = [name for name, _mod, _attr in _COMMANDS]
