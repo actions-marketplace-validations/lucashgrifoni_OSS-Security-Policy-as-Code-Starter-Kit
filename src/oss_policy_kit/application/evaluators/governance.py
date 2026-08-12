@@ -1043,7 +1043,10 @@ def eval_gov_disc_065(ctx: EvalContext) -> EvalOutcome:
     triage_sla = data.get("triage_sla_hours")
     pdp = data.get("public_disclosure_policy") or {}
     missing = _disclosure_missing_fields(contact, ack_sla, triage_sla, pdp)
-    if missing:
+    # Unreachable: every field `_disclosure_missing_fields` reads is `required` in the
+    # schema with a floor, so an incomplete policy is refused at load with the field
+    # named. Kept so loosening the schema cannot silently pass an SLA-less policy.
+    if missing:  # pragma: no cover
         return EvalOutcome(
             status=ControlStatus.FAIL,
             reason=(
@@ -1267,7 +1270,10 @@ def eval_release_archive_063(ctx: EvalContext) -> EvalOutcome:
     retention = data.get("retention_years")
     archive_dest = str(data.get("archive_destination", "")).strip()
     vuln_doc = str(data.get("vulnerability_handling_doc", "")).strip()
-    if not isinstance(retention, int) or retention < 0:
+    # Unreachable while the schema requires `retention_years` to be a non-negative
+    # integer; the refusal happens at load. Kept as the guard the arithmetic below
+    # depends on.
+    if not isinstance(retention, int) or retention < 0:  # pragma: no cover
         return EvalOutcome(
             status=ControlStatus.MANUAL_REVIEW_REQUIRED,
             reason="release-archival-policy.json has missing or invalid retention_years.",

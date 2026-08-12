@@ -232,3 +232,92 @@ def test_a_diagnostic_setting_with_no_scope_covers_nothing(tmp_path: Path) -> No
     (tmp_path / "main.bicep").write_text(body, encoding="utf-8")
 
     assert "IAC-BICEP-005" in {f.rule_id for f in run_bicep_scan(tmp_path).findings}
+
+
+# --------------------------------------------------------------------------- #
+# Evidence that is valid but unfilled
+# --------------------------------------------------------------------------- #
+
+
+def test_ai_agent_evidence_left_holding_a_scaffold_token_is_refused(tmp_path: Path) -> None:
+    """It passes its schema and still attests nothing: `REPLACE_ME` is not an attester."""
+
+    from oss_policy_kit.application.evaluators._shared import _load_ai_agent_evidence
+
+    path = tmp_path / ".oss-policy-kit" / "evidence" / "ai-agent" / "memory-policy.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": "ai-agent-baseline/v1",
+                "control_id": "AI-AGENT-009",
+                "attested_at": "2026-08-11",
+                "attested_by": "REPLACE_ME",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    _evidence, data, outcome = _load_ai_agent_evidence(_ctx(tmp_path), "memory-policy.json", "AI agent memory policy")
+
+    assert data is None
+    assert outcome is not None
+    assert outcome.status is ControlStatus.NOT_EVALUATED
+    assert outcome.operational_warnings, "the operator has to be told the file is still a template"
+
+
+def test_runner_group_evidence_left_holding_a_scaffold_token_is_refused(tmp_path: Path) -> None:
+    """Same shape on a different control: an unfilled template must not certify a runner group."""
+
+    from oss_policy_kit.application.evaluators import github
+
+    path = tmp_path / ".oss-policy-kit" / "evidence" / "runner-groups.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": "runner-groups/v1",
+                "attested_at": "2026-08-11",
+                "attested_by": "REPLACE_ME",
+                "org_name": "contoso",
+                "runner_groups": [
+                    {
+                        "name": "default",
+                        "restricted_to_private_repos": True,
+                        "allows_public_repositories": False,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    workflow = tmp_path / ".github" / "workflows" / "ci.yml"
+    workflow.parent.mkdir(parents=True)
+    workflow.write_text("on: push\njobs:\n  b:\n    runs-on: ubuntu-latest\n", encoding="utf-8")
+
+    ctx = EvalContext(
+        repo_root=tmp_path,
+        profile_id="github-level-3",
+        workflows=WorkflowAnalysis(workflow_paths=[workflow]),
+        azure_pipelines=AzurePipelineAnalysis(),
+        aws_ci=AwsCiAnalysis(),
+        scorecard=None,
+    )
+    outcome = github.eval_gh_runner_062(ctx)
+
+    assert outcome.status is ControlStatus.NOT_EVALUATED
+    assert "REPLACE_ME" in " ".join(outcome.operational_warnings)
+
+
+def test_a_cloudformation_intrinsic_over_a_mapping_node_is_re_encoded() -> None:
+    """`!Fn::If`-style tags carry mappings; the long form has to survive the round trip."""
+
+    import yaml as yaml_module
+
+    from oss_policy_kit.infrastructure.iac.cfn.scanner import _CfnSafeLoader, _intrinsic_constructor
+
+    loader = _CfnSafeLoader("{}")
+    node = yaml_module.compose("Key: value")
+    ctor = _intrinsic_constructor("Fn::If")
+
+    assert ctor(loader, node) == {"Fn::If": {"Key": "value"}}

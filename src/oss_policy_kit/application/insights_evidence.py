@@ -229,6 +229,9 @@ def load_insights_evidence(repo_root: Path) -> InsightsEvidence | None:
     errors, _warnings = validate_ingest_structure(doc)
     try:
         source_rel = chosen.resolve().relative_to(repo_root.resolve()).as_posix()
-    except ValueError:
+    except ValueError:  # pragma: no cover - discovery only ever returns paths inside the repo
+        # `relative_to` can only raise for a file outside `repo_root`, which
+        # `discover_insights_file` does not produce. Kept so a future discovery that
+        # follows a link records a basename rather than leaking an absolute path.
         source_rel = chosen.name
     return InsightsEvidence(source_rel=source_rel, valid=not errors, signals=extract_signals(doc))

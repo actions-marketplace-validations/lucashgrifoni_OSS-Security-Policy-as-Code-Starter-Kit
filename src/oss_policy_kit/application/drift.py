@@ -84,7 +84,10 @@ def _extract_profile_id(report: dict[str, Any]) -> str | None:
             return stripped
     if flat is not None and not isinstance(flat, str):
         coerced = str(flat).strip()
-        if coerced:
+        # pragma: no branch is on the next line because the falsy arm cannot be reached:
+        # `flat` is neither None nor a str here, and `str()` of any other object is
+        # non-empty. The check stays as the guard it reads as.
+        if coerced:  # pragma: no branch
             return coerced
     return None
 

@@ -543,7 +543,10 @@ def _rule_netpol_001_no_netpol(repo_root: Path, manifests: list[K8sManifest]) ->
     out: list[K8sFinding] = []
     for ns in sorted(workload_namespaces - netpol_namespaces):
         anchor = sample_workload.get(ns)
-        if anchor is None:
+        # `ns` came from `workload_namespaces`, which is populated in the same pass that
+        # fills `sample_workload`, so the lookup cannot miss. The guard keeps the finding
+        # from being anchored to nothing if those two ever drift apart.
+        if anchor is None:  # pragma: no cover
             continue
         out.append(
             _finding(

@@ -172,7 +172,11 @@ skip_covered = false
 # `isinstance(result, list)` on a state the caller cannot produce -- executing the line
 # while checking nothing. They were deleted along with the code. Raise this as real
 # coverage grows; never lower it to accommodate a regression.
-fail_under = 93
+# 100 is the measured state, not an aspiration: every statement and every branch in
+# src/ is exercised. The floor is set there so a new uncovered line fails the run that
+# introduced it, which is the only moment it is cheap to cover. Branches that cannot be
+# reached carry `# pragma: no cover` (or `no branch`) with the reason written beside them.
+fail_under = 100
 exclude_lines = [
   "pragma: no cover",
   "if TYPE_CHECKING:",

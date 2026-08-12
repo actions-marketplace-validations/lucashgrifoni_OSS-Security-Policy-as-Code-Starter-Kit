@@ -212,7 +212,9 @@ def _azure_pipeline_paths(repo_root: Path) -> list[Path]:
     paths: list[Path] = []
     for pattern in patterns:
         for p in sorted(repo_root.glob(pattern)):
-            if p not in seen:
+            # The six globs above are mutually exclusive, so the duplicate arm is not
+            # reachable today; the guard is what keeps that true if one is widened.
+            if p not in seen:  # pragma: no branch
                 seen.add(p)
                 paths.append(p)
     return paths

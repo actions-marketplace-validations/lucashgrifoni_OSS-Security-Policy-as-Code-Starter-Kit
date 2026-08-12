@@ -156,7 +156,10 @@ def _load_runs(path: Path) -> tuple[list[Any] | None, str | None]:
         doc = json.loads(raw)
     except json.JSONDecodeError as exc:
         return None, f"Could not parse SARIF JSON: {exc}"
-    except RecursionError as exc:
+    except RecursionError as exc:  # pragma: no cover - the depth guard above refuses first
+        # Unreachable while `too_deep_reason` runs before `json.loads`, and kept because
+        # it is the only thing standing between a deeply nested document and an exit-3
+        # crash if that ordering is ever changed.
         return None, f"Could not parse SARIF JSON: document is too deeply nested ({exc})"
     if not isinstance(doc, dict):
         return None, "SARIF file missing top-level 'runs' array."

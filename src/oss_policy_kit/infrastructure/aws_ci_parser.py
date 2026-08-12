@@ -241,7 +241,10 @@ def _scan_codepipeline_export(path: Path, result: AwsCiAnalysis) -> None:
         return
     result.codepipeline_valid_export_paths.append(path)
     pipe = load_committed_codepipeline_document(path)
-    if isinstance(pipe, dict):
+    # `committed_codepipeline_export_is_minimal` already loaded this document and
+    # returned False for anything that is not an object, so the falsy arm is not
+    # reachable from here.
+    if isinstance(pipe, dict):  # pragma: no branch
         role = str(pipe.get("roleArn", "")).strip()
         if role.startswith("arn:aws:iam::"):
             result.codepipeline_committed_iam_role_paths.append(path)

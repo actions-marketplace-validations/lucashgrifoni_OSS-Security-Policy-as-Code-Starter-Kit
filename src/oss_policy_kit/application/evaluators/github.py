@@ -865,7 +865,10 @@ def eval_gh_runner_062(ctx: EvalContext) -> EvalOutcome:
     posture_outcome = _gh_ephemeral_posture_outcome(all_self, ephemeral, evidence)
     if posture_outcome is not None:
         return posture_outcome
-    if not evidence.is_file():
+    # Unreachable: `_gh_ephemeral_posture_outcome` returns None only when the evidence
+    # file exists, so by here it does. Kept because the two functions are separately
+    # editable and this arm is what stops a missing file reading as a clean posture.
+    if not evidence.is_file():  # pragma: no cover
         return EvalOutcome(
             status=ControlStatus.MANUAL_REVIEW_REQUIRED,
             reason="Self-hosted runner posture cannot be fully assessed without a runner-groups.json evidence file.",
@@ -889,7 +892,10 @@ def eval_gh_runner_062(ctx: EvalContext) -> EvalOutcome:
         return blocked
     assert data is not None
     groups = data.get("runner_groups") or []
-    if not isinstance(groups, list) or not groups:
+    # Unreachable while the schema keeps `runner_groups` required with `minItems: 1`,
+    # which is where an empty list is actually refused. This arm is the second line of
+    # defence if that constraint is ever relaxed.
+    if not isinstance(groups, list) or not groups:  # pragma: no cover
         return EvalOutcome(
             status=ControlStatus.FAIL,
             reason="runner-groups.json contains no runner_groups entries.",

@@ -128,9 +128,12 @@ def _intrinsic_constructor(tag: str) -> Callable[[yaml.SafeLoader, yaml.Node], A
             return {tag: loader.construct_scalar(node)}
         if isinstance(node, yaml.SequenceNode):
             return {tag: loader.construct_sequence(node, deep=True)}
-        if isinstance(node, yaml.MappingNode):
+        if isinstance(node, yaml.MappingNode):  # pragma: no branch
             return {tag: loader.construct_mapping(node, deep=True)}
-        return None
+        # Scalar, sequence and mapping are the only node kinds PyYAML composes, so
+        # this is unreachable; it keeps the constructor total rather than raising
+        # AttributeError if that ever stops being true.
+        return None  # pragma: no cover
 
     return _ctor
 
