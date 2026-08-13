@@ -25,6 +25,7 @@ from oss_policy_kit.application.evaluators._shared import (
     _audit_log_streaming_schema,
     _audit_stream_signal_match,
     _detect_sbom_format_and_version,
+    _digest_gate_outcome,
     _disclosure_policy_schema,
     _disclosure_sla_signal_match,
     _evidence_is_api_backed,
@@ -45,15 +46,18 @@ from oss_policy_kit.application.evaluators._shared import (
     _read_security,
     _release_archival_policy_schema,
     _release_archive_signal_match,
+    _sbom_artifact_digest_strings,
     _validate_bsi_tr_03183_v2_1,
     _validate_json_evidence,
     _verification_freshness_status,
     _workflow_text,
     checks_as_map,
     contextlib,
+    has_placeholder_values,
     insights_self_attested_outcome,
     json,
 )
+from oss_policy_kit.application.input_limits import bad_input_detail
 from oss_policy_kit.domain.models import utc_now
 
 _GITHUB_DIR = ".github"
@@ -321,7 +325,13 @@ def _classify_evidence_files(
                 expiry_warns,
                 EvalOutcome(
                     status=ControlStatus.MANUAL_REVIEW_REQUIRED,
-                    reason=f"Evidence file {path.name} is unreadable or invalid JSON: {exc}.",
+                    # M-002: an OSError stringifies with the filename it was handed, which the CLI
+                    # has already resolved -- so `{exc}` puts the auditor's home directory and OS
+                    # account name into a `reason` that reports render verbatim, in the same report
+                    # whose `target_path` was deliberately reduced to a basename. `bad_input_detail`
+                    # is the project's path-free rendering of a read failure; the file is already
+                    # named by `path.name`, which is the part the operator needs.
+                    reason=f"Evidence file {path.name} is unreadable or invalid JSON: {bad_input_detail(exc)}.",
                     remediation="Repair or regenerate the evidence JSON file.",
                     evidence_sources=[str(path.resolve())],
                     confidence="low",
@@ -695,35 +705,87 @@ def eval_org_mfa_001(ctx: EvalContext) -> EvalOutcome:
     )
 
 
-def _evidence_sbom_format(evid: Path) -> str | None:
-    """Return the documented SPDX/CycloneDX SBOM format string from one evidence file, else None."""
+def _read_evidence_json(evid: Path) -> Any:
+    """Parse one evidence file, or return None when it is absent or the kit cannot read it.
+
+    An evidence file the kit cannot read is GOV-EVIDFRESH-054's business; here it simply
+    documents nothing, so the control keeps looking for real evidence instead of ending
+    the run on it.
+    """
 
     if not evid.is_file():
         return None
     with contextlib.suppress(OSError, UnicodeDecodeError, json.JSONDecodeError):
-        data = json.loads(evid.read_text(encoding="utf-8"))
-        sbom_block = data.get("sbom") if isinstance(data, dict) else None
-        fmt = str(sbom_block.get("format", "")).strip() if isinstance(sbom_block, dict) else ""
-        if fmt and ("spdx" in fmt.lower() or "cyclonedx" in fmt.lower()):
-            return fmt
+        return json.loads(evid.read_text(encoding="utf-8"))
     return None
 
 
-def _sbom_format_from_evidence(ctx: EvalContext) -> EvalOutcome | None:
-    """PASS outcome when an Azure/AWS SBOM evidence file documents an SPDX/CycloneDX format."""
+def _declared_sbom_format(data: Any) -> str | None:
+    """Return the SPDX/CycloneDX format string declared in already-parsed evidence, else None."""
 
+    sbom_block = data.get("sbom") if isinstance(data, dict) else None
+    fmt = str(sbom_block.get("format", "")).strip() if isinstance(sbom_block, dict) else ""
+    if fmt and ("spdx" in fmt.lower() or "cyclonedx" in fmt.lower()):
+        return fmt
+    return None
+
+
+def _evidence_sbom_format(evid: Path) -> str | None:
+    """Return the documented SPDX/CycloneDX SBOM format string from one evidence file, else None."""
+
+    return _declared_sbom_format(_read_evidence_json(evid))
+
+
+def _unusable_sbom_evidence_outcome(evid: Path, data: dict[str, Any]) -> EvalOutcome | None:
+    """Refuse an evidence file that declares an SBOM format it cannot back, else ``None``.
+
+    `scaffold-evidence` writes `sbom.format: "cyclonedx"` into the template, so the declared
+    format cannot tell a filled-in attestation from a scaffold nobody edited. The artifact-bound
+    siblings that read this same file (AZ-ARTSBOM-058, AWS-SBOMART-058) run two gates over it:
+    unreplaced tokens first, then digests that are template values or not SHA-256 at all.
+    Replacing the obvious `REPLACE_ME` tokens and leaving the shipped `aaaa…`/`bbbb…` digests
+    clears the first gate alone, so this reader — which parses the file itself — runs both.
+    """
+
+    blocked = _evidence_placeholder_outcome(evid, has_placeholder_values(data))
+    if blocked is not None:
+        return blocked
+    return _digest_gate_outcome(evid, _sbom_artifact_digest_strings(data))
+
+
+def _sbom_format_from_evidence(ctx: EvalContext) -> tuple[EvalOutcome | None, EvalOutcome | None]:
+    """Read the Azure/AWS SBOM evidence files as ``(credit, unusable)``.
+
+    ``credit`` is the PASS earned by the first file that documents an SPDX/CycloneDX format and
+    can back it; ``unusable`` is the refusal earned by the first file that declares one it cannot
+    back. A refusal never ends the walk: only one of the two files has to be usable, and the
+    control has two further routes after this one, so the azure scaffold sitting untouched beside
+    a real SBOM must not cost the repository the credit that SBOM earns. The refusal travels back
+    so the caller can name the file it refused rather than report finding nothing.
+    """
+
+    unusable: list[EvalOutcome] = []
     for evid_name in ("azure-sbom-artifact.json", "aws-sbom-artifact.json"):
         evid = ctx.repo_root / _KIT_DIR / "evidence" / evid_name
-        fmt = _evidence_sbom_format(evid)
-        if fmt:
-            return EvalOutcome(
+        data = _read_evidence_json(evid)
+        fmt = _declared_sbom_format(data)
+        if not fmt:
+            continue
+        refused = _unusable_sbom_evidence_outcome(evid, data)
+        if refused is not None:
+            unusable.append(refused)
+            continue
+        return (
+            EvalOutcome(
                 status=ControlStatus.PASS,
                 reason=f"Evidence documents SBOM format '{fmt}' (SPDX/CycloneDX).",
                 remediation="Keep SBOM format and digest records current with each release.",
                 evidence_sources=[str(evid.resolve())],
                 confidence="medium",
-            )
-    return None
+            ),
+            None,
+        )
+    return None, unusable[0] if unusable else None
 
 
 def _classify_sbom_file(p: Path) -> tuple[str | None, str | None, str | None]:
@@ -819,12 +881,16 @@ def _sbom_ci_signal(ctx: EvalContext) -> EvalOutcome | None:
 def eval_build_sbom_qual_003(ctx: EvalContext) -> EvalOutcome:
     """BUILD-SBOM-QUAL-003: SBOM format validity — SPDX or CycloneDX document detectable in repo or evidence."""
 
-    evidence_outcome = _sbom_format_from_evidence(ctx)
-    if evidence_outcome is not None:
-        return evidence_outcome
+    credit, unusable = _sbom_format_from_evidence(ctx)
+    if credit is not None:
+        return credit
     sbom_files = _find_sbom_files(ctx.repo_root)
     if sbom_files:
         return _scan_repo_sbom_files(sbom_files)
+    # Ahead of the CI keyword signal and the FAIL below, both of which say no evidence was found:
+    # a file the kit refused is evidence it found and read, and naming it is what an operator can act on.
+    if unusable is not None:
+        return unusable
     ci_outcome = _sbom_ci_signal(ctx)
     if ci_outcome is not None:
         return ci_outcome
@@ -1188,11 +1254,13 @@ def eval_prov_verify_061(ctx: EvalContext) -> EvalOutcome:
     source_suffix = ""
     if isinstance(source_raw, str) and source_raw.strip():
         source_suffix = f" source={source_raw.strip()};"
-    # ADR-028 (opt-in): a fully verified attestation record (transparency-log inclusion
-    # confirmed + fresh verified_at) is the canonical ATTESTED case. Gated behind
-    # ``--enable-attested``; default off keeps the historical PASS. The crypto verification
-    # itself happens in CI (gh attestation verify / cosign verify-bundle) and is recorded in
-    # this structured evidence file — the kit validates that record, it does not re-sign.
+    # ADR-028: a fully verified attestation record (transparency-log inclusion confirmed +
+    # fresh verified_at) is the canonical ATTESTED case. The CLI has passed
+    # ``--enable-attested`` by default since v8.0.0 (ADR-041), so ATTESTED is what an adopter
+    # sees; ``--no-enable-attested`` returns the historical PASS for one deprecation cycle, and
+    # the library default stays off for callers that build an EvalContext directly. The crypto
+    # verification itself happens in CI (gh attestation verify / cosign verify-bundle) and is
+    # recorded in this structured evidence file — the kit validates that record, it does not re-sign.
     attested = ctx.enable_attested
     status = ControlStatus.ATTESTED if attested else ControlStatus.PASS
     basis = (

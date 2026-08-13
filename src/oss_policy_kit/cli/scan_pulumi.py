@@ -16,8 +16,16 @@ import sys
 import typer
 
 from oss_policy_kit.adapters.local_paths import resolve_existing_dir
-from oss_policy_kit.cli.common import app, exit_for_unexpected, markup_safe, stderr_console, write_stdout_text
+from oss_policy_kit.cli.common import (
+    app,
+    display_path,
+    exit_for_unexpected,
+    markup_safe,
+    stderr_console,
+    write_stdout_text,
+)
 from oss_policy_kit.cli.help_text import CMD_PANEL_SCAN
+from oss_policy_kit.cli.scan_errors import exit_for_unwritable_evidence
 from oss_policy_kit.domain.errors import OssPolicyKitError
 from oss_policy_kit.infrastructure.iac.pulumi.scanner import (
     DEFAULT_INCLUDE_GLOBS,
@@ -94,7 +102,7 @@ def scan_pulumi_cmd(
                 f"scan-pulumi: {outcome.status} -- "
                 f"files={len(outcome.files_scanned)} "
                 f"findings={len(outcome.findings)} "
-                f"-> {evidence_path}\n",
+                f"-> {display_path(evidence_path, root=repo)}\n",
             )
             if outcome.parse_errors:
                 stderr_console().print(
@@ -108,7 +116,6 @@ def scan_pulumi_cmd(
     except typer.Exit:
         raise
     except OSError as exc:
-        stderr_console().print(f"[red]Error:[/red] {markup_safe(exc)}")
-        raise typer.Exit(code=2) from exc
+        exit_for_unwritable_evidence(exc)
     except Exception as exc:  # noqa: BLE001 - last-resort user message
         exit_for_unexpected(exc)
