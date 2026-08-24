@@ -168,7 +168,7 @@ def _load_enrichment(path: Path) -> tuple[dict[str, dict[str, Any]], SourceRecor
         # nesting limit and a bare ValueError past CPython's 4300-digit integer
         # conversion limit. Both must degrade to an honest "unreadable" record —
         # correlate-findings documents that an unreadable source is never raised.
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        raw = json.loads(path.read_text(encoding="utf-8-sig"))
     except BAD_INPUT_ERRORS:
         return {}, SourceRecord(path=rel, kind="enrichment-snapshot", tool=tool, status="unreadable")
     if not isinstance(raw, dict):
