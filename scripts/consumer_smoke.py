@@ -126,7 +126,7 @@ def _resolve_venv_dir(repo_root: Path, value: Path | None) -> Path:
     return venv_dir
 
 
-def _resolve_smoke_venv(repo_root: Path, requested: Path | None) -> tuple[Path, Path]:
+def _resolve_smoke_venv() -> tuple[Path, Path]:
     """Return ``(venv_dir, containment_root)`` for the smoke virtualenv.
 
     The venv used to live inside the repository unconditionally, which tied the length of every
@@ -137,13 +137,19 @@ def _resolve_smoke_venv(repo_root: Path, requested: Path | None) -> tuple[Path, 
     Moving it to a temp directory is the obvious repair and, done carelessly, removes a guard that
     exists on purpose: :func:`_remove_virtualenv` calls ``shutil.rmtree``, and every path reaching
     it is forced through :func:`_resolve_repo_child`, which refuses anything outside the
-    repository. So the containment is kept and its ROOT is parameterised instead of dropped. A
-    directory the operator names must still sit inside the repository; a directory this script
-    chooses is one it created itself, and deletion is confined to that.
+    repository. So the containment is kept and its ROOT is parameterised instead of dropped: the
+    directory this script chooses is one it created itself, and deletion is confined to that.
+
+    A ``--venv-dir`` override shipped with the first version of this fix and was withdrawn. It let
+    the operator choose the directory the venv -- and therefore the interpreter this script
+    executes -- was built in, which Snyk Code reported as a command-injection dataflow from the
+    argument parser into :func:`subprocess.run`. By the letter of that class it is a false
+    positive: every call passes a list with ``shell=False``, and :func:`_safe_python_exe` already
+    refuses an interpreter resolving outside the venv. It was removed anyway, because the flag was
+    convenience rather than repair -- the MAX_PATH defect is fixed by the default alone -- and a
+    suppression would have needed an owner and an expiry to buy nothing.
     """
 
-    if requested is not None:
-        return _resolve_venv_dir(repo_root, requested), repo_root
     containment_root = Path(tempfile.mkdtemp(prefix="oss-policy-kit-smoke-")).resolve()
     return _resolve_venv_dir(containment_root, _DEFAULT_VENV_DIR), containment_root
 
@@ -219,16 +225,6 @@ def main() -> int:
         help="Repository root (default: current directory).",
     )
     parser.add_argument(
-        "--venv-dir",
-        type=Path,
-        default=None,
-        help=(
-            "Where to build the throwaway virtualenv. Must stay inside --repo-root. "
-            "Default: a temporary directory, so the installed paths do not inherit the "
-            "repository's own path length (Windows MAX_PATH)."
-        ),
-    )
-    parser.add_argument(
         "--keep-venv",
         action="store_true",
         help="Do not delete the venv after the run.",
@@ -236,7 +232,7 @@ def main() -> int:
     args = parser.parse_args()
 
     repo_root = _resolve_current_repo_root(args.repo_root)
-    venv_dir, venv_containment = _resolve_smoke_venv(repo_root, args.venv_dir)
+    venv_dir, venv_containment = _resolve_smoke_venv()
     out_summary = _resolve_repo_child(
         repo_root,
         _DEFAULT_OUTPUT_SUMMARY,

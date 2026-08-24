@@ -18,10 +18,14 @@ is there on purpose. `_remove_virtualenv` runs `shutil.rmtree`, and every path i
 through `_resolve_repo_child`, which refuses anything outside the repository. Deleting that
 containment to gain a shorter path trades a broken script for a dangerous one.
 
-So containment is kept and its ROOT is parameterised: when the operator names a directory it must
-still sit inside the repository, and when the script picks the location itself it creates the root
-and confines deletion to that. The guard is not relaxed; it is pointed at whichever tree the venv
-legitimately belongs to.
+So containment is kept and its ROOT is parameterised: the script creates the root itself and
+confines deletion to that. The guard is not relaxed; it is pointed at the tree the venv actually
+belongs to.
+
+A `--venv-dir` override shipped with the first version of this fix and was withdrawn after Snyk
+Code reported the operator-chosen interpreter path as a command-injection dataflow. The reasoning
+is on `_resolve_smoke_venv`; what matters here is that the MAX_PATH repair never depended on it,
+so the tests below exercise the only path that remains.
 """
 
 from __future__ import annotations
@@ -45,7 +49,7 @@ def test_the_default_venv_is_not_created_inside_the_repository(tmp_path: Path) -
 
     repo_root = _repo(tmp_path)
 
-    venv_dir, containment = consumer_smoke._resolve_smoke_venv(repo_root, None)
+    venv_dir, containment = consumer_smoke._resolve_smoke_venv()
     try:
         assert not consumer_smoke._is_relative_to(venv_dir, repo_root), (
             "the venv is still anchored to the repository, so its path length follows the clone location"
@@ -64,9 +68,7 @@ def test_the_default_location_is_a_direct_child_of_the_systems_temporary_directo
     directory too, so the check was true either way and measured nothing.
     """
 
-    repo_root = _repo(tmp_path)
-
-    venv_dir, containment = consumer_smoke._resolve_smoke_venv(repo_root, None)
+    venv_dir, containment = consumer_smoke._resolve_smoke_venv()
     try:
         assert containment.parent == Path(tempfile.gettempdir()).resolve(), (
             f"the containment root is nested somewhere else entirely: {containment}"
@@ -76,45 +78,29 @@ def test_the_default_location_is_a_direct_child_of_the_systems_temporary_directo
         shutil.rmtree(containment, ignore_errors=True)
 
 
-def test_two_repositories_at_different_depths_get_equally_short_venvs(tmp_path: Path) -> None:
-    """The defect was that the venv path grew with the clone path. It must not any more."""
+def test_the_venv_path_is_short_enough_for_the_limit_that_broke_it(tmp_path: Path) -> None:
+    """The defect was measured in characters, so the guard is measured in characters too.
 
-    shallow = _repo(tmp_path)
-    deep = tmp_path / ("nested/" * 12).rstrip("/")
-    deep.mkdir(parents=True)
+    An earlier version compared two repositories at different depths and asserted their venv paths
+    came out the same length. That was a real test while `_resolve_smoke_venv` still took the
+    repository as an argument. Once the `--venv-dir` override was withdrawn the function stopped
+    seeing any caller path at all, and the comparison decayed into asserting that two `mkdtemp`
+    results are the same length -- true by construction, and no longer about the defect.
 
-    a_dir, a_root = consumer_smoke._resolve_smoke_venv(shallow, None)
-    b_dir, b_root = consumer_smoke._resolve_smoke_venv(deep, None)
-    try:
-        assert len(str(a_dir)) == len(str(b_dir)), "the venv path still varies with the repository's depth"
-    finally:
-        shutil.rmtree(a_root, ignore_errors=True)
-        shutil.rmtree(b_root, ignore_errors=True)
-
-
-def test_a_directory_the_operator_names_still_has_to_live_in_the_repository(tmp_path: Path) -> None:
-    """The containment guard is the reason this fix is not simply "use a temp directory".
-
-    `_remove_virtualenv` deletes recursively. An operator-supplied path outside the repository is
-    exactly what that guard exists to refuse, and parameterising the root must not soften it.
+    What still needs holding is the number that broke it: the reproduction had the worst installed
+    path at 274 against a 260 limit. The venv root is the part this function controls, and what
+    gets installed underneath needs room to fit, so the root has to stay far below the limit
+    rather than merely somewhere else.
     """
 
-    repo_root = _repo(tmp_path)
-    outside = repo_root.parent / "outside-venv"
-
-    with pytest.raises(SystemExit):
-        consumer_smoke._resolve_smoke_venv(repo_root, outside)
-
-
-def test_a_directory_the_operator_names_is_used_as_given(tmp_path: Path) -> None:
-    """And the escape hatch has to actually work, or `--keep-venv` inspection loses its point."""
-
-    repo_root = _repo(tmp_path)
-
-    venv_dir, containment = consumer_smoke._resolve_smoke_venv(repo_root, Path("my-venv"))
-
-    assert venv_dir == (repo_root / "my-venv").resolve()
-    assert containment == repo_root
+    venv_dir, containment = consumer_smoke._resolve_smoke_venv()
+    try:
+        assert len(str(venv_dir)) < 120, (
+            f"the venv root is {len(str(venv_dir))} characters, leaving too little of the "
+            f"260-character budget for the paths installed beneath it: {venv_dir}"
+        )
+    finally:
+        shutil.rmtree(containment, ignore_errors=True)
 
 
 def test_the_cleanup_guard_still_refuses_a_directory_that_is_not_a_virtualenv(tmp_path: Path) -> None:
