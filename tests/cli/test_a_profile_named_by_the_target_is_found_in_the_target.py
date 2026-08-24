@@ -166,19 +166,35 @@ def test_a_profile_missing_from_the_target_is_not_silently_taken_from_the_operat
     assert not (out / "evaluation-report.json").is_file()
 
 
-def test_the_refusal_does_not_name_the_operators_account(tmp_path: Path) -> None:
-    """Anchoring builds a path the kit prints, so the message must stay free of the host account.
+def test_the_refusal_does_not_print_the_host_path(tmp_path: Path) -> None:
+    """Anchoring builds a path the kit prints, so the message must not carry the host layout.
 
-    `display_path` is what keeps this true -- it replaces the home directory with `~`. Pinned
-    here because the anchoring above is what made the kit print a constructed path at all.
+    The first version asserted `Path.home().name not in output`. It passed on Windows, failed in
+    CI, and BOTH results were wrong. On Windows the temporary directory renders as the 8.3 short
+    form, so the account name never appeared literally and the test passed while the leak was
+    real. In CI it appeared because pytest names its own temp directory `pytest-of-<user>` -- a
+    directory the kit never chose -- so the failure pointed at the fixture rather than the defect.
+    One assertion, two wrong reasons, with a real leak sitting in between: the refusal was
+    printing the whole constructed path.
+
+    The marker below is a directory name this test invents. It cannot reach the output except
+    through the path, it is present on every platform, and no short-form or fixture-naming
+    accident can hide it.
     """
 
-    target = tmp_path / "target"
-    target.mkdir()
+    marker = "opk-host-layout-marker"
+    target = tmp_path / marker / "target"
+    target.mkdir(parents=True)
     (target / "README.md").write_text("# demo\n", encoding="utf-8")
     (target / "oss-policy-kit.yaml").write_text(_CONFIG.format(profile="ausente.yaml"), encoding="utf-8")
 
     result = runner.invoke(app, ["evaluate", "--target", str(target), "--output-dir", str(tmp_path / "out")])
 
     assert result.exit_code == 2
-    assert Path.home().name not in result.output, "the refusal named the operator's account"
+    assert marker not in result.output, (
+        "the refusal printed the directories above the target, which is host layout the operator "
+        f"never asked to publish: {result.output!r}"
+    )
+    assert "ausente.yaml" in result.output, (
+        "the refusal no longer names the missing file, which makes it useless to act on"
+    )
