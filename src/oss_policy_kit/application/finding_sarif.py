@@ -130,6 +130,9 @@ _MAX_DRIVER_NAME_CHARS = 64
 #: Bounds on target-controlled location text entering `extensions.partial_scan_warnings`.
 _MAX_EXTRA_LOCATIONS_NAMED = 10
 _MAX_LOCATION_URI_CHARS = 200
+#: A purl with a long namespace is the realistic worst case; anything past this is not
+#: a package name, it is a payload aimed at the published artifact.
+_MAX_COMPONENT_CHARS = 200
 
 #: SARIF result kinds that are NOT failures. ``kind`` defaults to "fail" when
 #: absent (SARIF 2.1.0 §3.27.9), and "review"/"open" mean the tool has not
@@ -346,6 +349,58 @@ def _dropped_locations_in_drop(path: Path, filename: str) -> list[str]:
     return dropped
 
 
+def _component(result: dict[str, Any], props: dict[str, Any]) -> str | None:
+    """The package a vulnerability finding is about, when the source names one.
+
+    ``NormalizedFinding.component`` is what separates two packages carrying the same
+    advisory: the vuln correlation axis keys on ``vid + component`` and omits the file, so
+    without it the key degenerates to the bare CVE. Nothing populated the field, so a
+    scanner reporting one CVE against three packages produced one finding with
+    ``component: null`` and ``merged_from: 3`` -- an over-merge, in an engine whose
+    declared strategy is ``conservative-under-merge``.
+
+    Three spellings are read, in order of precision:
+
+    1. ``properties.purl`` -- the package URL, which pins ecosystem, name and version.
+    2. ``properties.package`` / ``packageName`` -- the plain name, when there is no purl.
+    3. ``logicalLocations[].fullyQualifiedName`` -- where SARIF 2.1.0 itself puts a
+       non-file coordinate, taken only from an entry that says it is a package.
+
+    Nothing is inferred beyond those. A finding whose source names no package keeps
+    ``None`` and merges the way it always did: there is nothing to tell it apart by, and
+    inventing a component from the lockfile path would be a claim about which dependency
+    is affected that the scanner never made.
+
+    Bounded like every other piece of target-controlled text on its way into a published
+    artifact.
+    """
+
+    for key in ("purl", "package", "packageName"):
+        value = props.get(key)
+        if isinstance(value, str) and value.strip():
+            return _clean_component(value)
+
+    locations = result.get("locations")
+    if not isinstance(locations, list) or not locations or not isinstance(locations[0], dict):
+        return None
+    logical = locations[0].get("logicalLocations")
+    if not isinstance(logical, list):
+        return None
+    for entry in logical:
+        if not isinstance(entry, dict) or str(entry.get("kind") or "").strip().lower() != "package":
+            continue
+        name = entry.get("fullyQualifiedName") or entry.get("name")
+        if isinstance(name, str) and name.strip():
+            return _clean_component(name)
+    return None
+
+
+def _clean_component(value: str) -> str:
+    """Strip, drop unprintables, and bound -- the same treatment a location URI gets."""
+
+    return "".join(ch for ch in value.strip() if ch.isprintable())[:_MAX_COMPONENT_CHARS]
+
+
 def _vulnerability_ids(rule: str, props: dict[str, Any]) -> tuple[str, ...]:
     """Collect verbatim vulnerability ids (no alias resolution in findings/1.0)."""
 
@@ -406,6 +461,7 @@ def _normalize_result(
         message=message,
         severity=SeverityView(normalized=normalized, by_source=((tool, severity_original),)),
         location=_location(result),
+        component=_component(result, props),
         vulnerability_ids=_vulnerability_ids(rule, props),
         # EPSS is a probability in [0.0, 1.0]; CVSS base scores fall in [0.0, 10.0].
         # Bounds + the finite guard keep a garbage source value from warping ranking

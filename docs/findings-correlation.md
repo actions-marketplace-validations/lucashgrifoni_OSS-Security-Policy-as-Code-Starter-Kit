@@ -24,7 +24,11 @@ the six kit evidence JSONs (`sast-semgrep`, `iac-terraform`, `iac-cfn`, `iac-pul
    **conservative under-merge**: cross-axis findings never merge, a missing location is
    never merged with a concrete one, and the same rule with a different message stays
    separate. The same CVE reported by two tools *does* collapse to one finding that
-   records both sources.
+   records both sources. On the `vuln` axis the key is the advisory id **plus the
+   package** (`component`), so one advisory against three dependencies stays three
+   findings — one per thing you have to fix. When a source names no package the field
+   is `null` and findings sharing the advisory still collapse: there is nothing to tell
+   them apart by, and the kit does not infer a package from a lockfile path.
 3. **Ranks** deterministically: CISA-KEV-listed first, then EPSS descending, then
    normalized severity, with stable tie-breaks. Re-runs on an unchanged clone are
    **deterministic in content** — the finding ids, ranks, and ordering are identical
@@ -92,6 +96,11 @@ Contract `oss-policy-kit/findings/1.0` — strict schema at
   pre-hash key is retained in `correlation.key` for audit.
 - **`id` is UNRELATED to the per-control `finding_id` in reports/2.0** (that one is a
   `{control_id}@{profile}` synthetic). The two artifacts imply no linkage.
+- `component` — the package the advisory is about, read verbatim from whichever of
+  `properties.purl`, `properties.package` / `packageName`, or a SARIF
+  `logicalLocations` entry of kind `package` the source provides, in that order. `null`
+  when the source names none; never inferred from the file path. It participates in the
+  `vuln` key, so a purl carrying a version keeps two versions of one package apart.
 - `severity.normalized` ∈ `critical|high|medium|low|info|unknown`; the per-source
   originals ride along.
 - `kev: null` means *no source exposed a KEV signal* — never fabricated as `false`.
