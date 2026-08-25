@@ -169,7 +169,14 @@ def main() -> None:
     # Guard stdout so a downstream reader closing the pipe (``| head``, ``| less``)
     # unwinds via ``_BrokenPipeExit`` instead of being caught by a per-command
     # ``except Exception`` handler that would print "Unexpected error" + exit 3.
-    sys.stdout = _BrokenPipeGuardedStdout(sys.stdout)
+    # Only when there IS a stdout. A caller that closes the descriptor outright -- `>&-` --
+    # leaves `sys.stdout` as None, and wrapping None made every delegated call raise
+    # AttributeError, including the flush at interpreter shutdown. Measured: the kit exited
+    # 120, outside the documented 0/1/2/3 contract, after printing a traceback that carried
+    # the absolute path of the installation, account name included. Plain CPython in the
+    # same situation exits 0 with an empty stderr, so this was ours, not the interpreter's.
+    if sys.stdout is not None:
+        sys.stdout = _BrokenPipeGuardedStdout(sys.stdout)
     try:
         app()
     except _BrokenPipeExit:
