@@ -10,8 +10,10 @@ Around it, the two ways the resolver can come up empty are different problems an
 destination filename the kit does not ship a template for is bad input, while a template that
 is named but missing from both the package and the repository checkout is a packaging fault.
 
-`_kit_version` degrades to "unknown" rather than raising, because it only labels a generated
-file's `generator:` field -- failing an `init` over a metadata lookup would be absurd.
+`_kit_version` stamps the SOURCE constant, not the installed distribution's metadata. It used
+to read the metadata and fall back to "unknown": from a source checkout with an older wheel
+installed under the same name, `init` wrote 10.0.4 while every other artifact of the run said
+10.0.17, and the test here asserted only that the label was not the string "unknown".
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ from pathlib import Path
 
 import pytest
 
+import oss_policy_kit
 from oss_policy_kit.application import init_writer as iw
 from oss_policy_kit.domain.errors import InvalidInputError
 
@@ -85,8 +88,26 @@ def test_the_repository_checkout_is_the_fallback_when_the_package_has_none(
 # --------------------------------------------------------------------------- #
 
 
-def test_an_unavailable_version_degrades_to_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
-    """It labels a generated file; failing `init` over a metadata lookup would be absurd."""
+def test_the_generator_label_is_the_version_of_the_code_that_ran() -> None:
+    """`!= "unknown"` was the whole assertion here, and it is true of any string.
+
+    The label used to come from the INSTALLED distribution's metadata, which is not
+    necessarily the code executing. Measured from a source checkout with an older wheel
+    installed under the same name: source 10.0.17, metadata 10.0.4 -- so `init` stamped
+    10.0.4 while every other artifact of the same run said 10.0.17, and the old assertion
+    was satisfied by both. Comparing against the source constant is what makes it fail.
+    """
+
+    assert iw._kit_version() == oss_policy_kit.__version__
+
+
+def test_the_label_does_not_depend_on_installed_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The successor to the "degrades to unknown" case.
+
+    There is no fallback any more because there is no lookup to fail: a missing
+    distribution used to produce `generator: oss-policy-kit unknown`, a label nobody can
+    trace back to anything. Breaking the lookup must now change nothing at all.
+    """
 
     import importlib.metadata
 
@@ -94,10 +115,8 @@ def test_an_unavailable_version_degrades_to_unknown(monkeypatch: pytest.MonkeyPa
         raise importlib.metadata.PackageNotFoundError("oss-policy-kit")
 
     monkeypatch.setattr(importlib.metadata, "version", _boom)
-    assert iw._kit_version() == "unknown"
 
-
-def test_the_installed_version_is_used_when_available() -> None:
+    assert iw._kit_version() == oss_policy_kit.__version__
     assert iw._kit_version() != "unknown"
 
 

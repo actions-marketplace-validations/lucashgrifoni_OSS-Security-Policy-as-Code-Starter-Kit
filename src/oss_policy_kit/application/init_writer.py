@@ -85,14 +85,27 @@ def _now_iso_utc() -> str:
 
 
 def _kit_version() -> str:
-    """Best-effort version lookup for the embedded ``generator`` label."""
+    """The version stamped into the embedded ``generator`` label.
 
-    try:
-        from importlib.metadata import version
+    This used to read the INSTALLED distribution's metadata, which is not necessarily the
+    version of the code that ran. Measured from a source checkout with an older wheel
+    installed under the same name:
 
-        return version("oss-policy-kit")
-    except Exception:  # noqa: BLE001
-        return "unknown"
+        source __version__          : 10.0.17
+        installed distribution meta : 10.0.4
+
+    So ``init`` wrote ``generator: oss-policy-kit 10.0.4`` into ``oss-policy-kit.yaml``
+    while the evaluation report, the batch report, the findings artifact and ``--version``
+    from the same run all said 10.0.17. And when the distribution could not be found at
+    all it wrote ``unknown``, which is a label nobody can trace back to anything.
+
+    The scanners settled this first, and their reason applies here word for word: a stale
+    installed distribution must never relabel an artifact it did not produce.
+    """
+
+    from oss_policy_kit import __version__ as _src_version
+
+    return _src_version
 
 
 def _render_config_yaml(plan: InitPlan) -> str:
