@@ -317,6 +317,35 @@ def _build_eval_queue(
     return eval_queue, skipped_dirs
 
 
+def _safe_component(value: str) -> str:
+    """Reduce *value* to a single directory name that cannot steer where a report lands.
+
+    Both halves of the per-run destination -- the target name and the profile reference --
+    are joined onto ``--output-dir``. The target name was reduced here; the profile
+    reference was not, and ``pathlib`` resolves whatever it is given.
+
+    Measured, with three targets and a profile passed by relative path:
+
+    - ``-p ../profile.yaml`` made the destination ``output_dir / <target> / ../profile.yaml``,
+      which collapses to ``output_dir/profile.yaml``. The target component disappears, so all
+      three targets wrote the SAME file. `evaluation-batch.json` still declared three runs
+      with three report links; one file existed, holding the last target's verdict. Exit 0.
+    - ``-p ../../profile.yaml`` walked out of ``--output-dir`` entirely: zero reports where
+      the operator asked, one written beside it, exit 0, and the path recorded in the batch
+      artifact is basename-sanitized so it does not even say where they went.
+    - When the escaped destination collided with an existing file, the run aborted with
+      "Cannot write to --output-dir" -- blaming a directory that was perfectly fine.
+
+    So separators are flattened and a component that is only dots is refused. `.` and `..`
+    carry no separator and still traverse, which is why stripping slashes alone is not
+    enough. An empty or all-dot value becomes ``_`` rather than vanishing, because a
+    disappearing component is exactly the failure being fixed.
+    """
+
+    flattened = value.replace("/", "_").replace("\\", "_")
+    return "_" if not flattened.strip(". ") else flattened
+
+
 def _execute_one_run(
     target: Path,
     likely_repo: bool,
@@ -341,7 +370,7 @@ def _execute_one_run(
 
     profile = load_profile_by_id(root, pid)
     report = evaluate_repository(repo_root=repo, profile=profile, catalog=catalog, waiver_outcome=None, scorecard=None)
-    dest = output_dir / safe_name / pid
+    dest = output_dir / safe_name / _safe_component(pid)
     _ensure_batch_dir(dest)
     json_path = dest / "evaluation-report.json"
     md_path = dest / "evaluation-report.md"
@@ -437,7 +466,7 @@ def _execute_batch_runs(
     total_runs = len(eval_queue) * len(profile_ids)
     run_index = 0
     for target, likely_repo in eval_queue:
-        safe_name = target.name.replace("/", "_").replace("\\", "_")
+        safe_name = _safe_component(target.name)
         for pid in profile_ids:
             run_index += 1
             if progress_callback is not None:
