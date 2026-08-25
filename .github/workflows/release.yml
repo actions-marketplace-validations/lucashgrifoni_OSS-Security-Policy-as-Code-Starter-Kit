@@ -127,7 +127,12 @@ jobs:
                   *) notes="${notes}- ${clean}"$'\n' ;;
                 esac ;;
             esac
-          done < <(git log --no-merges --pretty=format:'%s' "${RANGE}")
+          # `tformat:` and not `format:`. The two differ by one byte of output: `format:`
+          # is a SEPARATOR, so it emits no newline after the final commit, and the
+          # `while read` above therefore never runs its body for that line. Every release
+          # published before this was fixed silently lost the oldest commit in its range --
+          # for v10.0.15 that was the change the release was named after.
+          done < <(git log --no-merges --pretty=tformat:'%s' "${RANGE}")
 
           [ -z "${hi}" ]    && hi="- _No feature-level changes in this release._"$'\n'
           [ -z "${imp}" ]   && imp="- _No fixes or performance changes in this release._"$'\n'
