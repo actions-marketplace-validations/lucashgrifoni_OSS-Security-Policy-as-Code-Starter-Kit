@@ -117,6 +117,37 @@ def _ensure_batch_dir(directory: Path) -> None:
         raise InvalidInputError(f"Cannot write to --output-dir: {exc.strerror or 'filesystem error'}") from exc
 
 
+def _write_batch_artifact(path: Path, content: str) -> None:
+    """Write one consolidated artifact, reporting a write failure AS a write failure.
+
+    These two were the last unguarded writes in the batch. An ``OSError`` from either
+    reached the CLI's last-resort handler, which classifies every ``OSError`` as
+    unreadable INPUT, so a blocked ``--output-dir`` was answered with
+
+        Error: input could not be read: it could not be read (Permission denied)
+
+    -- which sends the operator to check permissions on the repositories being audited,
+    and those were fine. ``_ensure_batch_dir`` a few lines above already says the right
+    thing for the ``mkdir``, and single ``evaluate`` for its own reports; this is the same
+    sentence for the step in between.
+
+    The message names the file that could not be written and warns about the other one,
+    because the two are written in sequence: a failure on the second leaves the first from
+    THIS run beside a file that may still be from the previous one, and nothing in either
+    file says so. Only ``strerror`` and the artifact's own name are reported --
+    ``str(OSError)`` embeds the absolute filename (M-002).
+    """
+
+    try:
+        path.write_text(content, encoding="utf-8")
+    except OSError as exc:
+        raise InvalidInputError(
+            f"Cannot write {path.name} to --output-dir: {exc.strerror or 'filesystem error'}. "
+            "The other consolidated file there may be left over from an earlier run; delete "
+            "both before reading either."
+        ) from exc
+
+
 def _is_meta_directory(name: str) -> bool:
     """Return True when *name* looks like an output / build / cache directory
     that should never be evaluated as a project, even via --skip-non-repos."""
@@ -593,10 +624,11 @@ def run_batch_evaluation(  # noqa: C901
         batch_payload["batch_complete"] = False
 
     batch_json = output_dir / "evaluation-batch.json"
-    batch_json.write_text(json.dumps(batch_payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    _write_batch_artifact(batch_json, json.dumps(batch_payload, indent=2, ensure_ascii=False) + "\n")
 
     batch_md = output_dir / "evaluation-batch.md"
-    batch_md.write_text(
+    _write_batch_artifact(
+        batch_md,
         _render_batch_markdown(
             rows,
             generated_at=generated_at,
@@ -611,7 +643,6 @@ def run_batch_evaluation(  # noqa: C901
             output_dir=output_dir,
             include_absolute_path=include_absolute_path,
         ),
-        encoding="utf-8",
     )
     return BatchResult(
         batch_json=batch_json,
