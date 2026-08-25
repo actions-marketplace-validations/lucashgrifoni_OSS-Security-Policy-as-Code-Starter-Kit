@@ -30,7 +30,11 @@ from oss_policy_kit.application.finding_sarif import (
     sarif_partial_location_warnings,
 )
 from oss_policy_kit.application.input_limits import BAD_INPUT_ERRORS, MAX_EVIDENCE_BYTES, oversize_reason
-from oss_policy_kit.application.reporting import _sanitize_target_path_for_payload
+from oss_policy_kit.application.reporting import (
+    _looks_like_rooted_path,
+    _sanitize_embedded_path_in_text,
+    _sanitize_target_path_for_payload,
+)
 from oss_policy_kit.application.vuln_waivers import VulnWaiver, load_vuln_waivers
 from oss_policy_kit.domain.findings import NormalizedFinding, SourceRecord, WaiverLink
 
@@ -49,9 +53,46 @@ def _source_record_to_dict(record: SourceRecord) -> dict[str, Any]:
     }
 
 
-def _finding_to_dict(finding: NormalizedFinding) -> dict[str, Any]:
+def _file_for_payload(file: str | None, *, include_absolute: bool) -> str | None:
+    """Redact an ABSOLUTE finding location; leave a repository-relative one alone.
+
+    The first attempt used the target-path sanitizer, which reduces anything to its basename.
+    That turned `src/app.py` into `app.py` for every ordinary finding -- and a path inside the
+    repository is not host layout, it is the answer to "where is this". Only a rooted path
+    carries the operator's directory chain, which is the same test the prose sanitizer applies.
+    """
+
+    if not file or include_absolute or not _looks_like_rooted_path(file):
+        return file
+    return _sanitize_target_path_for_payload(file, include_absolute=False)
+
+
+def _finding_to_dict(finding: NormalizedFinding, *, include_absolute: bool = False) -> dict[str, Any]:
+    """Serialize one finding, dropping the host layout unless the operator asked for it.
+
+    `target_path` was the only field going through the privacy sanitizer. Measured with a
+    scanner drop carrying an absolute path, the published findings/1.0 artifact repeated the
+    operator's directory chain in three more places: `location.file`, `message`, and
+    `sources[].message`. The kit's own `scan-sast` writes an absolute path into its evidence,
+    so "that is third-party SARIF, not ours" does not hold.
+
+    A RELATIVE path is untouched -- that is the ordinary case and it carries no host layout.
+    Only an absolute one loses its directories, which is the same rule `reports/2.0` follows,
+    and `--include-absolute-path` still returns everything for operators who want it.
+
+    `correlation.key` is deliberately NOT sanitized here and still carries the file on the
+    `code` axis. It is a MERGE key: redacting the path inside it would make two findings in
+    different directories share an identity, which is the over-merge ADR-030 exists to avoid.
+    Fixing that means changing what the key is made of, which is a contract decision rather
+    than a redaction pass.
+    """
+
     loc = finding.location
     lg = loc.logical
+
+    def _text(value: str) -> str:
+        return _sanitize_embedded_path_in_text(value, include_absolute=include_absolute)
+
     return {
         "id": finding.id,
         "sources": [
@@ -60,13 +101,13 @@ def _finding_to_dict(finding: NormalizedFinding) -> dict[str, Any]:
                 "source_path": s.source_path,
                 "rule": s.rule,
                 "severity_original": s.severity_original,
-                "message": s.message,
+                "message": _text(s.message),
                 "native_id": s.native_id,
             }
             for s in finding.sources
         ],
         "rule": finding.rule,
-        "message": finding.message,
+        "message": _text(finding.message),
         "cwe": list(finding.cwe),
         "owasp": list(finding.owasp),
         "severity": {
@@ -74,7 +115,7 @@ def _finding_to_dict(finding: NormalizedFinding) -> dict[str, Any]:
             "by_source": [{"tool": t, "original": o} for t, o in finding.severity.by_source],
         },
         "location": {
-            "file": loc.file,
+            "file": _file_for_payload(loc.file, include_absolute=include_absolute),
             "line_start": loc.line_start,
             "line_end": loc.line_end,
             "logical": {
@@ -222,7 +263,7 @@ def build_findings_report(
         "sources_read": [_source_record_to_dict(r) for r in records],
         "findings_total": len(correlated),
         "findings_by_severity": by_severity,
-        "findings": [_finding_to_dict(f) for f in correlated],
+        "findings": [_finding_to_dict(f, include_absolute=include_absolute_path) for f in correlated],
         "correlation": result.to_dict(),
         # Both halves of the same honesty rule: what the scanners could not parse, and
         # what a single-location finding could not carry.
