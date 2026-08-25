@@ -381,17 +381,45 @@ def _sanitize_embedded_path_in_text(text: str, *, include_absolute: bool) -> str
 
     if include_absolute or not text:
         return text
+    tokens = text.split(" ")
     out: list[str] = []
-    for token in text.split(" "):
-        # Strip a single trailing sentence punctuation char so "<path>." sanitizes cleanly.
-        suffix = ""
-        core = token
-        if core and core[-1] in ".,;:":
-            core, suffix = core[:-1], core[-1]
-        if _looks_like_rooted_path(core):
-            core = _sanitize_target_path_for_payload(core, include_absolute=False)
-        out.append(core + suffix)
+    index = 0
+    while index < len(tokens):
+        core, suffix = _split_trailing_punctuation(tokens[index])
+        if not _looks_like_rooted_path(core):
+            out.append(core + suffix)
+            index += 1
+            continue
+        # A path with a space in it arrives here as several tokens, and only the first is
+        # rooted. Sanitizing that one alone left the rest verbatim: on a machine whose home
+        # directory carries a first and last name, the leading token reduced to the given
+        # name, every following segment passed through untouched, and the explanation
+        # reconstructed the full account name plus the directory chain beneath it -- in a
+        # report written to be shared. Directories with spaces are the common case on
+        # Windows and macOS, not an edge one.
+        #
+        # So the run continues while the following tokens carry a path separator. Prose does
+        # not: a sentence resuming after the path has no `/` or `\` in its next word, which
+        # is what ends the run.
+        run = [core]
+        while index + 1 < len(tokens):
+            nxt_core, nxt_suffix = _split_trailing_punctuation(tokens[index + 1])
+            if "/" not in nxt_core and "\\" not in nxt_core:
+                break
+            run.append(nxt_core)
+            suffix = nxt_suffix
+            index += 1
+        out.append(_sanitize_target_path_for_payload(" ".join(run), include_absolute=False) + suffix)
+        index += 1
     return " ".join(out)
+
+
+def _split_trailing_punctuation(token: str) -> tuple[str, str]:
+    """Peel one trailing sentence character so ``<path>.`` sanitizes cleanly."""
+
+    if token and token[-1] in ".,;:":
+        return token[:-1], token[-1]
+    return token, ""
 
 
 def _looks_like_rooted_path(token: str) -> bool:
