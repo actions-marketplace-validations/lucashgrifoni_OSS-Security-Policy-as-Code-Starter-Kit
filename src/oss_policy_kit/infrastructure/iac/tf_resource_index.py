@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from oss_policy_kit.infrastructure.scan_deadline import ScanDeadline
+
 from .hcl_loader import HclLoadError, load_hcl_file
 
 
@@ -84,16 +86,23 @@ def _iter_resource_blocks(
         yield from _blocks_from_resource_entry(entry, source_path)
 
 
-def build_index(files: Iterable[Path]) -> TfResourceIndex:
+def build_index(files: Iterable[Path], *, deadline: ScanDeadline | None = None) -> TfResourceIndex:
     """Parse every path and build a :class:`TfResourceIndex` from the results.
 
     Files that fail to parse are recorded in ``parse_errors`` (so callers can
     write ``manual-review-required`` evidence) but never raise — the goal is
     to be best-effort like a real CSPM tool, not crash on a single bad file.
+
+    ``deadline`` is the ``--timeout`` budget. When it runs out the parse stops where it
+    is and returns a partial index; the caller checks the same deadline and reports
+    ``status: "timeout"`` rather than passing partial input off as a finished scan.
+    ``None`` means no budget, which is what every caller outside ``run_scan`` wants.
     """
 
     index = TfResourceIndex()
     for path in files:
+        if deadline is not None and deadline.expired():
+            break
         try:
             parsed = load_hcl_file(path)
         except HclLoadError as exc:

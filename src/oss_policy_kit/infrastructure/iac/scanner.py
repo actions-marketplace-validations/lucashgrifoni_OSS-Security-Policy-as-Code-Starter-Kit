@@ -32,6 +32,7 @@ from typing import Any
 from oss_policy_kit.application.clock import report_generated_at
 from oss_policy_kit.application.reporting import _sanitize_target_path_for_payload
 from oss_policy_kit.infrastructure.fs_walk import walk_matching_files
+from oss_policy_kit.infrastructure.scan_deadline import TIMEOUT_DIAGNOSTIC, ScanDeadline
 
 from .hcl_loader import hcl2_available
 from .tf_resource_index import TfBlock, TfResourceIndex, build_index
@@ -862,11 +863,11 @@ def run_scan(
     *,
     include_globs: Iterable[str] = DEFAULT_INCLUDE_GLOBS,
     exclude_globs: Iterable[str] | None = None,
-    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,  # accepted for API symmetry; parser is in-process
+    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> IacScanOutcome:
     """Discover ``.tf`` files, run every bundled rule, return a structured outcome."""
 
-    _ = timeout_seconds  # currently unused; kept for symmetry with scan-sast
+    deadline = ScanDeadline(timeout_seconds)
     if not hcl2_available():
         return IacScanOutcome(
             status="not_available",
@@ -877,6 +878,18 @@ def run_scan(
 
     files = _walk_tf_files(repo_root, include_globs, exclude_globs)
     if not files:
+        # Ahead of the early return, or a spent budget would leave this the one scanner
+        # that answers "no Terraform here" -- a positive claim -- instead of "timeout".
+        # The other four reach their timeout return through an empty rule pass.
+        if deadline.expired():
+            return IacScanOutcome(
+                status="timeout",
+                tool_version=_kit_version(),
+                files_scanned=[],
+                findings=[],
+                scanned_at=_utc_iso(),
+                diagnostics=TIMEOUT_DIAGNOSTIC.format(seconds=timeout_seconds),
+            )
         return IacScanOutcome(
             status="ok",
             tool_version=_kit_version(),
@@ -885,25 +898,41 @@ def run_scan(
             scanned_at=_utc_iso(),
         )
 
-    index = build_index(files)
+    index = build_index(files, deadline=deadline)
 
     parse_errors: list[dict[str, str]] = [
         {"file": _normalize_target(repo_root, p), "error": str(err)} for p, err in index.parse_errors
     ]
 
     findings: list[IacFinding] = []
-    try:
-        for _, fn in _RULES:
-            findings.extend(fn(repo_root, index))
-    except Exception as exc:  # noqa: BLE001 - one bad rule should not crash the scan
+    if not deadline.expired():
+        try:
+            for _, fn in _RULES:
+                if deadline.expired():
+                    break
+                findings.extend(fn(repo_root, index))
+        except Exception as exc:  # noqa: BLE001 - one bad rule should not crash the scan
+            return IacScanOutcome(
+                status="error",
+                tool_version=_kit_version(),
+                files_scanned=[_normalize_target(repo_root, p) for p in index.files_parsed],
+                parse_errors=parse_errors,
+                findings=[],
+                scanned_at=_utc_iso(),
+                diagnostics=f"rule engine raised {type(exc).__name__}: {exc}",
+            )
+
+    if deadline.expired():
+        # No findings: half a rule pack over half the files is not a result, and the
+        # per-rule counts would read as "this rule found nothing" for rules never run.
         return IacScanOutcome(
-            status="error",
+            status="timeout",
             tool_version=_kit_version(),
             files_scanned=[_normalize_target(repo_root, p) for p in index.files_parsed],
             parse_errors=parse_errors,
             findings=[],
             scanned_at=_utc_iso(),
-            diagnostics=f"rule engine raised {type(exc).__name__}: {exc}",
+            diagnostics=TIMEOUT_DIAGNOSTIC.format(seconds=timeout_seconds),
         )
 
     return IacScanOutcome(

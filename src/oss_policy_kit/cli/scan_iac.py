@@ -30,7 +30,7 @@ from oss_policy_kit.cli.common import (
     write_stdout_text,
 )
 from oss_policy_kit.cli.help_text import CMD_PANEL_SCAN
-from oss_policy_kit.cli.scan_errors import exit_for_unwritable_evidence
+from oss_policy_kit.cli.scan_errors import exit_for_unwritable_evidence, warn_if_timed_out
 from oss_policy_kit.domain.errors import OssPolicyKitError
 from oss_policy_kit.infrastructure.iac.scanner import (
     DEFAULT_INCLUDE_GLOBS,
@@ -132,6 +132,7 @@ def scan_iac_cmd(
                 f"findings={len(outcome.findings)} "
                 f"-> {display_path(evidence_path, root=repo)}\n",
             )
+            warn_if_timed_out(outcome.status, seconds=timeout)
             if outcome.status == "not_available":
                 stderr_console().print(
                     "[yellow]python-hcl2 is not installed.[/yellow] "

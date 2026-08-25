@@ -31,6 +31,7 @@ from typing import Any
 from oss_policy_kit.application.clock import report_generated_at
 from oss_policy_kit.application.reporting import _sanitize_target_path_for_payload
 from oss_policy_kit.infrastructure.fs_walk import walk_matching_files
+from oss_policy_kit.infrastructure.scan_deadline import TIMEOUT_DIAGNOSTIC, ScanDeadline
 
 EVIDENCE_SCHEMA_VERSION = "oss-policy-kit/evidence/iac-pulumi/v1"
 EVIDENCE_FILENAME = "iac-pulumi.json"
@@ -466,13 +467,15 @@ def run_scan(
     exclude_globs: Iterable[str] | None = None,
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> PulumiScanOutcome:
-    _ = timeout_seconds
+    deadline = ScanDeadline(timeout_seconds)
     files = _walk_python_files(repo_root, include_globs, exclude_globs)
     calls: list[PulumiCall] = []
     files_scanned: list[Path] = []
     parse_errors: list[dict[str, str]] = []
     files_read = 0
     for f in files:
+        if deadline.expired():
+            break
         try:
             # BYTES, not text. `ast.parse` honours a PEP 263 `# -*- coding: latin-1 -*-`
             # line and a BOM, so a legal module in another encoding still parses. Reading
@@ -503,20 +506,38 @@ def run_scan(
         calls.extend(_extract_pulumi_calls(tree, f))
 
     findings: list[PulumiFinding] = []
-    try:
-        for _rid, fn in _RULES:
-            findings.extend(fn(repo_root, calls))
-    except Exception as exc:  # noqa: BLE001 - rule engine errors must not crash the scan
+    if not deadline.expired():
+        try:
+            for _rid, fn in _RULES:
+                if deadline.expired():
+                    break
+                findings.extend(fn(repo_root, calls))
+        except Exception as exc:  # noqa: BLE001 - rule engine errors must not crash the scan
+            return PulumiScanOutcome(
+                files_read=files_read,
+                status="error",
+                tool_version=_kit_version(),
+                files_scanned=[_normalize_target(repo_root, f) for f in files_scanned],
+                parse_errors=parse_errors,
+                findings=[],
+                scanned_at=_utc_iso(),
+                diagnostics=f"rule engine raised {type(exc).__name__}: {exc}",
+            )
+
+    if deadline.expired():
+        # No findings: half a rule pack over half the files is not a result, and the
+        # per-rule counts would read as "this rule found nothing" for rules never run.
         return PulumiScanOutcome(
             files_read=files_read,
-            status="error",
+            status="timeout",
             tool_version=_kit_version(),
             files_scanned=[_normalize_target(repo_root, f) for f in files_scanned],
             parse_errors=parse_errors,
             findings=[],
             scanned_at=_utc_iso(),
-            diagnostics=f"rule engine raised {type(exc).__name__}: {exc}",
+            diagnostics=TIMEOUT_DIAGNOSTIC.format(seconds=timeout_seconds),
         )
+
     return PulumiScanOutcome(
         files_read=files_read,
         status="ok",

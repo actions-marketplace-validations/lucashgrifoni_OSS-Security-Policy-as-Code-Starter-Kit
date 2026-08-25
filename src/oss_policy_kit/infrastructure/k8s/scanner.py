@@ -30,6 +30,7 @@ import yaml
 from oss_policy_kit.application.clock import report_generated_at
 from oss_policy_kit.application.reporting import _sanitize_target_path_for_payload
 from oss_policy_kit.infrastructure.fs_walk import walk_matching_files
+from oss_policy_kit.infrastructure.scan_deadline import TIMEOUT_DIAGNOSTIC, ScanDeadline
 from oss_policy_kit.infrastructure.source_text import decode_source
 
 EVIDENCE_SCHEMA_VERSION = "oss-policy-kit/evidence/k8s-baseline/v1"
@@ -177,13 +178,21 @@ def _files_actually_scanned(
 def _index_manifests(
     repo_root: Path,
     files: list[Path],
+    deadline: ScanDeadline | None = None,
 ) -> tuple[list[K8sManifest], list[str], list[dict[str, str]]]:
-    """Return ``(manifests, helm_templates_skipped, parse_errors)``."""
+    """Return ``(manifests, helm_templates_skipped, parse_errors)``.
+
+    ``deadline`` is the ``--timeout`` budget. When it runs out the parse stops where it
+    is; the caller checks the same deadline and reports ``status: "timeout"`` rather than
+    passing a partial index off as a finished scan.
+    """
 
     manifests: list[K8sManifest] = []
     helm_skipped: list[str] = []
     parse_errors: list[dict[str, str]] = []
     for path in files:
+        if deadline is not None and deadline.expired():
+            break
         try:
             raw = path.read_bytes()
         except OSError as exc:
@@ -692,12 +701,12 @@ def run_scan(
     (that list is reserved for unrendered ``{{ ... }}`` templates).
     """
 
-    _ = timeout_seconds
+    deadline = ScanDeadline(timeout_seconds)
     files = _walk_yaml_files(repo_root, include_globs, exclude_globs)
-    manifests, helm_skipped, parse_errors = _index_manifests(repo_root, files)
+    manifests, helm_skipped, parse_errors = _index_manifests(repo_root, files, deadline)
 
     helm = _HelmState()
-    if helm_render:
+    if helm_render and not deadline.expired():
         helm, helm_skipped = _apply_helm_render(repo_root, manifests, helm_skipped, parse_errors)
     helm_attempted = helm.attempted
     helm_available_flag = helm.available
@@ -709,19 +718,46 @@ def run_scan(
 
     try:
         findings: list[K8sFinding] = []
-        try:
-            for _rid, fn in _RULES:
-                findings.extend(fn(repo_root, manifests))
-        except Exception as exc:  # noqa: BLE001 - one bad rule should not crash the scan
+        if not deadline.expired():
+            try:
+                for _rid, fn in _RULES:
+                    if deadline.expired():
+                        break
+                    findings.extend(fn(repo_root, manifests))
+            except Exception as exc:  # noqa: BLE001 - one bad rule should not crash the scan
+                return K8sScanOutcome(
+                    status="error",
+                    tool_version=_kit_version(),
+                    files_scanned=_files_actually_scanned(repo_root, files, parse_errors),
+                    helm_templates_skipped=helm_skipped,
+                    parse_errors=parse_errors,
+                    findings=[],
+                    scanned_at=_utc_iso(),
+                    diagnostics=f"rule engine raised {type(exc).__name__}: {exc}",
+                    helm_render_attempted=helm_attempted,
+                    helm_available=helm_available_flag,
+                    helm_version=helm_version_str,
+                    helm_charts_discovered=helm_charts_discovered,
+                    helm_charts_rendered=helm_charts_rendered,
+                    helm_render_errors=helm_render_errors,
+                )
+
+        if deadline.expired():
+            # No findings: half a rule pack over half the files is not a result, and the
+            # per-rule counts would read as "this rule found nothing" for rules never run.
+            # ``files_scanned`` is empty for the same reason. An interrupted index cannot
+            # name the files it reached, and the discovered list is the exact over-report
+            # ``_files_actually_scanned`` exists to prevent -- a non-empty entry there
+            # reads downstream as "there was something here and I looked at it".
             return K8sScanOutcome(
-                status="error",
+                status="timeout",
                 tool_version=_kit_version(),
-                files_scanned=_files_actually_scanned(repo_root, files, parse_errors),
+                files_scanned=[],
                 helm_templates_skipped=helm_skipped,
                 parse_errors=parse_errors,
                 findings=[],
                 scanned_at=_utc_iso(),
-                diagnostics=f"rule engine raised {type(exc).__name__}: {exc}",
+                diagnostics=TIMEOUT_DIAGNOSTIC.format(seconds=timeout_seconds),
                 helm_render_attempted=helm_attempted,
                 helm_available=helm_available_flag,
                 helm_version=helm_version_str,
@@ -729,6 +765,7 @@ def run_scan(
                 helm_charts_rendered=helm_charts_rendered,
                 helm_render_errors=helm_render_errors,
             )
+
         return K8sScanOutcome(
             status="ok",
             tool_version=_kit_version(),

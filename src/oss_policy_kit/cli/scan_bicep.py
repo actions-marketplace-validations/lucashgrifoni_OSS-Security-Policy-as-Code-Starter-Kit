@@ -23,7 +23,7 @@ from oss_policy_kit.cli.common import (
     write_stdout_text,
 )
 from oss_policy_kit.cli.help_text import CMD_PANEL_SCAN
-from oss_policy_kit.cli.scan_errors import exit_for_unwritable_evidence
+from oss_policy_kit.cli.scan_errors import exit_for_unwritable_evidence, warn_if_timed_out
 from oss_policy_kit.domain.errors import OssPolicyKitError
 from oss_policy_kit.infrastructure.iac.bicep.scanner import (
     DEFAULT_INCLUDE_GLOBS,
@@ -102,6 +102,7 @@ def scan_bicep_cmd(
                 f"findings={len(outcome.findings)} "
                 f"-> {display_path(evidence_path, root=repo)}\n",
             )
+            warn_if_timed_out(outcome.status, seconds=timeout)
             if outcome.parse_errors:
                 stderr_console().print(
                     f"[yellow]{len(outcome.parse_errors)} file(s) failed to parse[/yellow]; "

@@ -34,3 +34,21 @@ def exit_for_unwritable_evidence(exc: OSError) -> NoReturn:
     detail = exc.strerror or "filesystem error"
     stderr_console().print(f"[red]Error:[/red] cannot write output ({markup_safe(detail)}).")
     raise typer.Exit(code=2) from exc
+
+
+def warn_if_timed_out(status: str, *, seconds: int) -> None:
+    """Say on stderr that the scan ran out of budget, so ``findings=0`` is not read as clean.
+
+    The stdout summary already carries ``timeout`` -- but it carries ``findings=0`` right
+    beside it, and that pair reads as a clean result to anyone skimming a CI log.
+    ``scan-sast`` has printed a note like this since it was the only command that could
+    produce the state; the five in-process parsers can produce it too now that they honor
+    ``--timeout`` instead of discarding it.
+    """
+
+    if status != "timeout":
+        return
+    stderr_console().print(
+        f"[yellow]The scan ran out of its {seconds}s budget[/yellow]; it reports no "
+        "findings because it did not finish. Raise --timeout, or narrow --include.",
+    )

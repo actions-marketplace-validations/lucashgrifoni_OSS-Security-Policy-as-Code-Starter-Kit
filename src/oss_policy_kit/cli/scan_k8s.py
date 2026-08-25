@@ -25,7 +25,7 @@ from oss_policy_kit.cli.common import (
     write_stdout_text,
 )
 from oss_policy_kit.cli.help_text import CMD_PANEL_SCAN
-from oss_policy_kit.cli.scan_errors import exit_for_unwritable_evidence
+from oss_policy_kit.cli.scan_errors import exit_for_unwritable_evidence, warn_if_timed_out
 from oss_policy_kit.domain.errors import OssPolicyKitError
 from oss_policy_kit.infrastructure.k8s.scanner import (
     DEFAULT_INCLUDE_GLOBS,
@@ -38,7 +38,9 @@ from oss_policy_kit.infrastructure.k8s.scanner import (
 )
 
 
-def _emit_scan_k8s_human(outcome: K8sScanOutcome, evidence_path: Path, *, root: Path | None = None) -> None:
+def _emit_scan_k8s_human(
+    outcome: K8sScanOutcome, evidence_path: Path, *, root: Path | None = None, seconds: int = DEFAULT_TIMEOUT_SECONDS
+) -> None:
     """Write the human-format scan-k8s summary line plus helm/parse diagnostics to the console.
 
     ``root`` is the scanned target, and is only ever the base subtracted from
@@ -55,6 +57,7 @@ def _emit_scan_k8s_human(outcome: K8sScanOutcome, evidence_path: Path, *, root: 
         f"findings={len(outcome.findings)} "
         f"-> {display_path(evidence_path, root=root)}\n",
     )
+    warn_if_timed_out(outcome.status, seconds=seconds)
     if outcome.helm_render_attempted and not outcome.helm_available:
         stderr_console().print(
             "[yellow]--helm-render requested but the `helm` CLI was not on PATH[/yellow]; "
@@ -105,7 +108,7 @@ def _run_scan_k8s(target: str, include: str, exclude: str, timeout: int, *, helm
     if fmt == "json":
         sys.stdout.write(json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
     else:
-        _emit_scan_k8s_human(outcome, evidence_path, root=repo)
+        _emit_scan_k8s_human(outcome, evidence_path, root=repo, seconds=timeout)
 
 
 @app.command("scan-k8s", rich_help_panel=CMD_PANEL_SCAN)

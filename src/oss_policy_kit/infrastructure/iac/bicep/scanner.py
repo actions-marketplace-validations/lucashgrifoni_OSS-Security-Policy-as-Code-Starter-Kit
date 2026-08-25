@@ -29,6 +29,7 @@ from typing import Any
 from oss_policy_kit.application.clock import report_generated_at
 from oss_policy_kit.application.reporting import _sanitize_target_path_for_payload
 from oss_policy_kit.infrastructure.fs_walk import walk_matching_files
+from oss_policy_kit.infrastructure.scan_deadline import TIMEOUT_DIAGNOSTIC, ScanDeadline
 from oss_policy_kit.infrastructure.source_text import decode_source
 
 _STORAGE_ACCOUNTS_TYPE = "Microsoft.Storage/storageAccounts"
@@ -464,12 +465,14 @@ def run_scan(
     exclude_globs: Iterable[str] | None = None,
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> BicepScanOutcome:
-    _ = timeout_seconds
+    deadline = ScanDeadline(timeout_seconds)
     files = _walk_bicep_files(repo_root, include_globs, exclude_globs)
     resources: list[BicepResource] = []
     files_scanned: list[Path] = []
     parse_errors: list[dict[str, str]] = []
     for f in files:
+        if deadline.expired():
+            break
         try:
             raw = f.read_bytes()
         except OSError as exc:
@@ -483,19 +486,36 @@ def run_scan(
         resources.extend(_parse_resources(text, f))
 
     findings: list[BicepFinding] = []
-    try:
-        for _rid, fn in _RULES:
-            findings.extend(fn(repo_root, resources))
-    except Exception as exc:  # noqa: BLE001 - rule engine errors must not crash the scan
+    if not deadline.expired():
+        try:
+            for _rid, fn in _RULES:
+                if deadline.expired():
+                    break
+                findings.extend(fn(repo_root, resources))
+        except Exception as exc:  # noqa: BLE001 - rule engine errors must not crash the scan
+            return BicepScanOutcome(
+                status="error",
+                tool_version=_kit_version(),
+                files_scanned=[_normalize_target(repo_root, f) for f in files_scanned],
+                parse_errors=parse_errors,
+                findings=[],
+                scanned_at=_utc_iso(),
+                diagnostics=f"rule engine raised {type(exc).__name__}: {exc}",
+            )
+
+    if deadline.expired():
+        # No findings: half a rule pack over half the files is not a result, and the
+        # per-rule counts would read as "this rule found nothing" for rules never run.
         return BicepScanOutcome(
-            status="error",
+            status="timeout",
             tool_version=_kit_version(),
             files_scanned=[_normalize_target(repo_root, f) for f in files_scanned],
             parse_errors=parse_errors,
             findings=[],
             scanned_at=_utc_iso(),
-            diagnostics=f"rule engine raised {type(exc).__name__}: {exc}",
+            diagnostics=TIMEOUT_DIAGNOSTIC.format(seconds=timeout_seconds),
         )
+
     return BicepScanOutcome(
         status="ok",
         tool_version=_kit_version(),
