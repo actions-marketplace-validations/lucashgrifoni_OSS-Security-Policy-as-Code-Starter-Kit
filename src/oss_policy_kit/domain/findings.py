@@ -49,12 +49,50 @@ class LogicalLocation:
     name: str | None = None
 
 
+def normalize_path_spelling(value: str) -> str:
+    """One spelling per file, so a finding id does not depend on the machine that scanned.
+
+    ``src/app.py``, ``./src/app.py``, ``src//app.py``, ``src/./app.py`` and ``src\\app.py``
+    are the same file written five ways. The ``code`` correlation key is
+    ``rule + file + line``, so each spelling produced its own finding and its own id --
+    and a scanner run on Windows writes the backslash form, so the same commit scanned on
+    a laptop and in Linux CI produced different ids for the same issue. The artifact is
+    documented as deterministic in content; across platforms it was not.
+
+    What is deliberately NOT done here:
+
+    - ``..`` is kept as a segment. Resolving it is a claim about what is on the
+      filesystem, and this layer is a projection over a document.
+    - A value carrying a URI scheme is returned verbatim. ``file:///src/app.py`` is a
+      different KIND of reference, not a different spelling, and turning one into a
+      relative path would be a claim about where the repository root is.
+    - A leading ``//`` survives: on Windows that is a UNC host, not a doubled separator.
+    """
+
+    if "://" in value:
+        return value
+    cleaned = value.replace("\\", "/")
+    prefix = "//" if cleaned.startswith("//") else "/" if cleaned.startswith("/") else ""
+    segments = [segment for segment in cleaned.split("/") if segment and segment != "."]
+    return (prefix + "/".join(segments)) or value
+
+
 @dataclass(slots=True, frozen=True)
 class FindingLocation:
     file: str | None = None
     line_start: int | None = None
     line_end: int | None = None
     logical: LogicalLocation = field(default_factory=LogicalLocation)
+
+    def __post_init__(self) -> None:
+        """Normalize the spelling here so no construction site can forget to.
+
+        Four places build one of these and more will follow. Normalizing at each of them
+        is a rule someone has to remember; normalizing here is a property the type has.
+        """
+
+        if self.file is not None:
+            object.__setattr__(self, "file", normalize_path_spelling(self.file))
 
 
 @dataclass(slots=True, frozen=True)

@@ -96,6 +96,11 @@ Contract `oss-policy-kit/findings/1.0` — strict schema at
   pre-hash key is retained in `correlation.key` for audit.
 - **`id` is UNRELATED to the per-control `finding_id` in reports/2.0** (that one is a
   `{control_id}@{profile}` synthetic). The two artifacts imply no linkage.
+- `location.file` — one spelling per file, so an id does not depend on the machine that
+  scanned: separators are folded to `/`, and a leading `./`, a doubled `//`, and `/./`
+  segments are dropped. A `..` segment is **kept** (resolving it would be a claim about
+  the filesystem), a value carrying a URI scheme is left exactly as written, and a
+  leading `//` survives as a UNC host.
 - `component` — the package the advisory is about, read verbatim from whichever of
   `properties.purl`, `properties.package` / `packageName`, or a SARIF
   `logicalLocations` entry of kind `package` the source provides, in that order. `null`
