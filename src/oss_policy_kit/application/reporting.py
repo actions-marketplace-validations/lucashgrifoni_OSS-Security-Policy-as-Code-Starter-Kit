@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import time
 import uuid
 from collections.abc import Callable, Sequence
@@ -353,6 +354,33 @@ def _md_cell(value: str) -> str:
     return escaped.replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
 
 
+#: Both separators, always, and never the local ``os.sep``. ``pathlib`` on POSIX does not
+#: treat a backslash as a separator, so ``Path(...).name`` of a drive-rooted Windows path is
+#: the WHOLE string there -- this redaction silently did nothing to such a path when the
+#: report was rendered on Linux, while passing on Windows. ``evidence_projection`` carries the
+#: same regex for the same stated reason: a report rendered on one platform can hold paths
+#: written on the other.
+_ANY_SEPARATOR = re.compile(r"[\\/]+")
+
+#: A bare drive token (``C:``) is a root, not a name.
+_DRIVE_ONLY = re.compile(r"[A-Za-z]:")
+
+
+def _basename_any_platform(value: str) -> str:
+    """The last path component, whichever separator style wrote it.
+
+    A POSIX filename may legally contain a backslash, and this splits on it anyway. That
+    trade is deliberate and is the one ``evidence_projection`` already made: over-trimming
+    an exotic filename costs a reader some context, while under-trimming a Windows path
+    publishes the operator's account name.
+    """
+
+    parts = [part for part in _ANY_SEPARATOR.split(value) if part]
+    if not parts or _DRIVE_ONLY.fullmatch(parts[-1]):
+        return ""
+    return parts[-1]
+
+
 def _sanitize_target_path_for_payload(absolute: str, *, include_absolute: bool) -> str:
     """Sanitize the target path for inclusion in shareable report files (M-002).
 
@@ -372,10 +400,10 @@ def _sanitize_target_path_for_payload(absolute: str, *, include_absolute: bool) 
         cwd = Path.cwd().resolve()
         if p.resolve() == cwd:
             return "."
-        return p.name or "."
+        return _basename_any_platform(absolute) or "."
     except (OSError, ValueError):
         # Fall back to the original string rather than leaking implementation errors.
-        return Path(absolute).name or absolute
+        return _basename_any_platform(absolute) or absolute
 
 
 def _sanitize_embedded_path_in_text(text: str, *, include_absolute: bool) -> str:

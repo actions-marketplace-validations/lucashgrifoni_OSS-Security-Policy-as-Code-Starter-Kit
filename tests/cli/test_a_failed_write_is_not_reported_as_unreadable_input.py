@@ -82,11 +82,22 @@ def test_a_blocked_artifact_is_reported_as_a_write_failure(blocked: str, tmp_pat
 
 @pytest.mark.parametrize("blocked", _ARTIFACTS)
 def test_the_message_names_the_os_reason_and_not_the_path(blocked: str, tmp_path: Path) -> None:
-    """`str(OSError)` embeds the absolute filename, which is the M-002 leak this avoids."""
+    """`str(OSError)` embeds the absolute filename, which is the M-002 leak this avoids.
+
+    The reason itself is whatever the platform says -- Windows answers "Permission denied"
+    for a directory in the file's place and Linux answers "Is a directory". Asserting the
+    Windows wording is what made the first version of this test pass here and fail in CI,
+    so what is held is the shape: a real reason arrived, not the ``strerror or 'filesystem
+    error'`` fallback, and no path came with it.
+    """
 
     _exit_code, output = _run_with_blocked(tmp_path, blocked)
 
-    assert "Permission denied" in output or "denied" in output.lower()
+    reason = output.split("--output-dir: ", 1)[1].split(".", 1)[0]
+    assert reason and reason != "filesystem error", (
+        f"the message carries no OS reason for the failure: {output!r}. The fallback text "
+        "tells the operator nothing they can act on."
+    )
     assert str(tmp_path) not in output
     assert tmp_path.name not in output
 

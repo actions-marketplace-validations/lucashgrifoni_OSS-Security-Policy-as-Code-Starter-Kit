@@ -20,13 +20,23 @@ Every path below is ASSEMBLED rather than written as a literal. `scripts/check_p
 forbids home-shaped strings in public files, and this test needs them as data -- writing them out
 would trade a redaction bug for a hygiene violation, which is how the first version of this file
 turned the hygiene gate red.
+
+A SECOND defect surfaced here, and only in CI: every Windows case below passed on Windows and
+failed on Linux. The basename step used `Path(...).name`, and `pathlib` on POSIX does not treat
+a backslash as a separator -- so the basename of a drive-rooted Windows path is the WHOLE string
+there, and the redaction silently did nothing. `evidence_projection` had already written down
+the rule ("a report rendered on POSIX can carry Windows paths and vice versa, so separator
+handling never relies on the local os.sep"); this module had not adopted it.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from oss_policy_kit.application.reporting import _sanitize_embedded_path_in_text
+from oss_policy_kit.application.reporting import (
+    _sanitize_embedded_path_in_text,
+    _sanitize_target_path_for_payload,
+)
 
 _WIN_HOME = "C:" + "\\" + "Users" + "\\" + "Ana Souza"
 _POSIX_HOME = "/" + "home" + "/Ana Souza"
@@ -86,6 +96,25 @@ def test_a_path_without_spaces_is_unchanged_in_behaviour() -> None:
     )
 
     assert out == "Loaded 12 entries from scorecard.json."
+
+
+def test_the_basename_step_reads_both_separator_styles() -> None:
+    """The half that could only fail in CI, held directly on the function that does it.
+
+    A test built from `Path` objects would spell the separator the way the running OS
+    does and never notice; these are string literals, so they mean the same thing on
+    every platform.
+    """
+
+    assert _sanitize_target_path_for_payload(_WIN_HOME + "\\proj\\f.json", include_absolute=False) == "f.json"
+    assert _sanitize_target_path_for_payload(_POSIX_HOME + "/proj/f.json", include_absolute=False) == "f.json"
+
+
+def test_a_root_with_no_name_under_it_is_not_reported_as_a_drive_letter() -> None:
+    """`C:\\` has no basename, and answering `C:` would put the host's drive in a report."""
+
+    assert _sanitize_target_path_for_payload("C:" + "\\", include_absolute=False) == "."
+    assert _sanitize_target_path_for_payload("/", include_absolute=False) == "."
 
 
 def test_text_with_no_path_at_all_is_untouched() -> None:
