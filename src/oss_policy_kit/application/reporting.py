@@ -23,7 +23,13 @@ from oss_policy_kit.application.evidence_projection import (
     normalize_confidence,
     project_evidence,
 )
-from oss_policy_kit.domain.models import ControlResult, ControlStatus, ExecutionReport, LiveCollectionMetadata
+from oss_policy_kit.domain.models import (
+    ControlResult,
+    ControlStatus,
+    ExecutionReport,
+    LiveCollectionMetadata,
+    without_control_characters,
+)
 
 REPORT_JSON_SCHEMA_URL_V2_0 = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/2.0"
 
@@ -337,9 +343,14 @@ def _md_cell(value: str) -> str:
 
     An unescaped ``|`` (or an embedded newline) splits the row, silently shifting
     every later value under the wrong header for whoever reads or parses the report.
+
+    Invisible characters go too. ``ControlResult`` already cleans the prose fields, but
+    this writer is also handed the waiver owner and the catalog's category and lifecycle
+    strings, and an external profile supplies those. Doing it here as well costs a scan of
+    a short string and means the row is safe whatever is put in it.
     """
 
-    escaped = value.replace("|", "\\|")
+    escaped = without_control_characters(value).replace("|", "\\|")
     return escaped.replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
 
 

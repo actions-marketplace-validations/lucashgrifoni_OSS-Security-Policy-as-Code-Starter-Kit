@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import unicodedata
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from enum import StrEnum
@@ -75,6 +76,42 @@ class WaiverRecord:
     applies_to: list[str] | None
 
 
+#: Unicode general categories that carry no glyph: Cc (control) and Cf (format -- bidi
+#: overrides, zero-width joiners, the byte-order mark).
+_INVISIBLE = frozenset({"Cc", "Cf"})
+
+
+#: Kept even though they are control characters: they are whitespace a reason may legitimately
+#: contain, and the Markdown writer folds them itself so a row cannot be split.
+_KEEPABLE_CONTROLS = frozenset("\t\n\r")
+
+
+def without_control_characters(value: str) -> str:
+    """Drop invisible and terminal-controlling characters from human-facing report text.
+
+    Control text reaches a report from the audited repository: ``CI-LEAST-009`` interpolates a
+    workflow's job NAME into its reason, and a job name is a YAML key the target chooses. A
+    workflow declaring ``"build\\e[31m INJECTED \\e[0m"`` is a legal document -- the file holds
+    the printable escape, YAML decodes it -- and the escape reached
+    ``evaluation-report.md`` raw, which is a file people ``cat``, paste into a pull request,
+    and attach to releases. From there it colours, moves the cursor, or with ``\\e[2K\\r``
+    overwrites the line already printed, so the target repository decides what its own security
+    report appears to say.
+
+    Format characters go too, and they are the sharper half: U+202E RIGHT-TO-LEFT OVERRIDE
+    reverses the display order of everything after it (the Trojan Source trick) and U+200B is
+    invisible. Both reached the **JSON** report as raw characters as well, because ``json.dumps``
+    escapes C0 controls but leaves other categories alone under ``ensure_ascii=False``.
+
+    Tab, newline and carriage return survive: they are whitespace, and the Markdown writer
+    already folds them so they cannot break a table row.
+    """
+
+    if value.isprintable():
+        return value
+    return "".join(ch for ch in value if ch in _KEEPABLE_CONTROLS or unicodedata.category(ch) not in _INVISIBLE)
+
+
 @dataclass(frozen=True, slots=True)
 class ControlResult:
     """Single control evaluation row."""
@@ -97,6 +134,20 @@ class ControlResult:
     evidence_collection_method: str = "static"
     deprecation_note: str | None = None
     weight: int = 1
+
+    def __post_init__(self) -> None:
+        """Clean the prose fields here, not at each writer.
+
+        ``reason`` and ``remediation`` are the two an evaluator builds by interpolating
+        something the target repository wrote, and every artifact -- JSON, Markdown, SARIF,
+        the terminal -- renders them from this one object. Cleaning at the writers means
+        four places to keep in step and a fifth writer arriving unprotected; cleaning here
+        means no ``ControlResult`` can hold an invisible character at all.
+        """
+
+        for attribute in ("title", "reason", "remediation"):
+            value = getattr(self, attribute)
+            object.__setattr__(self, attribute, without_control_characters(value))
 
 
 @dataclass(frozen=True, slots=True)
