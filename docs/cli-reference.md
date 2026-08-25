@@ -242,8 +242,13 @@ reserved for a defect in the kit itself.
 When a custom evaluator package registered under the `oss_policy_kit.evaluators`
 entry-point group fails to import/load, built-in evaluation is never affected — but the
 failure is no longer silent. Run `evaluate --verbose` to see each plugin load problem
-(`load`, `not-callable`, `builtin-precedence`, or `discovery`) on stderr, so you can tell
-whether a custom control is actually active.
+(`load`, `not-callable`, `builtin-precedence`, `plugin-collision`, or `discovery`) on
+stderr, so you can tell whether a custom control is actually active.
+
+`builtin-precedence` and `plugin-collision` are different problems and are reported
+separately: the first means a bundled control already owns the ID, the second means
+another one of *your* plugins claimed it first — the row names which entry point won, and
+entry points load in discovery order.
 
 ## Pipeline-Friendly Output
 

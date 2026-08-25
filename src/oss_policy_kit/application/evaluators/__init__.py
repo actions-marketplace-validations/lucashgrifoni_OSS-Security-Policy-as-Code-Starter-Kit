@@ -281,8 +281,14 @@ def plugin_load_errors() -> list[dict[str, str]]:
 
     Each entry: ``{"name", "kind", "detail"}`` where ``kind`` is one of
     ``discovery`` (group enumeration failed), ``load`` (entry-point import/load
-    raised), ``not-callable`` (loaded object is not callable), or
-    ``builtin-precedence`` (skipped because a built-in already owns the ID).
+    raised), ``not-callable`` (loaded object is not callable),
+    ``builtin-precedence`` (skipped because a built-in already owns the ID), or
+    ``plugin-collision`` (skipped because ANOTHER PLUGIN already claimed the ID).
+
+    The last two used to be the same row. A second plugin claiming an ID the first one
+    had just registered was reported as ``builtin-precedence`` with "a built-in control
+    already owns this ID" -- sending the operator to look for a built-in that does not
+    exist, instead of at the two plugins of theirs that collide.
     """
     return list(PLUGIN_LOAD_ERRORS)
 
@@ -304,7 +310,24 @@ def _load_external_evaluators() -> None:
     except Exception as exc:  # noqa: BLE001 - best-effort discovery
         PLUGIN_LOAD_ERRORS.append({"name": "*", "kind": "discovery", "detail": f"{type(exc).__name__}: {exc}"})
         return
+    # Which entry point claimed each ID, so a second plugin claiming the same one can be
+    # told what it lost to. Checked BEFORE the registry: an ID a plugin just registered is
+    # in the registry too, and reporting that as a built-in clash is what sent operators
+    # hunting for a built-in control that does not exist.
+    claimed_by: dict[str, str] = {}
     for ep in eps:
+        if ep.name in claimed_by:
+            PLUGIN_LOAD_ERRORS.append(
+                {
+                    "name": ep.name,
+                    "kind": "plugin-collision",
+                    "detail": (
+                        f"another plugin already registered this ID ({claimed_by[ep.name]}); "
+                        "entry points load in discovery order and the first one keeps it"
+                    ),
+                }
+            )
+            continue
         if ep.name in EVALUATOR_REGISTRY:
             PLUGIN_LOAD_ERRORS.append(
                 {"name": ep.name, "kind": "builtin-precedence", "detail": "a built-in control already owns this ID"}
@@ -318,6 +341,7 @@ def _load_external_evaluators() -> None:
         if callable(func):
             EVALUATOR_REGISTRY[ep.name] = func
             PLUGIN_CONTROL_IDS.add(ep.name)
+            claimed_by[ep.name] = str(ep.value)
         else:
             PLUGIN_LOAD_ERRORS.append(
                 {
