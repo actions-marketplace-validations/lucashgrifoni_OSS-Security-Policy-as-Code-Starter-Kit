@@ -76,6 +76,41 @@ class WaiverRecord:
     applies_to: list[str] | None
 
 
+#: The confidence vocabulary a control result may hold, and the free-form spellings that
+#: map into it. It lives here, beside :class:`ControlStatus`, because it is a domain
+#: vocabulary: an evaluator -- including a third-party one -- returns a string, and every
+#: artifact has to agree on what that string means.
+_CONFIDENCE_NORMALIZATION: dict[str, str] = {
+    "high": "high",
+    "strong": "high",
+    "medium": "medium",
+    "med": "medium",
+    "moderate": "medium",
+    "low": "low",
+    "weak": "low",
+    "none": "none",
+    "n/a": "none",
+    "not-applicable": "none",
+    "not_applicable": "none",
+}
+
+
+def normalize_confidence(raw: str | None) -> str:
+    """Map free-form ``confidence`` strings into the v1 enum.
+
+    An unrecognized value becomes ``low`` rather than being passed through: the kit does
+    not know what a plugin's own word means, and reporting a confidence it cannot place
+    as anything but the weakest one would be a claim about evidence strength.
+
+    Idempotent -- every value in the enum maps to itself -- which is what lets
+    :class:`ControlResult` apply it once at construction.
+    """
+
+    if not raw:
+        return "none"
+    return _CONFIDENCE_NORMALIZATION.get(raw.strip().lower(), "low")
+
+
 #: Unicode general categories that carry no glyph: Cc (control) and Cf (format -- bidi
 #: overrides, zero-width joiners, the byte-order mark).
 _INVISIBLE = frozenset({"Cc", "Cf"})
@@ -136,18 +171,31 @@ class ControlResult:
     weight: int = 1
 
     def __post_init__(self) -> None:
-        """Clean the prose fields here, not at each writer.
+        """Clean the prose fields and settle the confidence here, not at each writer.
 
         ``reason`` and ``remediation`` are the two an evaluator builds by interpolating
         something the target repository wrote, and every artifact -- JSON, Markdown, SARIF,
         the terminal -- renders them from this one object. Cleaning at the writers means
         four places to keep in step and a fifth writer arriving unprotected; cleaning here
         means no ``ControlResult`` can hold an invisible character at all.
+
+        ``confidence`` is settled here for the same reason, and it had already drifted: the
+        JSON and the SARIF normalized it while the Markdown and the terminal printed the
+        evaluator's raw string, so one run produced artifacts that disagreed about the same
+        field. An evaluator answering ``"Strong"`` was reported as ``high`` in two of them
+        and ``Strong`` in the other two; one answering something the kit cannot place was
+        reported as ``low`` in two and verbatim in the other two -- the conservative
+        fallback in one artifact and the unexamined claim in the next.
+
+        The two writers that normalized on their own no longer do. A second call would be
+        a no-op no test could tell apart from its absence, and a guard nothing can falsify
+        is decoration.
         """
 
         for attribute in ("title", "reason", "remediation"):
             value = getattr(self, attribute)
             object.__setattr__(self, attribute, without_control_characters(value))
+        object.__setattr__(self, "confidence", normalize_confidence(self.confidence))
 
 
 @dataclass(frozen=True, slots=True)

@@ -6,7 +6,7 @@ from datetime import UTC, timedelta
 
 from oss_policy_kit.application import evidence_projection as ep
 from oss_policy_kit.application.evidence_projection import FreshnessContext
-from oss_policy_kit.domain.models import ControlResult, ControlStatus, utc_now
+from oss_policy_kit.domain.models import ControlResult, ControlStatus, normalize_confidence, utc_now
 
 
 def _result(status: ControlStatus = ControlStatus.PASS, **over: object) -> ControlResult:
@@ -26,10 +26,10 @@ def _result(status: ControlStatus = ControlStatus.PASS, **over: object) -> Contr
 
 
 def test_normalize_confidence() -> None:
-    assert ep.normalize_confidence(None) == "none"
-    assert ep.normalize_confidence("") == "none"
-    assert ep.normalize_confidence("HIGH") in {"high", "low", "medium", "none"}
-    assert ep.normalize_confidence("totally-unknown-value") == "low"
+    assert normalize_confidence(None) == "none"
+    assert normalize_confidence("") == "none"
+    assert normalize_confidence("HIGH") in {"high", "low", "medium", "none"}
+    assert normalize_confidence("totally-unknown-value") == "low"
 
 
 def test_is_placeholder_path() -> None:

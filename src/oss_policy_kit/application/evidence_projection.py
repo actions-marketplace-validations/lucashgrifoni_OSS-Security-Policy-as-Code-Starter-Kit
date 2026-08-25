@@ -29,36 +29,17 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from oss_policy_kit.domain.models import ControlResult, ControlStatus, utc_now
+from oss_policy_kit.domain.models import (
+    ControlResult,
+    ControlStatus,
+    utc_now,
+)
 
 EVIDENCE_PROVENANCE_VERSION = "evidence/2.0"
 
 # Conservative default freshness window for API-collected platform evidence.
 # Stale evidence on a hard-gate profile cannot back a `verified` trust level.
 DEFAULT_FRESHNESS_WINDOW_DAYS = 90
-
-_CONFIDENCE_NORMALIZATION: dict[str, str] = {
-    "high": "high",
-    "strong": "high",
-    "medium": "medium",
-    "med": "medium",
-    "moderate": "medium",
-    "low": "low",
-    "weak": "low",
-    "none": "none",
-    "n/a": "none",
-    "not-applicable": "none",
-    "not_applicable": "none",
-}
-
-
-def normalize_confidence(raw: str | None) -> str:
-    """Map free-form ``confidence`` strings into the v1 enum."""
-
-    if not raw:
-        return "none"
-    key = raw.strip().lower()
-    return _CONFIDENCE_NORMALIZATION.get(key, "low")
 
 
 def _is_placeholder_path(value: str) -> bool:

@@ -9,10 +9,9 @@ from oss_policy_kit.application.evidence_projection import (
     EVIDENCE_PROVENANCE_VERSION,
     FreshnessContext,
     gate_role_for,
-    normalize_confidence,
     project_evidence,
 )
-from oss_policy_kit.domain.models import ControlResult, ControlStatus, utc_now
+from oss_policy_kit.domain.models import ControlResult, ControlStatus, normalize_confidence, utc_now
 
 
 def _r(

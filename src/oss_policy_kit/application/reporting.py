@@ -20,7 +20,6 @@ from oss_policy_kit.application.drift import ControlDelta, DriftReport
 from oss_policy_kit.application.evidence_projection import (
     EVIDENCE_PROVENANCE_VERSION,
     classify_reference,
-    normalize_confidence,
     project_evidence,
 )
 from oss_policy_kit.domain.models import (
@@ -695,7 +694,10 @@ def _result_to_dict_v2_0(r: ControlResult, *, include_absolute_path: bool = Fals
         "profile": r.profile,
         "state": state,
         "assurance": r.assurance,
-        "confidence": normalize_confidence(r.confidence),
+        # Already the enum: `ControlResult` normalizes at construction, so every
+        # artifact of one run reports the same value. Normalizing again here would be
+        # a no-op no test could distinguish from its absence.
+        "confidence": r.confidence,
         "weight": r.weight,
         "message": r.reason,
         "remediation": r.remediation,

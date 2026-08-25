@@ -154,22 +154,31 @@ def test_results_table_reason_cell_keeps_the_workflow_name_it_names() -> None:
     _assert_survives(_collapse(_render(table)), HOSTILE)
 
 
-def test_results_table_id_and_confidence_cells_keep_their_brackets() -> None:
-    """Every ``str`` cell is markup to Rich, not only the one that carried the defect."""
+def test_results_table_id_cell_keeps_its_brackets() -> None:
+    """Every FREE-FORM ``str`` cell is markup to Rich, not only the one that carried the defect.
+
+    ``confidence`` was asserted here beside the id, and is not free form any more: an
+    evaluator's word is settled into the four-value enum by ``ControlResult``, so
+    ``[dim]low`` reaches the table as ``low``. That is deliberate -- the JSON and the SARIF
+    had always normalized it while this table printed the raw string, so one run produced
+    artifacts that disagreed about the same field.
+
+    The escaping is unchanged; the field simply cannot carry markup any more, and that is
+    asserted below rather than quietly dropped.
+    """
 
     hostile_id = "[bold]CI-1"
-    hostile_conf = "[dim]low"
     _assert_rich_would_eat_it(hostile_id)
-    _assert_rich_would_eat_it(hostile_conf)
 
     table = tui.render_eval_results_table(
-        _report(results=[_result(control_id=hostile_id, confidence=hostile_conf)]),
+        _report(results=[_result(control_id=hostile_id, confidence="[dim]low")]),
         unicode_icons=False,
     )
     out = _collapse(_render(table))
 
     _assert_survives(out, hostile_id)
-    _assert_survives(out, hostile_conf)
+    assert "[dim]" not in out, "a confidence carrying markup reached the table unnormalized"
+    assert "low" in out, "the normalized confidence is not shown at all"
 
 
 def test_results_table_title_keeps_the_profile_id_and_the_target_name() -> None:

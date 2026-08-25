@@ -24,7 +24,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from oss_policy_kit.application.evidence_projection import normalize_confidence, project_evidence
+from oss_policy_kit.application.evidence_projection import project_evidence
 from oss_policy_kit.application.reporting import _atomic_write_text
 from oss_policy_kit.domain.models import ControlResult, ControlStatus, ExecutionReport
 
@@ -161,7 +161,8 @@ def _result_to_sarif(result: ControlResult) -> dict[str, Any]:
         "locations": locations,
         "properties": {
             "kit_status": result.status.value,
-            "confidence": normalize_confidence(result.confidence),
+            # Already the enum -- see ControlResult.__post_init__.
+            "confidence": result.confidence,
             "assurance": result.assurance,
             "lifecycle": result.lifecycle,
             "profile": result.profile,
