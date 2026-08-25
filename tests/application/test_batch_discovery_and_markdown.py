@@ -147,6 +147,7 @@ def _render(tmp_path: Path, stats: _BatchStats) -> str:
         policy="fail",
         stats=stats,
         skipped_dirs=[],
+        failed_dirs=[],
         output_dir=tmp_path,
     )
 

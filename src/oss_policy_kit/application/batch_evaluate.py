@@ -607,6 +607,7 @@ def run_batch_evaluation(  # noqa: C901
             policy=policy,
             stats=stats,
             skipped_dirs=skipped_dirs,
+            failed_dirs=failed_dirs,
             output_dir=output_dir,
             include_absolute_path=include_absolute_path,
         ),
@@ -738,10 +739,22 @@ def _render_batch_markdown(
     policy: FailOnPolicy,
     stats: _BatchStats,
     skipped_dirs: list[dict[str, str]],
+    failed_dirs: list[dict[str, str]],
     output_dir: Path,
     include_absolute_path: bool = False,
 ) -> str:
-    """Render the consolidated batch Markdown report."""
+    """Render the consolidated batch Markdown report.
+
+    ``failed_dirs`` is separate from ``skipped_dirs`` for the same reason the JSON keeps
+    two keys: a skip means "not a repository", a failure means "a repository we could not
+    evaluate", and only the second makes the batch incomplete.
+
+    It used not to be passed here at all. The JSON payload recorded ``failed_directories``
+    and ``batch_complete: false``, while the Markdown beside it named no failure, used the
+    word nowhere, and printed **CI gate: PASSED** -- over a batch that had evaluated two of
+    three repositories. The run does exit 2, but the exit code is gone by the time someone
+    reads the report attached to a pull request.
+    """
 
     target_root_display = _sanitize_target_path_for_payload(
         str(target_root.resolve()), include_absolute=include_absolute_path
@@ -763,6 +776,14 @@ def _render_batch_markdown(
     ]
     md_lines.extend(f"- `{status}`: **{stats.totals[status]}**" for status in sorted(stats.totals))
     gate_state = "**VIOLATED**" if gate_violated else "**PASSED**"
+    if failed_dirs:
+        # The caveat rides on the gate line itself. A reader who takes one thing from this
+        # report takes that line, and "PASSED" beside totals that cover part of the target
+        # root is the claim being corrected -- in both directions, because a VIOLATED gate
+        # over an incomplete batch is equally partial.
+        gate_state += (
+            f" over an **INCOMPLETE** batch: {len(failed_dirs)} of {eval_queue_len} repositories could not be evaluated"
+        )
     md_lines.extend(["", f"- **CI gate (`--fail-on: {policy}`)**: {gate_state}", ""])
 
     dist = stats.dist
@@ -783,6 +804,20 @@ def _render_batch_markdown(
     if stats.comparison_lines:
         md_lines.extend(["## Quick comparison (by total `fail` counts across profiles)", ""])
         md_lines.extend(f"- {ln}" if ln.startswith("All **") else ln for ln in stats.comparison_lines)
+        md_lines.append("")
+
+    if failed_dirs:
+        md_lines.extend(
+            [
+                "## Repositories that could not be evaluated",
+                "",
+                "These are **not** skips. Each one is a repository the batch tried to evaluate and "
+                "could not, so every total and the gate above describe less than this target root "
+                "holds.",
+                "",
+            ]
+        )
+        md_lines.extend(f"- `{f['name']}` — {f['reason']}" for f in failed_dirs)
         md_lines.append("")
 
     if skipped_dirs:
