@@ -104,18 +104,39 @@ def _headings(kib: int) -> str:
     return "# limitations\n" * (kib * 1024 // 14)
 
 
+#: Repetitions per size, of which the FASTEST is kept.
+#:
+#: One sample each was measured at 3.07x during a full suite run while three isolated runs of the
+#: same test returned well under the budget. Nothing had changed in `_markdown_sections`; the
+#: machine was busy, and a scheduler slice landing in the second measurement and not the first
+#: inflates a ratio built from two single samples.
+#:
+#: The minimum is the run least interrupted by everything else on the box, so it estimates the
+#: cost of the CODE rather than the cost of the machine. The 3.0 budget is unchanged -- this
+#: tightens the measurement instead of loosening the assertion, which would have been the other
+#: way to make the red go away.
+_TIMING_REPEATS = 5
+
+
+def _fastest(document: str) -> float:
+    """Seconds for the fastest of ``_TIMING_REPEATS`` parses of *document*."""
+
+    best = float("inf")
+    for _ in range(_TIMING_REPEATS):
+        started = time.perf_counter()
+        _markdown_sections(document)
+        best = min(best, time.perf_counter() - started)
+    return best
+
+
 def test_doubling_the_headings_does_not_quadruple_the_work() -> None:
     """Ratio, not a clock -- the same reason as the SARIF walker: the suite runs under coverage."""
 
     small, large = _headings(_HEADING_DOC_KIB), _headings(_HEADING_DOC_KIB * 2)
 
     _markdown_sections(small)  # warm-up
-    started = time.perf_counter()
-    _markdown_sections(small)
-    at_n = time.perf_counter() - started
-    started = time.perf_counter()
-    _markdown_sections(large)
-    at_2n = time.perf_counter() - started
+    at_n = _fastest(small)
+    at_2n = _fastest(large)
 
     ratio = at_2n / at_n
     assert ratio < 3.0, (
