@@ -554,6 +554,14 @@ def _project_runs(runs: list[Any], tool: str, rel: str) -> _Projection:
     ``results: []``, stays honestly ``ok``. ``foreign_driver`` carries the name of
     the scanner that actually produced the drop when it is not the one the
     filename implies; its findings are attributed to it, never to the slot.
+
+    A SARIF document holds a LIST of runs, and each one names its own driver. Attribution
+    is therefore decided per run: the returned ``foreign_driver`` is the document-level
+    flag the caller needs for the record, and it used to double as the attribution for
+    every run after the first foreign one. In a file holding an osv-scanner run and a
+    Trivy run, that made the answer depend on which came first -- with Trivy first, a
+    finding osv-scanner produced was published as Trivy's. This module's own contract is
+    that attribution follows the document; following the first run is not that.
     """
 
     findings: list[NormalizedFinding] = []
@@ -564,10 +572,11 @@ def _project_runs(runs: list[Any], tool: str, rel: str) -> _Projection:
         if not isinstance(run, dict):
             continue
         driver = _driver(run)
+        run_driver = _foreign_driver(driver, tool)
         if tool_version is None:
             tool_version = _driver_version(driver)
         if foreign_driver is None:
-            foreign_driver = _foreign_driver(driver, tool)
+            foreign_driver = run_driver
         results = run.get("results")
         if not isinstance(results, list):
             if "results" in run:
@@ -577,7 +586,7 @@ def _project_runs(runs: list[Any], tool: str, rel: str) -> _Projection:
         # whose driver really is an object, so a malformed one degrades instead
         # of raising through correlate-findings as an exit 3.
         rule_levels = _sarif_rule_levels(run) if driver else {}
-        findings.extend(_normalize_results(results, foreign_driver or tool, rel, rule_levels))
+        findings.extend(_normalize_results(results, run_driver or tool, rel, rule_levels))
     return _Projection(findings, tool_version, container_invalid, foreign_driver)
 
 
