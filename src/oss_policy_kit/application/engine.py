@@ -14,7 +14,7 @@ import oss_policy_kit
 from oss_policy_kit.adapters.scorecard_json import ScorecardBundle
 from oss_policy_kit.application.applicability import resolve_applicability
 from oss_policy_kit.application.clock import report_generated_at
-from oss_policy_kit.application.evaluators import EVALUATOR_REGISTRY, EvalContext
+from oss_policy_kit.application.evaluators import EVALUATOR_REGISTRY, PLUGIN_CONTROL_IDS, EvalContext
 from oss_policy_kit.application.evidence_placeholders import has_placeholder_values
 from oss_policy_kit.application.insights_evidence import InsightsEvidence
 from oss_policy_kit.application.loader import ControlSpec, ProfileSpec
@@ -351,6 +351,51 @@ def _emit_verbose_outcome(ctx: EvalContext, outcome: EvalOutcome) -> None:
     ctx.verbose_emit(f"[dim]  Result: {_markup_escape(outcome.status.value)} — {_markup_escape(reason_one)}[/dim]")
 
 
+#: A third-party message is echoed into a report; bound it the way driver names are bounded.
+_MAX_PLUGIN_ERROR_CHARS = 200
+
+
+def _outcome_from_plugin(cid: str, evaluator: Callable[[EvalContext], EvalOutcome], ctx: EvalContext) -> EvalOutcome:
+    """Run a third-party evaluator without letting it end the run.
+
+    The loader already holds this line -- ``one broken plugin must not break the kit`` sits
+    beside its ``except Exception`` -- but only for the IMPORT. Nothing guarded the call, so a
+    plugin that imported cleanly and raised while evaluating took the whole run down.
+
+    Measured: a plugin raising on one control of ``github-level-1`` exited 3, wrote NO report,
+    and printed the plugin's own message as ``Unexpected error``. Exit 3 is what
+    docs/cli-reference.md reserves for a defect in this kit, so the kit took the blame for
+    third-party code and the operator lost the other thirteen verdicts with it.
+
+    The control becomes ``manual-review-required`` instead, which is what this project already
+    says about anything it could not establish: the plugin did not answer, so there is no
+    answer to report. Every other control still runs and the report is still written.
+
+    Deliberately NOT applied to built-ins. A built-in evaluator that raises IS a defect in this
+    kit, and exit 3 is the honest thing for it to do. Swallowing that would hide the real
+    thing this guard is imitating.
+    """
+
+    try:
+        return evaluator(ctx)
+    except Exception as exc:  # noqa: BLE001 - a third-party evaluator must not end the run
+        detail = f"{type(exc).__name__}: {exc}"[:_MAX_PLUGIN_ERROR_CHARS]
+        logger.warning("plugin evaluator for %s raised: %s", cid, detail)
+        return EvalOutcome(
+            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
+            reason=(
+                f"The third-party evaluator registered for '{cid}' raised while evaluating "
+                f"({detail}), so this control was not assessed. The rest of the run is unaffected."
+            ),
+            remediation=(
+                f"Report the failure to whoever ships the '{cid}' evaluator, or remove that "
+                "plugin and re-run to get a result for this control."
+            ),
+            evidence_sources=[],
+            confidence="low",
+        )
+
+
 def _evaluate_control(
     cid: str,
     ctx: EvalContext,
@@ -385,7 +430,9 @@ def _evaluate_control(
     if ctx.verbose_emit is not None:
         ctx.verbose_emit(f"[dim]→ {_markup_escape(cid)} ({_markup_escape(spec.title)})[/dim]")
     logger.debug("evaluating %s (%s)", cid, spec.title)
-    outcome = evaluator(ctx)
+    # A built-in is called directly on purpose: if it raises, that is a defect in this kit
+    # and exit 3 is the honest answer. Only a third-party evaluator is caught.
+    outcome = _outcome_from_plugin(cid, evaluator, ctx) if cid in PLUGIN_CONTROL_IDS else evaluator(ctx)
     operational_warnings.extend(outcome.operational_warnings)
     logger.debug(
         "%s -> %s [%s] sources=%d%s",

@@ -270,6 +270,11 @@ _load_webhook_evaluators()
 #: silently). Surfaced on ``evaluate --verbose``; never aborts built-in evaluation.
 PLUGIN_LOAD_ERRORS: list[dict[str, str]] = []
 
+#: Control ids served by a third-party evaluator rather than a built-in one.
+#: The engine guards a raising evaluator ONLY for these: a built-in that raises is a
+#: defect in this kit and must stay loud, which is what exit 3 means.
+PLUGIN_CONTROL_IDS: set[str] = set()
+
 
 def plugin_load_errors() -> list[dict[str, str]]:
     """Return a copy of plugin load problems recorded at registry construction.
@@ -293,6 +298,7 @@ def _load_external_evaluators() -> None:
     """
 
     PLUGIN_LOAD_ERRORS.clear()
+    PLUGIN_CONTROL_IDS.clear()
     try:
         eps = importlib.metadata.entry_points().select(group="oss_policy_kit.evaluators")
     except Exception as exc:  # noqa: BLE001 - best-effort discovery
@@ -311,6 +317,7 @@ def _load_external_evaluators() -> None:
             continue
         if callable(func):
             EVALUATOR_REGISTRY[ep.name] = func
+            PLUGIN_CONTROL_IDS.add(ep.name)
         else:
             PLUGIN_LOAD_ERRORS.append(
                 {
