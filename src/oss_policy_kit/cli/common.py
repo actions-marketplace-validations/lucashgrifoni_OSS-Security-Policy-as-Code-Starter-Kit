@@ -675,6 +675,18 @@ def _resolve_eval_target(req: EvaluateRequest) -> Path:
     chosen = req.target_opt or req.target_pos
     if not chosen:
         raise InvalidInputError(_missing_target_message())
+    if req.target_opt and req.target_pos and req.target_opt != req.target_pos:
+        # `--target` used to win and the positional was dropped without a word. Measured:
+        # `evaluate --target <repo> <path-that-does-not-exist>` exited 0 having evaluated
+        # only <repo>, with stderr carrying nothing but the "Wrote" lines -- while the same
+        # non-existent path passed ALONE exits 2. A run that names two repositories and
+        # silently audits one is the shape an unquoted `TARGETS="a b"` in CI takes, and it
+        # reports green over a repository nobody looked at.
+        raise InvalidInputError(
+            f"Two targets were given: {req.target_opt!r} via --target and {req.target_pos!r} "
+            "as the positional argument. `evaluate` audits one repository per run, so pick "
+            "one -- or use `evaluate-many --target-root` to audit several."
+        )
     return resolve_existing_dir(chosen)
 
 
