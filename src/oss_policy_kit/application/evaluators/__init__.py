@@ -275,6 +275,9 @@ PLUGIN_LOAD_ERRORS: list[dict[str, str]] = []
 #: defect in this kit and must stay loud, which is what exit 3 means.
 PLUGIN_CONTROL_IDS: set[str] = set()
 
+#: A `module:attr` entry-point target; anything past this is not one.
+_MAX_ENTRY_POINT_VALUE_CHARS = 200
+
 
 def plugin_load_errors() -> list[dict[str, str]]:
     """Return a copy of plugin load problems recorded at registry construction.
@@ -341,7 +344,10 @@ def _load_external_evaluators() -> None:
         if callable(func):
             EVALUATOR_REGISTRY[ep.name] = func
             PLUGIN_CONTROL_IDS.add(ep.name)
-            claimed_by[ep.name] = str(ep.value)
+            # Bounded like every other third-party string the kit echoes back: this one
+            # reaches stderr through `evaluate --verbose`, and the driver name and the
+            # finding component are capped for the same reason.
+            claimed_by[ep.name] = str(ep.value)[:_MAX_ENTRY_POINT_VALUE_CHARS]
         else:
             PLUGIN_LOAD_ERRORS.append(
                 {

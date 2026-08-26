@@ -366,6 +366,13 @@ def _component(result: dict[str, Any], props: dict[str, Any]) -> str | None:
     3. ``logicalLocations[].fullyQualifiedName`` -- where SARIF 2.1.0 itself puts a
        non-file coordinate, taken only from an entry that says it is a package.
 
+    Only the PRIMARY location is consulted for the third. A SARIF result may carry several
+    (this module walks ``locations[1:]`` elsewhere, for the affected files a single
+    ``FindingLocation`` cannot hold), and a package coordinate parked on a later entry is
+    not read. That is a stated limit, not an oversight: the scanners this registry accepts
+    put the package on the primary location, and widening the search for a shape none of
+    them emits would be code with no case behind it.
+
     Nothing is inferred beyond those. A finding whose source names no package keeps
     ``None`` and merges the way it always did: there is nothing to tell it apart by, and
     inventing a component from the lockfile path would be a claim about which dependency

@@ -253,3 +253,52 @@ def test_a_budget_of_nothing_is_spent_on_arrival() -> None:
     generous = ScanDeadline(3600)
     assert generous.expired() is False
     assert generous.expired() is False, "re-checking a live budget must not consume it"
+
+
+def test_the_helm_render_path_is_inside_the_budget_too(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`--helm-render` adds manifests, and parsing those is the parser `--timeout` names.
+
+    Rendering itself is bounded by the renderer's own per-chart timeout, but the re-index
+    of what it produced was handed no deadline: the budget was checked before the render
+    and not again until the rule pass. A chart set can render far more manifests than the
+    repository holds, so that gap was the largest unbounded parse in the command.
+
+    Only `render_charts` is faked. Substituting `_apply_helm_render` itself would assert
+    that `run_scan` hands it the deadline and stop there -- and the first version of this
+    test did exactly that, so the mutation putting the unbounded index back inside the real
+    helper survived it. The helper has to run.
+    """
+
+    from oss_policy_kit.infrastructure.k8s import helm_renderer
+
+    rendered_manifest = tmp_path / "rendered.yaml"
+    rendered_manifest.write_text(LABS[1].source, encoding="utf-8")
+
+    monkeypatch.setattr(
+        helm_renderer,
+        "render_charts",
+        lambda repo_root, **_kw: helm_renderer.HelmRenderOutcome(
+            available=True,
+            helm_version="v3.0.0",
+            charts_discovered=["chart"],
+            charts_rendered=["chart"],
+            rendered_manifest_paths=[rendered_manifest],
+        ),
+    )
+
+    budgets: list[object] = []
+    real_index = k8s_scanner._index_manifests
+
+    def _record(repo_root: Path, files: list[Path], deadline: object = None) -> object:
+        budgets.append(deadline)
+        return real_index(repo_root, files, deadline)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(k8s_scanner, "_index_manifests", _record)
+
+    k8s_scanner.run_scan(tmp_path, helm_render=True)
+
+    assert len(budgets) == 2, f"expected a discovery index and a rendered-manifest index, saw {len(budgets)}"
+    assert budgets[1] is not None, (
+        "the manifests Helm rendered were parsed with no budget, so `--timeout` did not bound the parse it advertises."
+    )
+    assert budgets[0] is budgets[1], "the two passes must share one budget, not get one each"

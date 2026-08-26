@@ -657,6 +657,7 @@ def _apply_helm_render(
     manifests: list[K8sManifest],
     helm_skipped: list[str],
     parse_errors: list[dict[str, str]],
+    deadline: ScanDeadline | None = None,
 ) -> tuple[_HelmState, list[str]]:
     """Render Helm charts, merge their manifests, and return ``(state, updated_helm_skipped)``."""
 
@@ -673,8 +674,13 @@ def _apply_helm_render(
         tmp_root=rendered.tmp_root,
     )
     if rendered.rendered_manifest_paths:
+        # The deadline reaches here too. Rendering is bounded by the renderer's own
+        # per-chart timeout, but parsing what it produced is the same parser `--timeout`
+        # bounds everywhere else, and a chart set can render far more manifests than the
+        # repository holds. Without this the budget was checked before the render and not
+        # again until the rule pass, so `--timeout` did not bound the parse it names.
         extra_manifests, _extra_skipped, extra_parse_errors = _index_manifests(
-            repo_root, rendered.rendered_manifest_paths
+            repo_root, rendered.rendered_manifest_paths, deadline
         )
         manifests.extend(extra_manifests)
         parse_errors.extend(extra_parse_errors)
@@ -707,7 +713,7 @@ def run_scan(
 
     helm = _HelmState()
     if helm_render and not deadline.expired():
-        helm, helm_skipped = _apply_helm_render(repo_root, manifests, helm_skipped, parse_errors)
+        helm, helm_skipped = _apply_helm_render(repo_root, manifests, helm_skipped, parse_errors, deadline)
     helm_attempted = helm.attempted
     helm_available_flag = helm.available
     helm_version_str = helm.version

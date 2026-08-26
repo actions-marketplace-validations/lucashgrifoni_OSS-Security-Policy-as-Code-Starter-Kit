@@ -104,16 +104,22 @@ def test_the_message_names_the_os_reason_and_not_the_path(blocked: str, tmp_path
 
 @pytest.mark.parametrize("blocked", _ARTIFACTS)
 def test_the_operator_is_warned_the_two_files_may_disagree(blocked: str, tmp_path: Path) -> None:
-    """They are written in sequence, so a failure on the second leaves a mismatched pair.
+    """They are written in sequence, so either failure leaves a mismatched pair.
 
-    The survivor is from this run and the other may still be from the previous one, and
-    nothing inside either file says which.
+    Which file is the stale one depends on which write failed, and nothing inside either
+    says so. The warning therefore states what is true in both directions -- the pair
+    describes different runs -- rather than naming one of them as the leftover. An earlier
+    version said "left over from an earlier run", which is false when the SECOND write
+    fails: the other file is this run's, freshly written.
     """
 
     _exit_code, output = _run_with_blocked(tmp_path, blocked)
 
-    assert "earlier run" in output
+    assert "different runs" in output
     assert "delete both" in output
+    assert "earlier run" not in output, (
+        "the message names one file as the leftover, which only holds when the first write is the one that failed."
+    )
 
 
 def test_a_writable_output_directory_still_produces_both_artifacts(tmp_path: Path) -> None:

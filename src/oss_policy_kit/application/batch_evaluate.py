@@ -131,11 +131,15 @@ def _write_batch_artifact(path: Path, content: str) -> None:
     thing for the ``mkdir``, and single ``evaluate`` for its own reports; this is the same
     sentence for the step in between.
 
-    The message names the file that could not be written and warns about the other one,
-    because the two are written in sequence: a failure on the second leaves the first from
-    THIS run beside a file that may still be from the previous one, and nothing in either
-    file says so. Only ``strerror`` and the artifact's own name are reported --
-    ``str(OSError)`` embeds the absolute filename (M-002).
+    The message names the file that could not be written and warns that the pair no longer
+    agrees, because the two are written in sequence and either can be the one that fails.
+    It says "different runs" rather than "left over from an earlier run": that wording was
+    only true when the FIRST write failed, and read as false when the second did -- there
+    the other file is this run's, freshly written. The advice is the same either way, but
+    the reason given for it has to hold in both directions.
+
+    Only ``strerror`` and the artifact's own name are reported -- ``str(OSError)`` embeds
+    the absolute filename (M-002).
     """
 
     try:
@@ -143,8 +147,8 @@ def _write_batch_artifact(path: Path, content: str) -> None:
     except OSError as exc:
         raise InvalidInputError(
             f"Cannot write {path.name} to --output-dir: {exc.strerror or 'filesystem error'}. "
-            "The other consolidated file there may be left over from an earlier run; delete "
-            "both before reading either."
+            "The two consolidated files there now describe different runs; delete both "
+            "before reading either."
         ) from exc
 
 
