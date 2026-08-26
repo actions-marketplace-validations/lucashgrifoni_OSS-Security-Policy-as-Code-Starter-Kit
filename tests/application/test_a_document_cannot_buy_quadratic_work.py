@@ -104,27 +104,33 @@ def _headings(kib: int) -> str:
     return "# limitations\n" * (kib * 1024 // 14)
 
 
-#: Repetitions per size, of which the FASTEST is kept.
+#: One sample per size measured 3.07x against a 3.0 budget during a full suite run, while three
+#: isolated runs of the same test passed comfortably. Nothing had changed in
+#: `_markdown_sections`; the machine was busy, and a scheduler slice landing in the second
+#: measurement and not the first inflates a ratio built from two single samples.
 #:
-#: One sample each was measured at 3.07x during a full suite run while three isolated runs of the
-#: same test returned well under the budget. Nothing had changed in `_markdown_sections`; the
-#: machine was busy, and a scheduler slice landing in the second measurement and not the first
-#: inflates a ratio built from two single samples.
+#: Taking the fastest of five single parses was the first fix and was NOT enough: it measured
+#: 3.67x on the next loaded run. The minimum removes interruptions, but it cannot remove what is
+#: below the clock's own resolution -- one parse of the small document costs about 30ms, and at
+#: that scale a scheduler tick is a large share of the reading no matter how many times it is
+#: repeated.
 #:
-#: The minimum is the run least interrupted by everything else on the box, so it estimates the
-#: cost of the CODE rather than the cost of the machine. The 3.0 budget is unchanged -- this
-#: tightens the measurement instead of loosening the assertion, which would have been the other
-#: way to make the red go away.
-_TIMING_REPEATS = 5
+#: So a measurement is a BATCH of parses rather than one, which puts each reading a few hundred
+#: milliseconds above the noise floor, and the fastest batch is kept. The 3.0 budget has not
+#: moved through either round: both changes tighten the measurement instead of loosening the
+#: assertion, which was always the other way to make the red go away.
+_TIMING_BATCH = 5
+_TIMING_REPEATS = 3
 
 
 def _fastest(document: str) -> float:
-    """Seconds for the fastest of ``_TIMING_REPEATS`` parses of *document*."""
+    """Seconds for the fastest batch of ``_TIMING_BATCH`` parses of *document*."""
 
     best = float("inf")
     for _ in range(_TIMING_REPEATS):
         started = time.perf_counter()
-        _markdown_sections(document)
+        for _ in range(_TIMING_BATCH):
+            _markdown_sections(document)
         best = min(best, time.perf_counter() - started)
     return best
 
