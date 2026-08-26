@@ -99,6 +99,11 @@ If you change evaluator logic, report structure, or CLI output:
 - update `README.md` and any affected docs under `docs/`
 - update `CHANGELOG.md` with factual, non-marketing release notes
 
+Document behavior with reproducible text, not with screenshots: the exact command to run, a
+short excerpt of its current stdout, a table explaining the statuses and fields, or a link to
+a generated report under `docs/sample-reports/`. A capture goes stale silently and cannot be
+diffed, which is why this repository ships no image assets.
+
 If you change packaged data or schemas:
 
 - keep `src/oss_policy_kit/data/` and public schema references aligned
