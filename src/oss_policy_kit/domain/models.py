@@ -106,9 +106,14 @@ def normalize_confidence(raw: str | None) -> str:
     :class:`ControlResult` apply it once at construction.
     """
 
-    if not raw:
+    key = (raw or "").strip().lower()
+    if not key:
+        # Nothing said, spaces included. The first cut checked emptiness BEFORE stripping,
+        # so a value of only whitespace fell through to the unknown-word branch and came
+        # back "low" -- a claim about evidence strength made from a blank. A property test
+        # found it on its first run; no example test had thought to send "   ".
         return "none"
-    return _CONFIDENCE_NORMALIZATION.get(raw.strip().lower(), "low")
+    return _CONFIDENCE_NORMALIZATION.get(key, "low")
 
 
 #: Unicode general categories that carry no glyph: Cc (control) and Cf (format -- bidi
