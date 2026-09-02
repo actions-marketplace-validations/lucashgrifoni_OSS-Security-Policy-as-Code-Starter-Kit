@@ -240,7 +240,9 @@ def _rank_sort_key(
     kev_rank = 0 if kev_eff else 1  # True -> 0 (first)
     epss_rank = -(epss_eff if epss_eff is not None else -1.0)  # higher epss first; null last
     sev_rank = -_SEVERITY_RANK.get(finding.severity.normalized, 0)  # higher severity first
-    file_key = finding.location.file or "￿"  # None sorts last
+    # U+FFFF written as an escape: the same string, but a literal non-character in the
+    # source made SonarQube's parser give up on the whole file (parse error, line 243).
+    file_key = finding.location.file or "\uffff"  # None sorts last
     return (kev_rank, epss_rank, sev_rank, file_key, finding.rule, finding.id)
 
 
