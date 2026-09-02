@@ -377,23 +377,62 @@ def _outcome_from_plugin(cid: str, evaluator: Callable[[EvalContext], EvalOutcom
     """
 
     try:
-        return evaluator(ctx)
+        outcome = evaluator(ctx)
     except Exception as exc:  # noqa: BLE001 - a third-party evaluator must not end the run
         detail = f"{type(exc).__name__}: {exc}"[:_MAX_PLUGIN_ERROR_CHARS]
         logger.warning("plugin evaluator for %s raised: %s", cid, detail)
-        return EvalOutcome(
-            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
-            reason=(
-                f"The third-party evaluator registered for '{cid}' raised while evaluating "
-                f"({detail}), so this control was not assessed. The rest of the run is unaffected."
-            ),
-            remediation=(
-                f"Report the failure to whoever ships the '{cid}' evaluator, or remove that "
-                "plugin and re-run to get a result for this control."
-            ),
-            evidence_sources=[],
-            confidence="low",
-        )
+        return _plugin_did_not_answer(cid, f"raised while evaluating ({detail})")
+
+    # The second way a plugin fails to answer. The guard above covers an evaluator that
+    # RAISES; one that RETURNS something the kit cannot use reached `ControlResult` and blew
+    # up there instead -- outside this guard, as exit 3 with no report, blaming the kit.
+    # Measured: `confidence=42` -> "'int' object has no attribute 'strip'"; `reason=None` ->
+    # "'NoneType' object has no attribute 'isprintable'". Identical in v10.0.17, so this is
+    # the guard finishing the job it started rather than a regression being repaired.
+    problem = _malformed_outcome(outcome)
+    if problem is None:
+        return outcome
+    logger.warning("plugin evaluator for %s returned a malformed outcome: %s", cid, problem)
+    return _plugin_did_not_answer(cid, f"returned a malformed outcome ({problem})")
+
+
+def _malformed_outcome(outcome: object) -> str | None:
+    """Why *outcome* cannot be turned into a ``ControlResult``, or ``None`` when it can.
+
+    Checks exactly the fields the kit reads afterwards, with the type each reader assumes.
+    Anything extra a plugin attaches is its own business.
+    """
+
+    if not isinstance(outcome, EvalOutcome):
+        return f"expected EvalOutcome, got {type(outcome).__name__}"
+    if not isinstance(outcome.status, ControlStatus):
+        return f"status is {type(outcome.status).__name__}, not ControlStatus"
+    for attribute in ("reason", "remediation", "confidence"):
+        value = getattr(outcome, attribute)
+        if not isinstance(value, str):
+            return f"{attribute} is {type(value).__name__}, not str"
+    sources = outcome.evidence_sources
+    if not isinstance(sources, list) or not all(isinstance(s, str) for s in sources):
+        return "evidence_sources is not a list of str"
+    return None
+
+
+def _plugin_did_not_answer(cid: str, what_happened: str) -> EvalOutcome:
+    """The one outcome for a plugin that produced no usable answer, whichever way it failed."""
+
+    return EvalOutcome(
+        status=ControlStatus.MANUAL_REVIEW_REQUIRED,
+        reason=(
+            f"The third-party evaluator registered for '{cid}' {what_happened}, so this "
+            "control was not assessed. The rest of the run is unaffected."
+        ),
+        remediation=(
+            f"Report the failure to whoever ships the '{cid}' evaluator, or remove that "
+            "plugin and re-run to get a result for this control."
+        ),
+        evidence_sources=[],
+        confidence="low",
+    )
 
 
 def _evaluate_control(
