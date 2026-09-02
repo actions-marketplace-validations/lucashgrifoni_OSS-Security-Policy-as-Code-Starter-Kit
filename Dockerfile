@@ -78,26 +78,28 @@ ENV PATH="/opt/venv/bin:$PATH"
 # on PyPI propagation timing.
 ARG KIT_VERSION=5.9.0
 COPY pyproject.toml README.md LICENSE NOTICE ./
+COPY .github/requirements/pip.txt .github/requirements/runtime-all.txt /tmp/requirements/
 COPY src ./src
 # --no-cache-dir is redundant with ENV PIP_NO_CACHE_DIR=1 above, but stated
 # explicitly so KICS "Pip install Keeping Cached Packages" reads it directly.
 #
-# The pin was 26.1.1, which is one patch below the fix for CVE-2026-8643 (path
-# traversal via console_scripts entry point names, fixed in 26.1.2). The base image
-# ships pip 25.0.1; this upgrade was already clearing three of its four advisories
-# and stopped one short of the fourth. Nothing caught that, because the Trivy jobs
-# scan the source tree and the base image, and a `pip==` pin inside a RUN string is
-# neither -- see the built-image scan in .github/workflows/github-ci-cd.yml.
+# Three installs, and every byte that crosses the network is checked against a hash
+# recorded in the repository:
 #
-# KNOWN AND NOT FIXED HERE: the runtime stage still carries the BASE image's own
-# pip 25.0.1 at /usr/local, which this venv upgrade never touches. Scanning the
-# published 10.0.15 image reports both pips. The kit never invokes pip at runtime
-# (every mention in src/ is remediation text), so removing pip from the runtime
-# image would clear those four findings and shrink the attack surface -- but that
-# change cannot be validated without building the image, so it is left for a
-# maintainer who has a working Docker daemon.
-RUN pip install --no-cache-dir --upgrade "pip==26.1.2" \
-    && pip install --no-cache-dir ".[all]"
+#   1. pip itself, from .github/requirements/pip.txt. The venv's pip is upgraded
+#      because the base image's copy is old: 25.0.1 carried five advisories, and
+#      26.1.2 -- the previous pin -- had since gained one of its own (CVE-2026-13346,
+#      fixed in 26.2.0). A `pip==` pin inside a RUN string is invisible to the
+#      filesystem scans; the built-image scan in github-ci-cd.yml is what sees it.
+#   2. the runtime dependency closure of `.[all]`, from runtime-all.txt. Regenerate
+#      with the `uv pip compile` line recorded at the top of that file.
+#   3. the kit itself, --no-deps, so the only unhashed artifact is this checkout.
+#
+# The Scorecard read the previous `pip install ".[all]"` as an unpinned download and
+# it was one: nothing in that line said which versions were acceptable.
+RUN pip install --no-cache-dir --require-hashes -r /tmp/requirements/pip.txt \
+    && pip install --no-cache-dir --require-hashes -r /tmp/requirements/runtime-all.txt \
+    && pip install --no-cache-dir --no-deps .
 
 # ---------------------------------------------------------------------------
 # Stage 2: runtime
@@ -121,6 +123,18 @@ RUN groupadd --system --gid 10001 appuser \
 
 # Copy the venv from the builder stage.
 COPY --from=builder /opt/venv /opt/venv
+
+# No package installer ships in the runtime image. Two pips were in every published
+# image: the base image's 25.0.1 at /usr/local (five advisories, the five open alerts on
+# this repository) and the venv's own. The venv's pip is not clean either: pip vendors
+# msgpack and setuptools under pip/_vendor and, since 26.x, ships a CycloneDX BOM that
+# lets Trivy see them -- so an image with ANY pip carries whatever those vendored copies
+# are missing. The kit never invokes pip at runtime; every mention of it in src/ is
+# remediation text shown to the operator. The system python is addressed by absolute
+# path because PATH already prefers the venv.
+RUN /usr/local/bin/python3 -m pip uninstall --yes pip \
+    && /opt/venv/bin/python -m pip uninstall --yes pip \
+    && rm -rf /root/.cache/pip
 
 # Drop privileges before declaring the entrypoint. WORKDIR /work is the
 # canonical mount point for the adopter's repository.

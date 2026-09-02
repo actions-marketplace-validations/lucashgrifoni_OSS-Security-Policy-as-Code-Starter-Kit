@@ -2,6 +2,10 @@
 # source tree so container publication does not race PyPI availability.
 .git/
 .github/
+# The two hashed locks the builder stage installs from. Everything else under
+# .github/ stays out of the context; these are the only files the image needs.
+!.github/requirements/pip.txt
+!.github/requirements/runtime-all.txt
 .gitignore
 .venv/
 .pytest_cache/
