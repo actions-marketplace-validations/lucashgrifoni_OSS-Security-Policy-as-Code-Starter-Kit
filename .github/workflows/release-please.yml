@@ -142,7 +142,11 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install the bumped tree
-        run: python -m pip install -e .
+        # Dependencies come from the hashed lock; the tree itself is installed with
+        # --no-deps so the only unhashed artifact is the checkout being released.
+        run: |
+          python -m pip install --require-hashes -r .github/requirements/runtime-all.txt
+          python -m pip install --no-deps -e .
 
       - name: Regenerate both sample labs
         run: |
