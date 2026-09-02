@@ -33,11 +33,45 @@ env:
 
 jobs:
   quality:
-    name: Quality (lint, types, tests, self-check)
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Three legs. The first is the gate the ruleset requires by name and is unchanged.
+    # The other two exist because six failures in one cycle were visible only on a
+    # platform the suite had never run on: `pathlib` treats a backslash as an ordinary
+    # character on POSIX, and a directory where a file belongs is "Permission denied"
+    # on Windows and "Is a directory" on Linux. Twelve commits inherited that red
+    # because the maintainer's gate runs on Windows and CI ran only on Linux. The 3.13
+    # leg covers the other half of `requires-python = ">=3.12"`, which admitted a
+    # version nothing had executed.
+    #
+    # Coverage, the property floor and the self-check gate stay on the first leg only:
+    # the other two answer "does it run there", not "is every line covered there".
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Quality (lint, types, tests, self-check)
+            os: ubuntu-latest
+            python: "3.12"
+            gate: true
+          - name: Quality (ubuntu, Python 3.13)
+            os: ubuntu-latest
+            python: "3.13"
+            gate: false
+          - name: Quality (windows, Python 3.12)
+            os: windows-latest
+            python: "3.12"
+            gate: false
+    defaults:
+      run:
+        # One shell on every leg, so a step written once runs the same on Windows.
+        shell: bash
     steps:
       - name: Harden runner
+        # Linux only: the agent has no Windows build. The Windows leg runs without
+        # an egress policy, which is the trade for having a Windows leg at all.
+        if: runner.os == 'Linux'
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           egress-policy: block
@@ -46,6 +80,8 @@ jobs:
             api.github.com:443
             pypi.org:443
             files.pythonhosted.org:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
 
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -55,13 +91,27 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: ${{ matrix.python }}
           cache: pip
 
       - name: Install project (dev)
         run: |
           python -m pip install -U pip
           python -m pip install -e ".[dev]"
+
+      - name: Install OPA (pinned by hash)
+        # `export-policy --format rego` is validated against the real interpreter, and
+        # that test skipped everywhere because nothing installed opa -- in CI, in the
+        # local gate, on any machine without it. A test that never runs gives the
+        # confidence of one that does not exist. The binary is a GitHub release asset,
+        # which is why the two githubusercontent hosts are in the egress allowlist.
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          curl -sSfL -o /tmp/opa "https://github.com/open-policy-agent/opa/releases/download/v1.20.1/opa_linux_amd64_static"
+          echo "0b3f152e61be276b70396cfbca49e39fc9d0c5089e0a8574e8f6a30f41a9187f  /tmp/opa" | sha256sum -c -
+          sudo install -m 0755 /tmp/opa /usr/local/bin/opa
+          opa version
 
       - name: Ruff check
         run: python -m ruff check .
@@ -83,12 +133,20 @@ jobs:
       - name: Pytest
         # Measure coverage here but do not gate yet (--cov-fail-under=0); the
         # property-tests step appends and enforces the combined floor.
+        if: matrix.gate
         run: python -m pytest tests --ignore=tests/property --cov=oss_policy_kit --cov-report= --cov-fail-under=0
 
       - name: Property-based tests
         # Append property-test coverage and enforce the combined floor
         # (fail_under=100 in pyproject; stated explicitly here as the gate).
+        if: matrix.gate
         run: python -m pytest tests/property/ -v --hypothesis-show-statistics --cov=oss_policy_kit --cov-append --cov-report=term-missing --cov-fail-under=100
+
+      - name: Pytest (no coverage floor on this leg)
+        # The whole suite, property tests included, without the coverage instrument:
+        # this leg answers whether the code behaves here, and the floor is held once.
+        if: ${{ !matrix.gate }}
+        run: python -m pytest tests -q -p no:cacheprovider
 
       - name: CLI help smoke
         run: |
@@ -193,7 +251,12 @@ jobs:
             echo "No wheel found under dist/" >&2
             exit 1
           fi
-          python -m pip install "${wheels[0]}"
+          # --no-deps: every dependency is already installed from `.[dev]` above, so this
+          # step installs exactly one artifact -- the wheel this job just built -- and
+          # reaches for nothing on the network. Scorecard read the bare `pip install` as
+          # an unpinned download, and without the flag it would have been one if a dep
+          # were missing.
+          python -m pip install --no-deps "${wheels[0]}"
           python -m oss_policy_kit --help
           python -m oss_policy_kit evaluate --help
 
