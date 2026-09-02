@@ -38,8 +38,12 @@ _AZURE_PIPELINE_GOV_REMEDIATION = (
 _KIT_DIR = ".oss-policy-kit"
 #: A checkout step that states the setting the message claims, rather than the two words
 #: `persistcredentials` and `false` appearing anywhere in the same file.
+#: Character classes are `[ \t]`, never `\s`: two adjacent `\s*` around an optional dash
+#: backtracked against each other and took 10 seconds on a 20,000-space line. The file is the
+#: target's own pipeline, which is exactly the input that may be shaped to do that.
 _PERSIST_CREDENTIALS_FALSE_RE = re.compile(
-    r"^\s*-?\s*persistCredentials\s*:\s*false\s*(?:#.*)?$", re.IGNORECASE | re.MULTILINE
+    r"^[ \t]*(?:-[ \t]*)?persistCredentials[ \t]*:[ \t]*false[ \t]*(?:#.*)?\r?$",
+    re.IGNORECASE | re.MULTILINE,
 )
 
 

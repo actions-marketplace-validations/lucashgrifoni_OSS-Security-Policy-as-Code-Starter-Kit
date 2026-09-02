@@ -78,6 +78,7 @@ _PACKAGE_JSON = "package.json"
 _PYPROJECT_TOML = "pyproject.toml"
 _README_MD = "README.md"
 _REQUIREMENTS_TXT = "requirements.txt"
+_POETRY_LOCK = "poetry.lock"
 _SECURITY_AT = "security@"
 _SECURITY_MD = "SECURITY.md"
 
@@ -704,7 +705,7 @@ def _lockfile_has_content(path: Path) -> bool:
 
 
 def _python_lock_or_pins(repo: Path) -> bool:
-    if any(_lockfile_has_content(repo / n) for n in ("poetry.lock", "Pipfile.lock", "uv.lock")):
+    if any(_lockfile_has_content(repo / n) for n in (_POETRY_LOCK, "Pipfile.lock", "uv.lock")):
         return True
     if any(_lockfile_has_content(repo / n) for n in ("requirements.lock", "requirements-lock.txt")):
         return True
@@ -1504,7 +1505,11 @@ def _strip_html_comments(text: str) -> str:
     return "".join(out)
 
 
-_ATX_HEADING_RE = re.compile(r"^\s{0,3}(#{1,6})\s+(.*?)\s*$")
+#: The title group is greedy and untrimmed on purpose: the previous `\s+(.*?)\s*$` made the
+#: lazy title and the trailing whitespace compete for the same spaces, which is quadratic in
+#: the length of the line -- and the line comes from the target's own README. Trimming
+#: happens where the title is consumed.
+_ATX_HEADING_RE = re.compile(r"^[ \t]{0,3}(#{1,6})[ \t]+(.*)$")
 _SETEXT_UNDERLINE_RE = re.compile(r"^\s{0,3}(?:=+|-{2,})\s*$")
 _FENCE_RE = re.compile(r"^\s*(?:```|~~~)")
 
@@ -1561,7 +1566,7 @@ def _markdown_sections(text: str) -> list[tuple[str, str]]:
             and not _ATX_HEADING_RE.match(lines[index + 1])
         )
         if atx:
-            heads.append((len(atx.group(1)), len(kept), atx.group(2).rstrip("#").strip().lower()))
+            heads.append((len(atx.group(1)), len(kept), atx.group(2).strip().rstrip("#").strip().lower()))
             index += 1
             continue
         if setext:
@@ -1704,7 +1709,7 @@ def _llm_sdk_scan(repo: Path) -> tuple[Path | None, bool]:
     # question the claim rests on.
     seen_any = False
     read_all = True
-    for rel in (_REQUIREMENTS_TXT, _PYPROJECT_TOML, _PACKAGE_JSON, "Pipfile", "poetry.lock"):
+    for rel in (_REQUIREMENTS_TXT, _PYPROJECT_TOML, _PACKAGE_JSON, "Pipfile", _POETRY_LOCK):
         p = repo / rel
         if not p.is_file():
             continue
@@ -1759,7 +1764,7 @@ def _manifest_declares(path: Path, hints: tuple[str, ...]) -> bool:
 
 
 def _scan_for_llm_sdks(repo: Path) -> Path | None:
-    for rel in (_REQUIREMENTS_TXT, _PYPROJECT_TOML, _PACKAGE_JSON, "Pipfile", "poetry.lock"):
+    for rel in (_REQUIREMENTS_TXT, _PYPROJECT_TOML, _PACKAGE_JSON, "Pipfile", _POETRY_LOCK):
         p = repo / rel
         if p.is_file() and _manifest_declares(p, _LLM_SDK_HINTS):
             return p
@@ -2475,7 +2480,7 @@ def _package_json_names(path: Path) -> set[str] | None:
 _MANIFEST_READERS: dict[str, Callable[[Path], set[str] | None]] = {
     _PYPROJECT_TOML: _pyproject_dependency_names,
     "pipfile": _pipfile_names,
-    "poetry.lock": _poetry_lock_names,
+    _POETRY_LOCK: _poetry_lock_names,
     _REQUIREMENTS_TXT: _requirements_names,
     _PACKAGE_JSON: _package_json_names,
 }
