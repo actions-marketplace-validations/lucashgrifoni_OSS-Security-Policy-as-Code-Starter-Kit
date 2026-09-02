@@ -47,6 +47,14 @@ updates:
     commit-message:
       prefix: "ci"
       include: "scope"
+    # The CodeQL sub-actions (init / autobuild / analyze / upload-sarif) must share one
+    # version. Delivered one per pull request, each bump left the others behind and the
+    # CodeQL jobs failed on every one of them -- #201, #202 and #203 in one week, none
+    # mergeable alone, consolidated by hand like the cycle before. One group, one PR.
+    groups:
+      codeql-action:
+        patterns:
+          - "github/codeql-action/*"
     ignore:
       - dependency-name: "*"
         update-types:

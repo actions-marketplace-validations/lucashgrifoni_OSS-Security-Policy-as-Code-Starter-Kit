@@ -21,7 +21,13 @@ classifiers = [
 ]
 dependencies = [
   "typer>=0.12.5",
-  "click>=8.1.8,<8.5",
+  # The ceiling is the next MAJOR, not the next minor. It used to be `<8.5`, a bound that
+  # was never chosen: Dependabot walked it forward one minor at a time (`<8.4` -> `<8.5`,
+  # #12) and nobody wrote down what a newer click broke, because nothing did -- the full
+  # CLI suite passes on 8.5.0, and typer 0.27 declares no click constraint of its own.
+  # A ceiling on a runtime dependency is a promise that the version past it breaks
+  # something; without a named breakage the honest ceiling is the semver major.
+  "click>=8.1.8,<9",
   "pyyaml>=6.0.1",
   "jsonschema>=4.20",
 ]
