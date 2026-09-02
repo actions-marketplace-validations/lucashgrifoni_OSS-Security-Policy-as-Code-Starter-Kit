@@ -128,14 +128,24 @@ def test_a_runner_mention_in_an_unscanned_extension_is_ignored(tmp_path: Path) -
 
 
 def test_a_file_that_cannot_be_read_is_stepped_over(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The unreadable file is named to sort first, or the match short-circuits before it."""
+    """Reaching the unreadable file is asserted, not hoped for.
+
+    The walk is sorted, so `a_locked.py` is read before `z_good.py` and the skip branch runs.
+    The earlier version of this test asserted only the returned path, which is `z_good.py`
+    in EITHER order -- so when the walk was still in filesystem order and Linux happened to
+    yield the good file first, the test passed while the skip branch was never executed.
+    Coverage was the only thing that noticed, months later, as an unexplained 99%. Recording
+    the attempts makes an unordered walk fail here, by name.
+    """
 
     _file(tmp_path, "a_locked.py", "import atheris\n")
     _file(tmp_path, "z_good.py", "import atheris\n")
 
     real_read_bytes = Path.read_bytes
+    attempted: list[str] = []
 
     def _read_bytes(self: Path) -> bytes:
+        attempted.append(self.name)
         if self.name == "a_locked.py":
             raise OSError(13, "Permission denied")
         return real_read_bytes(self)
@@ -144,6 +154,10 @@ def test_a_file_that_cannot_be_read_is_stepped_over(tmp_path: Path, monkeypatch:
     found = fz._has_fuzz_content(tmp_path)
     assert found is not None
     assert "z_good.py" in found
+    assert attempted[:2] == ["a_locked.py", "z_good.py"], (
+        f"the scan read {attempted!r}. The unreadable file must be reached first, or this "
+        "test passes without ever exercising the branch it exists for."
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -165,9 +179,29 @@ def test_the_walk_stops_at_the_file_limit(tmp_path: Path, monkeypatch: pytest.Mo
     assert len(list(fz._iter_candidate_paths(tmp_path))) == 3
 
 
+def test_an_entry_that_is_not_a_regular_file_is_skipped(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``os.walk`` lists broken symlinks, FIFOs and sockets among ``filenames``.
+
+    Opening a FIFO blocks until a writer appears, so a repository containing one would hang
+    the scan; ``is_file()`` is what keeps those out. Forced rather than built from a real
+    FIFO or symlink, because ``os.mkfifo`` does not exist on Windows and ``os.symlink``
+    needs a privilege there, and this branch should be covered wherever the suite runs.
+    """
+
+    _file(tmp_path, "regular.py", "x = 1")
+    _file(tmp_path, "special.py", "y = 2")
+    real_is_file = Path.is_file
+
+    def _is_file(self: Path) -> bool:
+        return False if self.name == "special.py" else real_is_file(self)
+
+    monkeypatch.setattr(Path, "is_file", _is_file)
+    assert [p.name for p in fz._iter_candidate_paths(tmp_path)] == ["regular.py"]
+
+
 def test_a_tree_that_cannot_be_walked_yields_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    def _boom(_self: Path, _pattern: str) -> object:
+    def _boom(_top: object) -> object:
         raise OSError(13, "Permission denied")
 
-    monkeypatch.setattr(Path, "rglob", _boom)
+    monkeypatch.setattr(fz.os, "walk", _boom)
     assert list(fz._iter_candidate_paths(tmp_path)) == []

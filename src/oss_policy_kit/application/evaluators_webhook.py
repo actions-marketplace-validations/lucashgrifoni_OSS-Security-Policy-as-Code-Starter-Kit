@@ -34,6 +34,7 @@ reads up to 16 KiB per file.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
@@ -131,26 +132,32 @@ _REPLAY_HINTS: tuple[str, ...] = (
 
 
 def _iter_candidate_paths(repo_root: Path) -> Iterable[Path]:
-    """Yield up to ``_SCAN_FILE_LIMIT`` source files in the clone (skipping noisy dirs)."""
+    """Yield up to ``_SCAN_FILE_LIMIT`` source files in the clone, in a fixed order.
+
+    Deterministic on purpose, for the reason spelled out in
+    :func:`oss_policy_kit.application.evaluators_fuzzing._iter_candidate_paths`: the walk
+    stops at ``_SCAN_FILE_LIMIT``, so with ``rglob`` the filesystem decided which files a
+    large repository got scanned at all, and the same clone could answer differently on two
+    machines. Pruning ``dirnames`` also stops the walk descending into a skipped directory
+    rather than walking it and discarding each path.
+    """
 
     seen = 0
     try:
-        for path in repo_root.rglob("*"):
-            try:
-                rel = path.relative_to(repo_root)
-            except ValueError:
-                continue
-            parts = rel.parts
-            if any(p in _SKIP_DIRS for p in parts):
-                continue
-            if not path.is_file():
-                continue
-            if path.suffix.lower() not in _SCAN_EXTS:
-                continue
-            yield path
-            seen += 1
-            if seen >= _SCAN_FILE_LIMIT:
-                return
+        for dirpath, dirnames, filenames in os.walk(repo_root):
+            dirnames[:] = sorted(d for d in dirnames if d not in _SKIP_DIRS)
+            filenames.sort()
+            here = Path(dirpath)
+            for name in filenames:
+                path = here / name
+                if path.suffix.lower() not in _SCAN_EXTS:
+                    continue
+                if not path.is_file():
+                    continue
+                yield path
+                seen += 1
+                if seen >= _SCAN_FILE_LIMIT:
+                    return
     except OSError:
         return
 
