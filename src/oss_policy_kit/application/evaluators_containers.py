@@ -382,7 +382,7 @@ def eval_cont_sign_001(ctx: Any) -> EvalOutcome:
         if wd.is_dir():
             for ext in ("*.yml", "*.yaml"):
                 with contextlib.suppress(OSError):
-                    candidates.extend(p for p in wd.rglob(ext) if p.is_file())
+                    candidates.extend(sorted(p for p in wd.rglob(ext) if p.is_file()))
         elif wd.is_file():
             candidates.append(wd)
     for path in candidates[:60]:

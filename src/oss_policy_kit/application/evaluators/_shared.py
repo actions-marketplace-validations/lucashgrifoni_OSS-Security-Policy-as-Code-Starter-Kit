@@ -957,7 +957,7 @@ def _validate_bsi_tr_03183_v2_1(content: str, fmt: str | None, version: str | No
 def _find_sbom_files(repo: Path) -> list[Path]:
     candidates: list[Path] = []
     for pat in ("*.spdx", "*.spdx.json", "*.cdx.json", "sbom.json", "sbom.xml", "bom.json", "bom.xml"):
-        for p in repo.rglob(pat):
+        for p in sorted(repo.rglob(pat)):
             if p.is_file():
                 candidates.append(p)
     return candidates[:10]
@@ -1951,7 +1951,7 @@ def _iter_ai_agent_text_files(repo: Path) -> list[Path]:
     found: list[Path] = []
     for pat in _AI_AGENT_TEXT_PATTERNS:
         with contextlib.suppress(OSError):
-            for p in repo.rglob(pat):
+            for p in sorted(repo.rglob(pat)):
                 if _is_ai_agent_text_file(p, repo):
                     found.append(p)
                     if len(found) >= 200:

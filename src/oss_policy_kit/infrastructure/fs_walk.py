@@ -45,7 +45,7 @@ def walk_matching_files(
     out: list[Path] = []
     excludes = tuple(exclude_globs or ())
     for pat in include_globs:
-        for p in repo_root.glob(pat):
+        for p in sorted(repo_root.glob(pat)):
             resolved = _accept(p, repo_root, excludes, skip_dirs)
             if resolved is None or resolved in seen:
                 continue

@@ -25,7 +25,7 @@ _MAX_GLOB_MATCHES = 5000
 def _any_file_matches(repo_root: Path, patterns: tuple[str, ...]) -> bool:
     for pattern in patterns:
         try:
-            for match in islice(repo_root.glob(pattern), _MAX_GLOB_MATCHES):
+            for match in islice(sorted(repo_root.glob(pattern)), _MAX_GLOB_MATCHES):
                 if match.is_file():
                     return True
         except (OSError, ValueError):

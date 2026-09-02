@@ -188,13 +188,13 @@ def _discover_aibom_files(repo_root: Path) -> list[Path]:
         d = repo_root / rel
         if d.is_dir():
             with contextlib.suppress(OSError):
-                candidates.extend(p for p in d.glob("*.json") if p.is_file())
+                candidates.extend(sorted(p for p in d.glob("*.json") if p.is_file()))
     if candidates:
         return candidates
     # Cycle 2 (PR-26): also recognise a CycloneDX 1.7 ML-BOM anywhere in the
     # repo via the machine-learning-model component marker.
     with contextlib.suppress(OSError):
-        for p in list(repo_root.rglob("*.cdx.json")) + list(repo_root.rglob("bom.json")):
+        for p in sorted(repo_root.rglob("*.cdx.json")) + sorted(repo_root.rglob("bom.json")):
             if _is_ml_bom_marker_file(p, repo_root):
                 candidates.append(p)
     return candidates
@@ -435,7 +435,7 @@ def eval_slsa_src_002(ctx: EvalContext) -> EvalOutcome:
         if p.exists():
             if p.is_dir():
                 with contextlib.suppress(OSError):
-                    candidates.extend(c for c in p.rglob("*") if c.is_file())
+                    candidates.extend(sorted(c for c in p.rglob("*") if c.is_file()))
             else:
                 candidates.append(p)
     matched: list[Path] = []
@@ -826,7 +826,7 @@ def _discover_dockerfiles(repo_root: Path) -> list[Path]:
         if p.is_file():
             dockerfiles.append(p)
     with contextlib.suppress(OSError):
-        for p in repo_root.glob("**/Dockerfile"):
+        for p in sorted(repo_root.glob("**/Dockerfile")):
             if p not in dockerfiles and ".git" not in _parts_within_repo(p, repo_root):
                 dockerfiles.append(p)
     return dockerfiles

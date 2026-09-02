@@ -356,7 +356,7 @@ def _iter_accepted_dockerfiles(repo: Path) -> Iterator[Path]:
     seen: set[Path] = set()
     try:
         for pattern in ("Dockerfile*", "dockerfile*", "*.Dockerfile", "*.dockerfile"):
-            for candidate in repo.rglob(pattern):
+            for candidate in sorted(repo.rglob(pattern)):
                 if _accept_dockerfile_candidate(candidate, seen):
                     yield candidate
     except OSError:

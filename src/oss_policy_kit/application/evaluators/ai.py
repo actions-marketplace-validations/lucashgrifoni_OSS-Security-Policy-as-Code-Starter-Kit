@@ -208,7 +208,7 @@ def eval_llm_218a_pw_002(ctx: EvalContext) -> EvalOutcome:
     found: list[Path] = []
     for pattern in ("test_*prompt*injection*.py", "test_*adversarial*.py", "test_*jailbreak*.py"):
         with contextlib.suppress(OSError):
-            for p in ctx.repo_root.rglob(pattern):
+            for p in sorted(ctx.repo_root.rglob(pattern)):
                 # The sweep had no skip list, so a test inside site-packages counted as the
                 # adopter's own; and an empty file named like a test is a filename, not a test.
                 if not _is_vendored(p, ctx.repo_root) and _has_content(p):
@@ -321,7 +321,7 @@ def _find_output_filter_files(repo_root: Path, limit: int = 5) -> list[Path]:
     matched: list[Path] = []
     for ext in ("*.py", "*.js", "*.ts", "*.mjs"):
         with contextlib.suppress(OSError):
-            for p in repo_root.rglob(ext):
+            for p in sorted(repo_root.rglob(ext)):
                 if _file_has_output_filter(p, repo_root):
                     matched.append(p)
                     if len(matched) >= limit:
@@ -392,8 +392,8 @@ def eval_ai_agent_001(ctx: EvalContext) -> EvalOutcome:
     configs = [ctx.repo_root / rel for rel in _MCP_CONFIG_PATHS if (ctx.repo_root / rel).is_file()]
     if not configs:
         with contextlib.suppress(OSError):
-            configs.extend(p for p in ctx.repo_root.rglob("*.mcp.yaml") if p.is_file())
-            configs.extend(p for p in ctx.repo_root.rglob("*.mcp.yml") if p.is_file())
+            configs.extend(sorted(p for p in ctx.repo_root.rglob("*.mcp.yaml") if p.is_file()))
+            configs.extend(sorted(p for p in ctx.repo_root.rglob("*.mcp.yml") if p.is_file()))
     if not configs:
         return EvalOutcome(
             status=ControlStatus.NOT_APPLICABLE,
@@ -519,13 +519,13 @@ def eval_ai_agent_004(ctx: EvalContext) -> EvalOutcome:
     found: list[Path] = []
     for pat in _AI_AGENT_TEST_PATTERNS:
         with contextlib.suppress(OSError):
-            for p in (ctx.repo_root / "tests").rglob(pat):
+            for p in sorted((ctx.repo_root / "tests").rglob(pat)):
                 if p.is_file():
                     found.append(p)
     security_tests = ctx.repo_root / "tests" / "security"
     if security_tests.is_dir():
         with contextlib.suppress(OSError):
-            found.extend(p for p in security_tests.rglob("*") if p.is_file())
+            found.extend(sorted(p for p in security_tests.rglob("*") if p.is_file()))
     if not found:
         return EvalOutcome(
             status=ControlStatus.MANUAL_REVIEW_REQUIRED,
@@ -876,7 +876,7 @@ def eval_mcp_injection_test_001(ctx: EvalContext) -> EvalOutcome:
         if not d.is_dir():
             continue
         with contextlib.suppress(OSError):
-            for f in d.rglob("*.py"):
+            for f in sorted(d.rglob("*.py")):
                 name = f.name.lower()
                 is_injection = "mcp" in name and "injection" in name
                 is_poison = "tool_poison" in name or "tool-poison" in name or ("poisoning" in name and "tool" in name)
