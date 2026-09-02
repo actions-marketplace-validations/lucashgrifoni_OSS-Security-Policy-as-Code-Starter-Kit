@@ -83,8 +83,12 @@ def test_a_failure_on_a_shorter_temp_path_is_raised_not_worked_around(
     to be long, not creatable.
     """
 
+    # Build past the budget itself, not to a fixed 200: a hosted Windows runner keeps its
+    # temp root short enough that 200 plus the file name plus the 13-character temp
+    # suffix landed UNDER 259, and the fixture then selected the long form it meant to
+    # rule out. The maintainer's machine never saw it because its temp root is long.
     deep = tmp_path
-    while len(str(deep)) < 200:
+    while len(str(deep)) <= rp._MAX_TEMP_PATH:
         deep = deep / "nested-directory-segment"
     dest = deep / "evaluation-report-with-a-long-name.json"
     assert len(str(dest.with_name(f".{dest.name}.deadbeef.tmp"))) > rp._MAX_TEMP_PATH, (
