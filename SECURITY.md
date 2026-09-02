@@ -43,7 +43,7 @@ Preventive scanning is provided by [templates/workflows/secret-scanning.yml](tem
 
 ## Posture, and what the Scorecard does not measure
 
-The repository publishes an [OpenSSF Scorecard](https://securityscorecards.dev/viewer/?uri=github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit). Three of its checks score zero or near zero and will stay that way; they are listed here so the score is read correctly rather than as an unaddressed defect.
+The repository publishes an [OpenSSF Scorecard](https://securityscorecards.dev/viewer/?uri=github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit). Some of its checks score zero or near zero and will stay that way; they are listed here so the score is read correctly rather than as an unaddressed defect.
 
 | Check | Score | Why it is where it is |
 |---|---|---|
@@ -52,6 +52,14 @@ The repository publishes an [OpenSSF Scorecard](https://securityscorecards.dev/v
 | Branch-Protection | 3 | The ruleset requires signatures, 13 status checks, linear history and no force-push. It does not require a review (see above) and it allows the repository owner to bypass — which is how a solo maintainer merges at all. |
 
 What the score *does* reflect: SAST, signed releases, pinned dependencies, token permissions, dangerous-workflow analysis, fuzzing, and a vulnerability-free dependency tree are each measured and each at or near the maximum. A drop in any of those is a regression worth reporting.
+
+### Findings that are open on purpose
+
+Two classes of alert stay open in code scanning. Both are accurate about what they measure and neither describes a defect that can be closed here.
+
+**Pinned-Dependencies on the CI dev install.** The workflow installs the project's `dev` extra from PyPI without hashes. A lock for it would have to be regenerated inside every Dependabot pull request that bumps a dev tool, and a lock that drifts from `pyproject.toml` fails silently rather than loudly: CI would test one version of ruff or mypy while the project declares another, and a green run would stop meaning what it says. That is a worse outcome than the finding, which covers tools that run only in CI, in a job that holds no secrets. Everything shipped to a user *is* hash-pinned — the container image installs from `.github/requirements/`, which Dependabot watches. The check also flags the image's final `pip install .`, which installs the checked-out tree itself and has no hash to carry.
+
+**Base-image CVEs in `pip`.** A job scans the base image pinned by digest in the `Dockerfile` and reports six CVEs in the `pip 25.0.1` that Debian's Python image ships. The published image does not contain them: the runtime stage uninstalls pip from both interpreters, and a scan of the built image reports no fixable vulnerability at any severity. Bumping the digest does not clear them either, because the current upstream image ships the same pip. They describe the image this project builds *from*, which is worth knowing, not the image it publishes.
 
 ## Scope
 
