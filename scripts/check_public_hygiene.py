@@ -208,6 +208,48 @@ def _scan_file(
     return violations
 
 
+#: Generated dependency locks. `uv pip compile` writes the command it was invoked with into
+#: the header and names its input beside every requirement, so whatever path the maintainer
+#: typed is recorded verbatim.
+_LOCK_DIRECTORY = ".github/requirements"
+
+#: A drive-letter or POSIX absolute path. Only ever applied to the files above.
+_ABSOLUTE_PATH = re.compile(r"(?<![A-Za-z0-9_])(?:[A-Za-z]:[\\/]|/(?:home|Users|srv|opt|tmp|var)/)")
+
+
+def _generated_lock_violations(root: Path) -> list[tuple[str, int, str]]:
+    """Absolute paths recorded inside a committed lock file.
+
+    Five locks carried ``C:/v/pins/work/<name>.in`` for the nine days they were public and
+    this scanner reported OK throughout, because every content rule above asks about a HOME
+    directory and a build scratch root is not one. The path still describes a directory
+    layout on the machine that generated the file, published in the repository — the class
+    the kit's own M-002 rule forbids in a shareable artifact.
+
+    Scoped to these files rather than expressed as a global token, and the difference is the
+    whole point: a repository-wide rule for drive-letter paths reported 26 violations, and
+    every one of them was legitimate. The tests are full of synthetic Windows paths because
+    redacting them is what the kit does, and the sample-report README shows one to document
+    the redaction. A lock file is different in kind: it is generated, nobody writes prose in
+    it, and it has no reason to name any absolute path at all.
+    """
+
+    directory = root / _LOCK_DIRECTORY
+    if not directory.is_dir():
+        return []
+    violations: list[tuple[str, int, str]] = []
+    for lock in sorted(directory.glob("*.txt")):
+        rel = lock.relative_to(root).as_posix()
+        try:
+            text = lock.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for i, line in enumerate(text.splitlines(), start=1):
+            if _ABSOLUTE_PATH.search(line):
+                violations.append((rel, i, line.strip()[:160]))
+    return violations
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path.cwd(), help="Repository root (default: cwd).")
@@ -242,6 +284,10 @@ def main(argv: list[str] | None = None) -> int:
             rel = f.relative_to(root).as_posix()
             print(f"[hygiene] {rel}  [forbidden-tracked-filename]  agent instruction file must not be public")
             total_violations += 1
+
+    for rel, lineno, excerpt in _generated_lock_violations(root):
+        print(f"[hygiene] {rel}:{lineno}  [absolute-path-in-generated-lock]  {excerpt}")
+        total_violations += 1
 
     for f in sorted(files):
         rel = f.relative_to(root).as_posix()

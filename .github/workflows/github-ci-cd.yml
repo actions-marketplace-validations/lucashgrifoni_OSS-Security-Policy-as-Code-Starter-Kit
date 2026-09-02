@@ -230,7 +230,7 @@ jobs:
         # against. Pinning it here would test a frozen tree rather than the one adopters
         # resolve, and hide a dependency break until release day.
         run: |
-          python -m pip install -U pip
+          python -m pip install --require-hashes -r .github/requirements/pip.txt
           python -m pip install --require-hashes -r .github/requirements/build-tools.txt
           python -m pip install -e ".[dev]"
 
@@ -261,12 +261,15 @@ jobs:
             echo "No wheel found under dist/" >&2
             exit 1
           fi
-          # --no-deps: every dependency is already installed from `.[dev]` above, so this
-          # step installs exactly one artifact -- the wheel this job just built -- and
-          # reaches for nothing on the network. Scorecard read the bare `pip install` as
-          # an unpinned download, and without the flag it would have been one if a dep
-          # were missing.
-          python -m pip install --no-deps "${wheels[0]}"
+          # The glob is passed straight to pip rather than through the array element, and
+          # the array is kept only to fail loudly when the build produced nothing. An
+          # earlier comment here claimed `--no-deps` was what made this a pinned install.
+          # It is not: Scorecard's `isUnpinnedPipInstall` treats an install as pinned when
+          # an argument ends in `.whl`, and reads `"${wheels[0]}"` as an opaque token with
+          # additional arguments, so the finding stood with the flag in place. `--no-deps`
+          # earns its own keep for a different reason -- every dependency is already
+          # installed from `.[dev]` above, so this step reaches for nothing on the network.
+          python -m pip install --no-deps dist/*.whl
           python -m oss_policy_kit --help
           python -m oss_policy_kit evaluate --help
 
