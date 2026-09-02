@@ -406,6 +406,32 @@ NIST finalized SP 800-218A as an SSDF *Community Profile* augmenting SP 800-218 
 
 **Coverage in this kit**: **shipped** in v6.0.0 via the advisory profile `appsec-llm-ssdf-218a-1` (`LLM-218A-*` family). The full per-practice mapping table is in the [NIST SP 800-218A — Generative AI SSDF Community Profile](#nist-sp-800-218a--generative-ai-ssdf-community-profile-shipped-in-v600) section below.
 
+## Controls the framework tables above do not reach
+
+The tables in this document were written framework by framework, and 41 of the 222
+catalog controls appear in none of them: each was added for a threat or an obligation
+that none of the nine frameworks names directly, and the mapping was never revisited.
+The table below closes that gap. It is informative: a framework practice quoted here is
+the closest one, not a claim that the framework requires the control. The control's own
+`description` and `remediation` remain the authority on what it checks.
+
+| Control family | IDs | Nearest framework practice | Why the framework tables missed it |
+|---|---|---|---|
+| Container runtime posture | `CONT-RUNTIME-001` .. `CONT-RUNTIME-006`, `CONT-DISTROLESS-001`, `CONT-IMAGE-002` | CIS Docker Benchmark 4.1 (non-root), 4.6 (HEALTHCHECK), 5.x (runtime); NIST SP 800-190 4.4 | The container family shipped after the CIS Kubernetes section was written, and CIS Docker is not one of the nine frameworks |
+| Container image signing | `CONT-SIGN-001` | SLSA v1.0 Build L2 (signed provenance); OWASP CI/CD Top 10 CICD-SEC-9 | Sits with SLSA in spirit; the SLSA section lists only the GitHub build-track controls |
+| Webhook ingestion | `SEC-WEBHOOK-001` .. `SEC-WEBHOOK-008` | OWASP ASVS 5.0 V13 (API and web service), V2 (validation); OWASP API Security Top 10 API2 (authentication), API4 (resource consumption) | Application-layer controls; every framework above is supply-chain or platform |
+| EU AI Act readiness | `LLM-AI-ACT-001` .. `LLM-AI-ACT-006` | EU AI Act Article 11 and Annex IV (technical documentation), Article 12 (record keeping) | The EU AI Act section below covers the profile; the ID-level rows lived only in the profile file |
+| MCP agent guardrails | `MCP-CONFIRM-001`, `MCP-EGRESS-001` | OWASP Top 10 for LLM Applications LLM06 (excessive agency), LLM02 (sensitive disclosure); OWASP ASI04 / ASI08 | Added with the agentic family in v10; the ASI table lists the `ASI-*` IDs only |
+| OIDC publication | `PUBLISH-OIDC-001` .. `PUBLISH-OIDC-003` | SLSA v1.0 Build L2/L3 (hosted build, no long-lived credentials); OWASP CI/CD Top 10 CICD-SEC-6 (credential hygiene), CICD-SEC-2 (identity management) | Trusted Publishing post-dates the SLSA and CI/CD sections |
+| Workflow integrity signals | `SCANNER-INTEGRITY-001`, `GH-WF-LOCKFILE-001`, `GH-EGRESS-NATIVE-001`, `GH-RUNNER-062`, `GH-WF-018`, `GH-REL-021`, `GH-IMMUTREL-070`, `ORG-ACTPOL-071` | OWASP CI/CD Top 10 CICD-SEC-3 (dependency chain abuse), CICD-SEC-4 (poisoned pipeline execution), CICD-SEC-8 (third-party services), CICD-SEC-9 (artifact integrity); SLSA v1.2 Source Track (immutable references) | Each was added for a specific incident class (egress exfiltration, runner pinning, immutable releases) after the CI/CD table was fixed at ten rows |
+| OSPS Baseline evidence | `OSPS-SCORECARD-V6-001`, `GOV-BUILD-072` | OpenSSF OSPS Baseline BR-01 (build pipeline), QA-01 (public repository); OpenSSF Scorecard (the check itself) | The OSPS section describes the `osps-coverage` map rather than listing IDs |
+| Evidence freshness | `GOV-EVIDFRESH-054` | No external framework. Kit-internal: bounds how old a `--evidence` file may be before its verdicts are downgraded (ADR-045) | It governs the kit's own evidence contract, not the target |
+| AWS CodeBuild pinning | `AWS-CB-045` | AWS Well-Architected Security Pillar SEC 6 (compute protection), SEC 11 (application security); OWASP CI/CD Top 10 CICD-SEC-3 | The AWS section lists the buildspec family by prefix, and this ID was added later under a different prefix |
+| Azure Pipelines decorators | `AZ-PIPE-028` | Azure DevOps security best practices: pipeline decorators and extension review; OWASP CI/CD Top 10 CICD-SEC-4 | Same cause as the AWS row: added after the Azure section was written |
+
+The mapping is documentation, not a data change: `osps-coverage` and the control catalog
+are unchanged, and nothing in a report cites this table.
+
 ## Decisions taken on this iteration
 
 After mapping the catalog to all nine frameworks above, the explicit decisions are:

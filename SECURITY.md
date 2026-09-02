@@ -41,6 +41,18 @@ If a credential, key, or other sensitive value is committed to this repository, 
 
 Preventive scanning is provided by [templates/workflows/secret-scanning.yml](templates/workflows/secret-scanning.yml), which downstream consumers of this kit can copy into `.github/workflows/`.
 
+## Posture, and what the Scorecard does not measure
+
+The repository publishes an [OpenSSF Scorecard](https://securityscorecards.dev/viewer/?uri=github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit). Three of its checks score zero or near zero and will stay that way; they are listed here so the score is read correctly rather than as an unaddressed defect.
+
+| Check | Score | Why it is where it is |
+|---|---|---|
+| Code-Review | 0 | One maintainer. A pull request cannot be reviewed by its author, and there is nobody else. Every change still passes the 13 required status checks, a required commit signature, and a linear-history rule before it reaches `master`. |
+| Contributors | 0 | The check counts contributors from several organizations. This project has one. |
+| Branch-Protection | 3 | The ruleset requires signatures, 13 status checks, linear history and no force-push. It does not require a review (see above) and it allows the repository owner to bypass — which is how a solo maintainer merges at all. |
+
+What the score *does* reflect: SAST, signed releases, pinned dependencies, token permissions, dangerous-workflow analysis, fuzzing, and a vulnerability-free dependency tree are each measured and each at or near the maximum. A drop in any of those is a regression worth reporting.
+
 ## Scope
 
 Reports should target this repository and its distributed artifacts:
