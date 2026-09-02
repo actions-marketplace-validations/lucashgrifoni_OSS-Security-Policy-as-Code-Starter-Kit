@@ -1509,7 +1509,10 @@ def _strip_html_comments(text: str) -> str:
 #: lazy title and the trailing whitespace compete for the same spaces, which is quadratic in
 #: the length of the line -- and the line comes from the target's own README. Trimming
 #: happens where the title is consumed.
-_ATX_HEADING_RE = re.compile(r"^[ \t]{0,3}(#{1,6})[ \t]+(.*)$")
+#: `\S` opens the title so the whitespace run before it and the title cannot trade
+#: characters; an all-whitespace title leaves the group unmatched, which the consumer
+#: reads as an empty heading, the same answer as before.
+_ATX_HEADING_RE = re.compile(r"^[ \t]{0,3}(#{1,6})[ \t]+(\S.*)?$")
 _SETEXT_UNDERLINE_RE = re.compile(r"^\s{0,3}(?:=+|-{2,})\s*$")
 _FENCE_RE = re.compile(r"^\s*(?:```|~~~)")
 
@@ -1566,7 +1569,8 @@ def _markdown_sections(text: str) -> list[tuple[str, str]]:
             and not _ATX_HEADING_RE.match(lines[index + 1])
         )
         if atx:
-            heads.append((len(atx.group(1)), len(kept), atx.group(2).strip().rstrip("#").strip().lower()))
+            title = (atx.group(2) or "").strip().rstrip("#").strip().lower()
+            heads.append((len(atx.group(1)), len(kept), title))
             index += 1
             continue
         if setext:

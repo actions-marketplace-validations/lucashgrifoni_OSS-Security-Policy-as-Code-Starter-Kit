@@ -94,10 +94,12 @@ def test_the_message_names_the_os_reason_and_not_the_path(blocked: str, tmp_path
     _exit_code, output = _run_with_blocked(tmp_path, blocked)
 
     reason = output.split("--output-dir: ", 1)[1].split(".", 1)[0]
-    assert reason and reason != "filesystem error", (
+    no_reason = (
         f"the message carries no OS reason for the failure: {output!r}. The fallback text "
         "tells the operator nothing they can act on."
     )
+    assert reason, no_reason
+    assert reason != "filesystem error", no_reason
     assert str(tmp_path) not in output
     assert tmp_path.name not in output
 
