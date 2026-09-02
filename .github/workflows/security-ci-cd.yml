@@ -396,12 +396,19 @@ jobs:
           echo "ref=${ref}" >> "${GITHUB_OUTPUT}"
           echo "Scanning ${ref}"
 
-      # Reported, not gated, and the distinction is deliberate. These are Debian packages:
-      # the fix exists upstream but arrives only when the base image is rebuilt, which this
-      # repository does not control. Failing the build would break CI on a repository with no
-      # changes and train everyone to ignore it. The findings land in code scanning, where
-      # they are tracked and dated, and `ignore-unfixed` means every one of them is actionable
-      # by bumping the digest.
+      # Reported, not gated, and the distinction is deliberate. A fix for anything found
+      # here arrives only when the base image is rebuilt, which this repository does not
+      # control. Failing the build would break CI on a repository with no changes and train
+      # everyone to ignore it, so the findings land in code scanning where they are tracked
+      # and dated.
+      #
+      # `ignore-unfixed` does NOT make everything reported here actionable by bumping the
+      # digest, and the previous version of this comment claimed it did. Measured 2026-09-02:
+      # what this job reports is six CVEs in the `pip 25.0.1` the Debian Python image ships,
+      # the current upstream `python:3.12-slim-bookworm` ships that same pip and the same six,
+      # and with `ignore-unfixed` the OS-package layer of both digests is empty. Bumping the
+      # digest today changes nothing. The runtime stage uninstalls pip from both interpreters,
+      # so none of it reaches the published image; SECURITY.md records why they stay open.
       - name: Scan the base image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.36.0
         with:
@@ -699,11 +706,21 @@ jobs:
         # (oss-policy-kit) via --skip-editable. Auditing our own freshly
         # built version is meaningless and races PyPI on release commits,
         # while runtime dependencies are still installed and audited.
-        # Upgrade pip first: the runner ships pip 26.1.1 (PYSEC-2026-196,
-        # fixed in 26.1.2). pip is a build tool, not a project dependency,
-        # so we patch it at the source rather than --ignore-vuln the finding.
+        #
+        # pip itself comes from the hashed lock, as in every other job. The runner
+        # ships a pip old enough to carry its own advisory (PYSEC-2026-196 against
+        # 26.1.1), and the previous `--upgrade "pip>=26.1.2"` patched that by
+        # resolving whatever was newest at the time: an unpinned download performing
+        # every install below it. The lock carries the same fix and a hash.
+        #
+        # The second install is deliberately NOT hash-pinned, and Scorecard reports
+        # it. This job exists to audit the runtime closure that `pyproject.toml`'s
+        # ranges actually resolve to. Installing a frozen lock here would audit the
+        # lock instead, and report clean on precisely the day a newly published
+        # range-satisfying version became vulnerable. Pinning it would not harden
+        # this job, it would blind it.
         run: |
-          python -m pip install --upgrade "pip>=26.1.2"
+          python -m pip install --require-hashes -r .github/requirements/pip.txt
           python -m pip install -e .
 
       - name: Audit Python dependencies
@@ -780,8 +797,14 @@ jobs:
 
       - name: Install the kit from source
         # From source, not from PyPI: this job has to exercise the commit under
-        # test, not the last release.
-        run: python -m pip install -e .
+        # test, not the last release. Unlike the pip-audit job above, nothing here
+        # depends on resolving ranges live -- this job only needs the CLI to run --
+        # so the dependencies come from the hashed lock and `--no-deps` stops the
+        # editable install reaching for anything beyond the checkout. Same shape as
+        # the install in release-please.yml.
+        run: |
+          python -m pip install --require-hashes -r .github/requirements/runtime-all.txt
+          python -m pip install --no-deps -e .
 
       - name: Produce zizmor SARIF into the evidence directory
         # `correlate-findings` reads external SARIF from

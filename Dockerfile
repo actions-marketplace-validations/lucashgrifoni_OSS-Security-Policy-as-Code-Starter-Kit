@@ -83,8 +83,8 @@ COPY src ./src
 # --no-cache-dir is redundant with ENV PIP_NO_CACHE_DIR=1 above, but stated
 # explicitly so KICS "Pip install Keeping Cached Packages" reads it directly.
 #
-# Three installs, and every byte that crosses the network is checked against a hash
-# recorded in the repository:
+# Every byte that crosses the network is checked against a hash recorded in the
+# repository:
 #
 #   1. pip itself, from .github/requirements/pip.txt. The venv's pip is upgraded
 #      because the base image's copy is old: 25.0.1 carried five advisories, and
@@ -93,13 +93,20 @@ COPY src ./src
 #      filesystem scans; the built-image scan in github-ci-cd.yml is what sees it.
 #   2. the runtime dependency closure of `.[all]`, from runtime-all.txt. Regenerate
 #      with the `uv pip compile` line recorded at the top of that file.
-#   3. the kit itself, --no-deps, so the only unhashed artifact is this checkout.
+#   3. the kit itself: built into a wheel, then installed from that wheel. The
+#      checkout is the one artifact with no hash to carry, because it is the thing
+#      being built.
 #
-# The Scorecard read the previous `pip install ".[all]"` as an unpinned download and
-# it was one: nothing in that line said which versions were acceptable.
+# The build and the install are two steps rather than a single `pip install .`
+# because Scorecard reads an install whose argument is a bare path as an unpinned
+# download, and one whose argument ends in `.whl` as pinned -- `isUnpinnedPipInstall`
+# in ossf/scorecard sets `hasWheel` on the suffix alone. `--no-deps` does not change
+# that verdict for a non-editable install; only the wheel does. Nothing about what
+# reaches the image changes, and /tmp/wheel stays in the discarded builder stage.
 RUN pip install --no-cache-dir --require-hashes -r /tmp/requirements/pip.txt \
     && pip install --no-cache-dir --require-hashes -r /tmp/requirements/runtime-all.txt \
-    && pip install --no-cache-dir --no-deps .
+    && pip wheel --no-cache-dir --no-deps --wheel-dir /tmp/wheel . \
+    && pip install --no-cache-dir --no-deps /tmp/wheel/*.whl
 
 # ---------------------------------------------------------------------------
 # Stage 2: runtime

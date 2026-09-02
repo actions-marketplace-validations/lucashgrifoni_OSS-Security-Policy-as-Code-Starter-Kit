@@ -57,7 +57,21 @@ What the score *does* reflect: SAST, signed releases, pinned dependencies, token
 
 Two classes of alert stay open in code scanning. Both are accurate about what they measure and neither describes a defect that can be closed here.
 
-**Pinned-Dependencies on the CI dev install.** The workflow installs the project's `dev` extra from PyPI without hashes. A lock for it would have to be regenerated inside every Dependabot pull request that bumps a dev tool, and a lock that drifts from `pyproject.toml` fails silently rather than loudly: CI would test one version of ruff or mypy while the project declares another, and a green run would stop meaning what it says. That is a worse outcome than the finding, which covers tools that run only in CI, in a job that holds no secrets. Everything shipped to a user *is* hash-pinned — the container image installs from `.github/requirements/`, which Dependabot watches. The check also flags the image's final `pip install .`, which installs the checked-out tree itself and has no hash to carry.
+**Pinned-Dependencies on three CI installs.** Exactly three `pip install` commands resolve versions this repository has not committed to. Naming them rather than describing them is deliberate: the count moved twice on 2026-09-02, and on both occasions a prose description was what let it move unnoticed.
+
+| File | Command |
+| --- | --- |
+| `.github/workflows/github-ci-cd.yml` | `python -m pip install -e ".[dev]"` (quality job) |
+| `.github/workflows/github-ci-cd.yml` | `python -m pip install -e ".[dev]"` (build-and-publish job) |
+| `.github/workflows/security-ci-cd.yml` | `python -m pip install -e .` (pip-audit job) |
+
+The two `dev` installs resolve the dev tool ranges `pyproject.toml` declares. A lock for them would have to be regenerated inside every Dependabot pull request that bumps a dev tool, and a lock that drifts from `pyproject.toml` fails silently rather than loudly: CI would test one version of ruff or mypy while the project declares another, and a green run would stop meaning what it says. That is a worse outcome than the finding, which covers tools that run only in CI, in a job that holds no secrets.
+
+This acceptance is a bet that a version change lands loudly rather than quietly, and on 2026-09-02 it paid out in the pleasant direction: CI resolved mypy 2.3.1 and passed, while a contributor machine still on mypy 1.20.1 reported an error in `application/evaluators/cicd.py` that CI does not see. An older checker being stricter is the harmless case. A newer one being *laxer* would have been a false green, and nothing here would have caught it — which is the residual risk this acceptance carries, stated rather than implied.
+
+The third is the editable install in the `pip-audit` job, and pinning it would defeat the job. That job exists to audit the runtime closure the ranges in `pyproject.toml` actually resolve to; installing a frozen lock would audit the lock instead, and report clean on precisely the day a newly published range-satisfying version became vulnerable.
+
+Everything shipped to a user *is* hash-pinned — the container image installs from `.github/requirements/`, which Dependabot watches. The three are enforced as a closed set by `tests/infrastructure/test_every_unpinned_pip_install_is_a_decision.py`, which applies Scorecard's own rule to every workflow and the `Dockerfile`: a fourth unpinned install fails the build in the pull request that adds it, rather than arriving later as an alert. Do not add to that list without adding the reason here.
 
 **Base-image CVEs in `pip`.** A job scans the base image pinned by digest in the `Dockerfile` and reports six CVEs in the `pip 25.0.1` that Debian's Python image ships. The published image does not contain them: the runtime stage uninstalls pip from both interpreters, and a scan of the built image reports no fixable vulnerability at any severity. Bumping the digest does not clear them either, because the current upstream image ships the same pip. They describe the image this project builds *from*, which is worth knowing, not the image it publishes.
 
