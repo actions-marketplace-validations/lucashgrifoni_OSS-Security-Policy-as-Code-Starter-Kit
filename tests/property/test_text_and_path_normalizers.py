@@ -60,7 +60,9 @@ def test_path_spelling_folds_every_separator_to_one_style(value: str) -> None:
     assert "\\" not in out
     body = out[2:] if out.startswith("//") else out
     assert "//" not in body, "a doubled separator survives only as a UNC prefix"
-    assert "/./" not in out and not out.endswith("/.") and out != "/."
+    assert "/./" not in out
+    assert not out.endswith("/.")
+    assert out != "/."
 
 
 @given(_path_text)

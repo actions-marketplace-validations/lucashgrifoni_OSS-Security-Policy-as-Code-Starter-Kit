@@ -71,7 +71,8 @@ def test_the_files_beyond_the_first_are_named(tmp_path: Path) -> None:
 
     assert warnings, "a result naming three files produced no warning at all"
     joined = " ".join(warnings)
-    assert "b/y.py" in joined and "c/z.py" in joined, f"the dropped files are still unnamed: {warnings!r}"
+    assert "b/y.py" in joined, f"the dropped files are still unnamed: {warnings!r}"
+    assert "c/z.py" in joined, f"the dropped files are still unnamed: {warnings!r}"
 
 
 def test_a_single_location_result_warns_about_nothing(tmp_path: Path) -> None:

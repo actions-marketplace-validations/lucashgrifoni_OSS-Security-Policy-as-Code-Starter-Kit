@@ -221,7 +221,8 @@ def test_an_unparsed_pipeline_is_reviewed_not_ruled_on(
     assert old_claim not in outcome.reason
     assert f"{unproven} could not be confirmed" in outcome.reason
     assert "azure-pipelines.yml" in outcome.reason
-    assert "/" not in outcome.reason and "\\" not in outcome.reason, "M-002: the name, never the path"
+    assert "/" not in outcome.reason, "M-002: the name, never the path"
+    assert "\\" not in outcome.reason, "M-002: the name, never the path"
 
 
 @pytest.mark.parametrize(

@@ -113,7 +113,8 @@ def test_the_reason_names_the_file_without_naming_the_host(body: str, tmp_path: 
     result = _read(_evidence(tmp_path, body))
 
     assert isinstance(result, EvalOutcome)
-    assert "/" not in result.reason and "\\" not in result.reason, result.reason
+    assert "/" not in result.reason, result.reason
+    assert "\\" not in result.reason, result.reason
 
 
 def test_a_well_formed_object_still_reads(tmp_path: Path) -> None:

@@ -673,7 +673,7 @@ def _analyze_one_composite_action(path: Path, result: WorkflowAnalysis) -> None:
     result.composite_action_paths.append(path)
     try:
         data: Any = load_yaml_file(path)
-    except Exception as exc:  # noqa: BLE001 - an unreadable action is recorded, never assumed empty
+    except Exception as exc:  # noqa: BLE001  # an unreadable action is recorded, never assumed empty
         result.parse_errors.append((path, str(exc)))
         return
     if not isinstance(data, dict):

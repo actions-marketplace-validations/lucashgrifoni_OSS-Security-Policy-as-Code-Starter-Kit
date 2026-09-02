@@ -54,9 +54,11 @@ def test_a_non_object_sarif_root_is_an_error_string_not_an_exception(label: str,
     runs, error = _shared._load_sarif_runs(path)
 
     assert runs is None
-    assert error and "JSON object" in error, error
+    assert error
+    assert "JSON object" in error, error
     # M-002: the message must not name where the file lives.
-    assert "/" not in error and "\\" not in error, error
+    assert "/" not in error, error
+    assert "\\" not in error, error
 
 
 @pytest.mark.parametrize("schema", [210, None, ["x"], {"a": 1}, 1.5, True])

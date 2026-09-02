@@ -72,7 +72,11 @@ def normalize_path_spelling(value: str) -> str:
     if "://" in value:
         return value
     cleaned = value.replace("\\", "/")
-    prefix = "//" if cleaned.startswith("//") else "/" if cleaned.startswith("/") else ""
+    prefix = ""
+    if cleaned.startswith("//"):
+        prefix = "//"
+    elif cleaned.startswith("/"):
+        prefix = "/"
     segments = [segment for segment in cleaned.split("/") if segment and segment != "."]
     return (prefix + "/".join(segments)) or value
 

@@ -135,8 +135,10 @@ def test_a_failure_is_not_filed_under_skipped(tmp_path: Path, monkeypatch: pytes
     failures = _section(markdown, "Repositories that could not be evaluated")
     skipped = _section(markdown, "Skipped directories")
 
-    assert _UNREADABLE in failures and _UNREADABLE not in skipped
-    assert _NOT_A_REPO in skipped and _NOT_A_REPO not in failures
+    assert _UNREADABLE in failures
+    assert _UNREADABLE not in skipped
+    assert _NOT_A_REPO in skipped
+    assert _NOT_A_REPO not in failures
 
 
 def test_a_complete_batch_says_nothing_about_being_incomplete(tmp_path: Path) -> None:

@@ -310,7 +310,11 @@ def strip_yaml_comments(text: str) -> str:
             continue
         tail = line[cut:]
         # `\r\n` first: it also ends with `\n`, and testing the other way round eats the `\r`.
-        newline = "\r\n" if tail.endswith("\r\n") else ("\n" if tail.endswith("\n") else "")
+        newline = ""
+        if tail.endswith("\r\n"):
+            newline = "\r\n"
+        elif tail.endswith("\n"):
+            newline = "\n"
         out.append(line[:cut] + " " * (len(tail) - len(newline)) + newline)
     return "".join(out)
 

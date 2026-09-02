@@ -116,7 +116,8 @@ def test_the_same_package_from_two_tools_is_still_one_finding(tmp_path: Path) ->
 
     assert len(findings) == 1, f"one package reported by two tools produced {len(findings)} findings"
     assert findings[0].component == purl
-    assert findings[0].correlation is not None and findings[0].correlation.merged_from == 2
+    assert findings[0].correlation is not None
+    assert findings[0].correlation.merged_from == 2
     assert {s.tool for s in findings[0].sources} == {"osv-scanner", "Trivy"}
 
 
@@ -139,7 +140,8 @@ def test_a_source_that_names_no_package_keeps_the_field_null(tmp_path: Path) -> 
 
     assert len(findings) == 1
     assert findings[0].component is None
-    assert findings[0].correlation is not None and findings[0].correlation.merged_from == 2
+    assert findings[0].correlation is not None
+    assert findings[0].correlation.merged_from == 2
 
 
 def test_the_plain_package_spelling_is_read_when_there_is_no_purl(tmp_path: Path) -> None:
