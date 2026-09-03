@@ -23,11 +23,16 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from oss_policy_kit.application.loader import (
+    bundled_kit_root,
+    resolve_profile_file,
+)
 from oss_policy_kit.application.profile_hints import (
+    STACK_LABEL_BY_SIGNAL_ID,
     ProfileRecommendation,
     build_profile_recommendation,
 )
-from oss_policy_kit.domain.errors import InvalidInputError
+from oss_policy_kit.domain.errors import InvalidInputError, LoadError
 
 #: Schema version for the persisted ``oss-policy-kit.yaml`` config file.
 CONFIG_SCHEMA_VERSION = "oss-policy-kit/config/v1"
@@ -51,6 +56,13 @@ DEFAULT_PROFILE_PER_PLATFORM: dict[str, str] = {
 #: Platforms accepted by ``--platform``. Hybrid and regulatory profiles are
 #: deliberately not auto-selectable here: they require a deliberate choice.
 SUPPORTED_PLATFORMS: frozenset[str] = frozenset({"github", "gitlab", "azure", "aws"})
+
+#: Platforms for which per-platform evidence templates exist and can be scaffolded
+#: by ``--with-evidence``. github/gitlab/azure/aws all ship evidence templates
+#: (``evidence_scaffold`` emits them; gitlab added in v6.4.0). Only ``unknown`` has no
+#: templates, so ``--with-evidence`` is downgraded (with a note) for it rather than
+#: silently dropped.
+EVIDENCE_PLATFORMS: frozenset[str] = frozenset({"github", "gitlab", "azure", "aws"})
 
 #: Allowed values for ``--fail-on``. Mirrors :mod:`oss_policy_kit.cli.common`.
 SUPPORTED_FAIL_ON: frozenset[str] = frozenset({"none", "fail", "degraded"})
@@ -123,31 +135,6 @@ class InitPlan:
     notes: list[str] = field(default_factory=list)
     recommendation: ProfileRecommendation | None = None
 
-    def planned_paths(self) -> list[tuple[str, Path]]:
-        """Return ``[(label, absolute_path), ...]`` for every artifact the
-        writer would create. Used by the human and JSON renderers.
-
-        The list is intentionally ordered so the human-facing summary feels
-        natural: config first, then waivers, then evidence directory, then
-        workflow file.
-        """
-
-        out: list[tuple[str, Path]] = []
-        if self.write_config:
-            out.append(("config", self.target / CONFIG_FILENAME))
-        if self.write_waivers:
-            out.append(("waivers", self.target / WAIVERS_FILENAME))
-        if self.scaffold_evidence:
-            out.append(("evidence_dir", self.target / ".oss-policy-kit" / "evidence"))
-        if self.write_workflow:
-            out.append(
-                (
-                    "workflow",
-                    self.target / ".github" / "workflows" / self.workflow_filename,
-                )
-            )
-        return out
-
 
 def _validate_fail_on(value: str) -> str:
     """Normalize and validate ``--fail-on``.
@@ -214,6 +201,37 @@ def _pick_profile(
     return DEFAULT_FALLBACK_PROFILE, "fallback"
 
 
+def _validate_user_profile(profile_id: str) -> None:
+    """Reject an unknown ``--profile`` before any filesystem write (incl. dry-run).
+
+    Uses the SAME lookup ``evaluate`` relies on so the two commands agree on what
+    is a valid profile:
+
+    - An external YAML path (``.yaml`` / ``.yml`` that exists on disk) is accepted
+      verbatim; ``evaluate`` loads it directly via :func:`load_profile_by_id`.
+    - Otherwise the value must resolve to a bundled
+      ``data/profiles/<id>/profile.yaml`` through
+      :func:`resolve_profile_file` (removed ids get the loader's migration pointer
+      verbatim). A miss is converted into a friendly
+      :class:`InvalidInputError` (exit 2) instead of writing a poisoned
+      ``oss-policy-kit.yaml`` that ``evaluate`` would later reject.
+    """
+
+    candidate = Path(profile_id)
+    if candidate.suffix.lower() in {".yaml", ".yml"} and candidate.is_file():
+        return
+    try:
+        resolve_profile_file(bundled_kit_root(), profile_id)
+    except LoadError as exc:
+        # Preserve the loader's removed-profile guidance verbatim (it names the
+        # canonical replacement id); only genuinely-unknown ids get the generic hint.
+        if "was removed" in exc.message:
+            raise InvalidInputError(exc.message) from exc
+        raise InvalidInputError(
+            f"Unknown profile '{profile_id}'. Run 'oss-policy-kit profiles' to list available ids."
+        ) from exc
+
+
 def _detect_platform_from_signals(signals: list[dict[str, str]]) -> str:
     """Pick the strongest platform from the list of detected signal IDs.
 
@@ -235,24 +253,18 @@ def _detect_platform_from_signals(signals: list[dict[str, str]]) -> str:
 
 
 def _detect_primary_stack_from_signals(signals: list[dict[str, str]]) -> str | None:
-    """Map tech-stack signal IDs to a friendly stack label."""
+    """Map tech-stack signal IDs to a friendly stack label.
 
-    mapping = {
-        "node_js": "Node.js",
-        "python_pyproject": "Python",
-        "python_requirements": "Python",
-        "python_setup": "Python",
-        "go_module": "Go",
-        "java_maven": "Java/Maven",
-        "java_gradle": "Java/Kotlin (Gradle)",
-        "rust_cargo": "Rust",
-        "dotnet_csproj": "C#/.NET",
-        "container_docker": "Container (Docker)",
-    }
+    The labels come from `profile_hints`, which is the module that emits these signals in the
+    first place. This function used to keep its own copy of the dict, and the two had already
+    drifted: this one knew `container_docker` while `profile_hints` knew `node_lockfile`, so the
+    stack a repository was said to use depended on which module you asked.
+    """
+
     for sig in signals:
-        sid = sig.get("id", "")
-        if sid in mapping:
-            return mapping[sid]
+        label = STACK_LABEL_BY_SIGNAL_ID.get(sig.get("id", ""))
+        if label is not None:
+            return label
     return None
 
 
@@ -311,6 +323,13 @@ def build_init_plan(
         recommendation=recommendation,
     )
 
+    # A user-supplied --profile must be a real bundled id (or external YAML path)
+    # before we write oss-policy-kit.yaml. Validating here — using the same lookup
+    # evaluate uses — keeps init from emitting a poisoned config that evaluate would
+    # later reject, and runs ahead of every write path (including --dry-run).
+    if profile_source == "user":
+        _validate_user_profile(profile)
+
     # Workflow generation only makes sense for GitHub in this iteration
     # because the bundled templates live under ``.github/workflows/``. We
     # silently downgrade ``with_workflow`` for non-GitHub targets and
@@ -322,6 +341,19 @@ def build_init_plan(
             "Workflow templates are only generated for GitHub targets in this version; "
             "skipped --with-workflow because the detected platform is "
             f"{detected_platform}.",
+        )
+
+    # Evidence templates exist for github/gitlab/azure/aws. Mirror the workflow handling:
+    # downgrade --with-evidence only for an unknown platform and surface a note, instead of
+    # silently dropping it (which left a dangling "fill the evidence files" next-step
+    # and was invisible in --format json). ADR-043/9.0.1 first-run honesty fix; gitlab
+    # parity restored in v10.0.1 (templates shipped since v6.4.0).
+    will_scaffold_evidence = with_evidence and detected_platform in EVIDENCE_PLATFORMS
+    if with_evidence and detected_platform not in EVIDENCE_PLATFORMS:
+        extra_notes.append(
+            "Evidence templates are only scaffolded for github / gitlab / azure / aws targets; "
+            f"skipped --with-evidence because the detected platform is {detected_platform}. "
+            "Pass --platform github|gitlab|azure|aws to scaffold evidence.",
         )
 
     signal_ids = [s.get("id", "") for s in recommendation.signals_detected if s.get("id")]
@@ -337,7 +369,7 @@ def build_init_plan(
         output_dir=output_dir,
         write_config=True,
         write_waivers=with_waivers,
-        scaffold_evidence=with_evidence,
+        scaffold_evidence=will_scaffold_evidence,
         write_workflow=will_write_workflow,
         workflow_filename=GITHUB_WORKFLOW_FILENAME,
         force=force,

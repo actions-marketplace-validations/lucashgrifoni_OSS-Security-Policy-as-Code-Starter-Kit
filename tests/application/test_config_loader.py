@@ -37,7 +37,7 @@ profile: github-level-1
 profile_source: recommended
 fail_on: fail
 output_dir: "./oss-policy-reports"
-report_json_contract: "1.0"
+report_json_contract: "2.0"
 detected:
   platform: github
   primary_stack: "Python"
@@ -64,7 +64,7 @@ def test_load_valid_config(tmp_path: Path) -> None:
     assert result.profile == "github-level-1"
     assert result.fail_on == "fail"
     assert result.output_dir == "./oss-policy-reports"
-    assert result.report_json_contract == "1.0"
+    assert result.report_json_contract == "2.0"
     assert result.detected_platform == "github"
     assert result.detected_primary_stack == "Python"
 

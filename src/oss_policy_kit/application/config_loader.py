@@ -22,9 +22,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
-
-from oss_policy_kit.domain.errors import InvalidInputError
+from oss_policy_kit.application.input_limits import MAX_CONFIG_BYTES, load_capped_document
+from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
 
 #: Filename of the persisted project config; matches ``init_planner``.
 CONFIG_FILENAME = "oss-policy-kit.yaml"
@@ -111,17 +110,14 @@ def load_project_config(path: Path) -> ProjectConfig:
     """
 
     if not path.is_file():
-        raise InvalidInputError(f"Config file not found: {path}.")
+        raise InvalidInputError(f"Config file not found: {path.name}.")
 
-    try:
-        raw = path.read_text(encoding="utf-8")
-    except OSError as exc:
-        raise InvalidInputError(f"Could not read {path}: {exc}.") from exc
-
-    try:
-        payload = yaml.safe_load(raw)
-    except yaml.YAMLError as exc:
-        raise InvalidInputError(f"{path.name}: invalid YAML: {exc}.") from exc
+    # The config sits inside the target repository, so its content is as
+    # attacker-influenced as any other cloned file: it is read through the shared
+    # defensive loader so an oversized, unreadable, too-deeply-nested, or otherwise
+    # hostile file is a usage error (exit 2) instead of an exit-3 crash, and no
+    # message echoes the resolved absolute path (M-002).
+    payload = load_capped_document(path, MAX_CONFIG_BYTES, label="Project config")
 
     if not isinstance(payload, dict):
         raise InvalidInputError(
@@ -146,6 +142,16 @@ def load_project_config(path: Path) -> ProjectConfig:
 
     output_dir = _require_str(payload, "output_dir", where=path)
     report_contract = _optional_str(payload, "report_json_contract") or "2.0"
+    # Validate against the engine's report-contract allow-list (reports/2.0 only in
+    # v9.0.0, ADR-043). Imported lazily to avoid a load-time import cycle.
+    from oss_policy_kit.application.engine import report_json_schema_url
+
+    try:
+        report_json_schema_url(report_contract)
+    except OssPolicyKitError as exc:
+        raise InvalidInputError(
+            f"{path.name}: report_json_contract must be '2.0' (got {report_contract!r}).",
+        ) from exc
 
     detected = payload.get("detected", {}) or {}
     if not isinstance(detected, dict):

@@ -100,7 +100,9 @@ def test_resolve_applicability_no_spec_is_always_applicable(tmp_path: Path) -> N
 def test_resolve_applicability_match_and_no_match(tmp_path: Path) -> None:
     spec = ApplicabilitySpec(requires_any_files=("**/Dockerfile",))
     applicable, reason = resolve_applicability(spec, tmp_path)
-    assert applicable is False and reason is not None and "Precondition not met" in reason
+    assert applicable is False
+    assert reason is not None
+    assert "Precondition not met" in reason
 
     (tmp_path / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
     assert resolve_applicability(spec, tmp_path) == (True, None)

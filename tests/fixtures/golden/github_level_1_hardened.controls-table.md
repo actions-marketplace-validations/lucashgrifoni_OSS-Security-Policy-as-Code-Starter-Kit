@@ -1,9 +1,6 @@
 | Status | Count |
 | --- | ---: |
 | `pass` | 14 |
-| Gate role | Count |
-| --- | ---: |
-| `passed_observation` | 14 |
 | ID | Category | Lifecycle | Assurance | Status | Confidence | Reason | Remediation | Waiver |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `GOV-SEC-001` | governance | stable | `deterministic` | `pass` | high | SECURITY.md present. | Keep SECURITY.md current and linked from the repository README. |  |

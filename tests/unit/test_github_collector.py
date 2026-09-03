@@ -108,8 +108,9 @@ def test_permission_error_on_403(monkeypatch: pytest.MonkeyPatch) -> None:
         )
 
     monkeypatch.setattr(httpx, "Client", _client)
+    collector = GitHubEvidenceCollector("x")
     with pytest.raises(CollectionPermissionError):
-        GitHubEvidenceCollector("x").collect("o/r")
+        collector.collect("o/r")
 
 
 def test_rate_limit_on_429(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -125,8 +126,9 @@ def test_rate_limit_on_429(monkeypatch: pytest.MonkeyPatch) -> None:
         )
 
     monkeypatch.setattr(httpx, "Client", _client)
+    collector_2 = GitHubEvidenceCollector("x")
     with pytest.raises(RateLimitError):
-        GitHubEvidenceCollector("x").collect("o/r")
+        collector_2.collect("o/r")
 
 
 @pytest.mark.usefixtures("mock_github_transport")
@@ -143,8 +145,9 @@ def test_collect_wraps_network_errors(monkeypatch: pytest.MonkeyPatch) -> None:
         raise httpx.ConnectError("boom", request=httpx.Request("GET", "https://api.github.com/repos/o/r"))
 
     monkeypatch.setattr(httpx, "Client", boom)
+    collector_3 = GitHubEvidenceCollector("tok")
     with pytest.raises(CollectionNetworkError):
-        GitHubEvidenceCollector("tok").collect("o/r")
+        collector_3.collect("o/r")
 
 
 # --------------------------------------------------------------------------- #

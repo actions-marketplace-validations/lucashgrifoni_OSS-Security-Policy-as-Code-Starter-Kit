@@ -153,7 +153,7 @@ def _render_one_chart(
     outcome.charts_rendered.append(rel)
     # helm template --output-dir nests templates under <out_dir>/<chart-name>/templates/...
     for pattern in ("*.yaml", "*.yml"):
-        for manifest in out_dir.rglob(pattern):
+        for manifest in sorted(out_dir.rglob(pattern)):
             if manifest.is_file():
                 outcome.rendered_manifest_paths.append(manifest)
 

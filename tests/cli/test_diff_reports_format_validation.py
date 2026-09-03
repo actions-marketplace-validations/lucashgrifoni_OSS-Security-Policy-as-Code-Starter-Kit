@@ -18,9 +18,9 @@ from oss_policy_kit.cli.main import app
 runner = CliRunner()
 
 _MINIMAL_REPORT = {
-    "schema_version": "https://example/reports/1.0",
+    "contract_version": "reports/2.0",
     "profile": {"id": "github-level-1"},
-    "results": [{"control_id": "A", "status": "pass"}],
+    "controls": [{"id": "A", "state": "PASS"}],
 }
 
 

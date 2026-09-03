@@ -1,8 +1,9 @@
 {
-  "schema_version": "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/1.0",
+  "schema_version": "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/2.0",
+  "contract_version": "reports/2.0",
   "evidence_provenance_version": "evidence/2.0",
-  "generated_at": "2026-05-19T16:49:49+00:00",
-  "kit_version": "6.0.0.dev0",
+  "generated_at": "2026-08-06T00:00:00+00:00",
+  "kit_version": "10.0.19",
   "target_path": "hardened-repo",
   "profile": {
     "id": "github-level-1",
@@ -14,52 +15,21 @@
     "recommended_gate": "--fail-on fail"
   },
   "summary_by_status": {
-    "pass": 14
+    "PASS": 14
   },
   "controls_total": 14,
-  "summary_by_gate_role": {
-    "passed_observation": 14
-  },
-  "gate_execution_model": {
-    "model_version": 2,
-    "report_contract": "reports/1.0",
-    "fail_on_semantics": {
-      "none": {
-        "exit_1_from_results": false
-      },
-      "fail": {
-        "exit_1_when": "ci_blocking_fail > 0",
-        "maps_to_summary_status": "fail"
-      },
-      "degraded": {
-        "exit_1_when": "ci_blocking_fail > 0 OR human_review_gate > 0",
-        "maps_to_summary_statuses": [
-          "fail",
-          "manual-review-required"
-        ]
-      }
-    },
-    "trust_boundary_notes": [
-      "`not-evaluated` never triggers fail-on by itself - it signals evaluation limits or missing evidence.",
-      "`self-attested` is declarative and is not the same as verifier-backed pass.",
-      "Waivers may convert `fail` to `waived` before summaries are computed.",
-      "`assurance: signal` controls cannot project to `trust_level: verified` in the v1 evidence model.",
-      "`evidence.freshness_status: stale` reduces trust to `declared` even when collection method is live."
-    ]
-  },
-  "results": [
+  "controls": [
     {
-      "control_id": "GOV-SEC-001",
+      "id": "GOV-SEC-001",
       "title": "SECURITY.md present",
       "category": "governance",
       "lifecycle": "stable",
       "profile": "github-level-1",
-      "status": "pass",
-      "gate_role": "passed_observation",
+      "state": "PASS",
       "assurance": "deterministic",
       "confidence": "high",
       "weight": 3,
-      "reason": "SECURITY.md present.",
+      "message": "SECURITY.md present.",
       "remediation": "Keep SECURITY.md current and linked from the repository README.",
       "evidence": {
         "source_type": "static_clone",
@@ -72,7 +42,7 @@
         "references": [
           {
             "kind": "path",
-            "value": "<redacted-absolute>/Projects List - Andamento\\1.Projeto - OSS Security Policy as Code Starter Kit\\examples\\hardened-repo\\SECURITY.md",
+            "value": "<redacted-absolute>SECURITY.md",
             "redacted": true
           }
         ],
@@ -87,17 +57,16 @@
       "finding_id": "GOV-SEC-001@github-level-1"
     },
     {
-      "control_id": "GOV-CON-002",
+      "id": "GOV-CON-002",
       "title": "CONTRIBUTING guide present",
       "category": "governance",
       "lifecycle": "stable",
       "profile": "github-level-1",
-      "status": "pass",
-      "gate_role": "passed_observation",
+      "state": "PASS",
       "assurance": "deterministic",
       "confidence": "high",
       "weight": 1,
-      "reason": "Contributing guide present.",
+      "message": "Contributing guide present.",
       "remediation": "Keep contribution expectations and security expectations aligned.",
       "evidence": {
         "source_type": "static_clone",
@@ -110,7 +79,7 @@
         "references": [
           {
             "kind": "path",
-            "value": "<redacted-absolute>/Projects List - Andamento\\1.Projeto - OSS Security Policy as Code Starter Kit\\examples\\hardened-repo\\CONTRIBUTING.md",
+            "value": "<redacted-absolute>CONTRIBUTING.md",
             "redacted": true
           }
         ],
@@ -125,17 +94,16 @@
       "finding_id": "GOV-CON-002@github-level-1"
     },
     {
-      "control_id": "GOV-COWN-003",
+      "id": "GOV-COWN-003",
       "title": "CODEOWNERS configured",
       "category": "governance",
       "lifecycle": "stable",
       "profile": "github-level-1",
-      "status": "pass",
-      "gate_role": "passed_observation",
+      "state": "PASS",
       "assurance": "deterministic",
       "confidence": "high",
       "weight": 2,
-      "reason": "CODEOWNERS file present.",
+      "message": "CODEOWNERS file present.",
       "remediation": "Review CODEOWNERS coverage for critical paths.",
       "evidence": {
         "source_type": "static_clone",
@@ -157,17 +125,16 @@
       "finding_id": "GOV-COWN-003@github-level-1"
     },
     {
-      "control_id": "GOV-LIC-004",
+      "id": "GOV-LIC-004",
       "title": "LICENSE file present",
       "category": "governance",
       "lifecycle": "stable",
       "profile": "github-level-1",
-      "status": "pass",
-      "gate_role": "passed_observation",
+      "state": "PASS",
       "assurance": "deterministic",
       "confidence": "high",
       "weight": 1,
-      "reason": "LICENSE (or COPYING) file detected.",
+      "message": "LICENSE (or COPYING) file detected.",
       "remediation": "Ensure LICENSE matches declared SPDX and distribution intent.",
       "evidence": {
         "source_type": "static_clone",
@@ -189,17 +156,16 @@
       "finding_id": "GOV-LIC-004@github-level-1"
     },
     {
-      "control_id": "CI-WF-005",
+      "id": "CI-WF-005",
       "title": "GitHub Actions workflows exist",
       "category": "ci_cd",
       "lifecycle": "stable",
       "profile": "github-level-1",
-      "status": "pass",
-      "gate_role": "passed_observation",
+      "state": "PASS",
       "assurance": "deterministic",
       "confidence": "high",
       "weight": 2,
-      "reason": "Found 3 workflow file(s).",
+      "message": "Found 3 workflow file(s).",
       "remediation": "Keep CI workflows minimal, pinned, and least-privilege.",
       "evidence": {
         "source_type": "static_clone",
@@ -212,17 +178,17 @@
         "references": [
           {
             "kind": "path",
-            "value": "<redacted-absolute>/Projects List - Andamento\\1.Projeto - OSS Security Policy as Code Starter Kit\\examples\\hardened-repo\\.github\\workflows\\ci.yml",
+            "value": "<redacted-absolute>ci.yml",
             "redacted": true
           },
           {
             "kind": "path",
-            "value": "<redacted-absolute>/Projects List - Andamento\\1.Projeto - OSS Security Policy as Code Starter Kit\\examples\\hardened-repo\\.github\\workflows\\release-example.yml",
+            "value": "<redacted-absolute>release-example.yml",
             "redacted": true
           },
           {
             "kind": "path",
-            "value": "<redacted-absolute>/Projects List - Andamento\\1.Projeto - OSS Security Policy as Code Starter Kit\\examples\\hardened-repo\\.github\\workflows\\security.yml",
+            "value": "<redacted-absolute>security.yml",
             "redacted": true
           }
         ],
@@ -237,17 +203,16 @@
       "finding_id": "CI-WF-005@github-level-1"
     },
     {
-      "control_id": "CI-PERM-006",
+      "id": "CI-PERM-006",
       "title": "Workflows declare explicit top-level permissions",
       "category": "ci_cd",
       "lifecycle": "stable",
       "profile": "github-level-1",
-      "status": "pass",
-      "gate_role": "passed_observation",
+      "state": "PASS",
       "assurance": "deterministic",
       "confidence": "medium",
       "weight": 3,
-      "reason": "All workflows declare top-level permissions.",
+      "message": "All workflows declare top-level permissions.",
       "remediation": "Re-audit permissions when adding new jobs.",
       "evidence": {
         "source_type": "static_clone",
@@ -269,17 +234,16 @@
       "finding_id": "CI-PERM-006@github-level-1"
     },
     {
-      "control_id": "CI-DANGER-007",
+      "id": "CI-DANGER-007",
       "title": "No pull_request_target without strong justification",
       "category": "ci_cd",
       "lifecycle": "stable",
       "profile": "github-level-1",
-      "status": "pass",
-      "gate_role": "passed_observation",
+      "state": "PASS",
       "assurance": "deterministic",
       "confidence": "medium",
       "weight": 3,
-      "reason": "No pull_request_target detected in workflows.",
+      "message": "No pull_request_target detected in workflows.",
       "remediation": "Continue avoiding pull_request_target unless necessary.",
       "evidence": {
         "source_type": "static_clone",
@@ -301,17 +265,16 @@
       "finding_id": "CI-DANGER-007@github-level-1"
     },
     {
-      "control_id": "CI-PIN-008",
+      "id": "CI-PIN-008",
       "title": "Third-party actions pinned to immutable references",
       "category": "supply_chain",
       "lifecycle": "stable",
       "profile": "github-level-1",
-      "status": "pass",
-      "gate_role": "passed_observation",
+      "state": "PASS",
       "assurance": "deterministic",
       "confidence": "medium",
       "weight": 3,
-      "reason": "No obvious mutable third-party action pins detected.",
+      "message": "No obvious mutable third-party action pins detected.",
       "remediation": "Re-check when editing workflows; verify transitive action versions.",
       "evidence": {
         "source_type": "static_clone",
@@ -333,17 +296,16 @@
       "finding_id": "CI-PIN-008@github-level-1"
     },
     {
-      "control_id": "CI-LEAST-009",
+      "id": "CI-LEAST-009",
       "title": "Workflow permissions are not obviously over-broad",
       "category": "ci_cd",
       "lifecycle": "stable",
       "profile": "github-level-1",
-      "status": "pass",
-      "gate_role": "passed_observation",
+      "state": "PASS",
       "assurance": "signal",
       "confidence": "medium",
       "weight": 2,
-      "reason": "No obviously over-broad workflow permissions detected.",
+      "message": "No obviously over-broad workflow permissions detected.",
       "remediation": "Review permissions when adding publishing or release jobs.",
       "evidence": {
         "source_type": "heuristic_signal",
@@ -368,17 +330,16 @@
       "finding_id": "CI-LEAST-009@github-level-1"
     },
     {
-      "control_id": "SEC-CODEQL-010",
+      "id": "SEC-CODEQL-010",
       "title": "CodeQL or equivalent security scanning in CI",
       "category": "vulnerability_management",
       "lifecycle": "stable",
       "profile": "github-level-1",
-      "status": "pass",
-      "gate_role": "passed_observation",
+      "state": "PASS",
       "assurance": "signal",
       "confidence": "high",
       "weight": 2,
-      "reason": "github/codeql-action usage detected in security.yml.",
+      "message": "github/codeql-action usage detected in security.yml.",
       "remediation": "Keep the CodeQL action pinned to an immutable SHA.",
       "evidence": {
         "source_type": "heuristic_signal",
@@ -391,7 +352,7 @@
         "references": [
           {
             "kind": "path",
-            "value": "<redacted-absolute>/Projects List - Andamento\\1.Projeto - OSS Security Policy as Code Starter Kit\\examples\\hardened-repo\\.github\\workflows\\security.yml",
+            "value": "<redacted-absolute>security.yml",
             "redacted": true
           }
         ],
@@ -409,17 +370,16 @@
       "finding_id": "SEC-CODEQL-010@github-level-1"
     },
     {
-      "control_id": "SEC-DEPREV-011",
+      "id": "SEC-DEPREV-011",
       "title": "Dependency review in pull requests",
       "category": "supply_chain",
       "lifecycle": "stable",
       "profile": "github-level-1",
-      "status": "pass",
-      "gate_role": "passed_observation",
+      "state": "PASS",
       "assurance": "deterministic",
       "confidence": "medium",
       "weight": 2,
-      "reason": "dependency-review-action detected in workflows.",
+      "message": "dependency-review-action detected in workflows.",
       "remediation": "Keep dependency review enabled for pull requests.",
       "evidence": {
         "source_type": "static_clone",
@@ -441,17 +401,16 @@
       "finding_id": "SEC-DEPREV-011@github-level-1"
     },
     {
-      "control_id": "REL-CHANGE-012",
+      "id": "REL-CHANGE-012",
       "title": "Changelog or documented release notes",
       "category": "release",
       "lifecycle": "stable",
       "profile": "github-level-1",
-      "status": "pass",
-      "gate_role": "passed_observation",
+      "state": "PASS",
       "assurance": "deterministic",
       "confidence": "high",
       "weight": 1,
-      "reason": "Changelog or release notes file detected.",
+      "message": "Changelog or release notes file detected.",
       "remediation": "Keep changelog entries aligned with semver and releases.",
       "evidence": {
         "source_type": "static_clone",
@@ -473,17 +432,16 @@
       "finding_id": "REL-CHANGE-012@github-level-1"
     },
     {
-      "control_id": "GOV-DISC-013",
+      "id": "GOV-DISC-013",
       "title": "Responsible disclosure channel documented",
       "category": "governance",
       "lifecycle": "stable",
       "profile": "github-level-1",
-      "status": "pass",
-      "gate_role": "passed_observation",
+      "state": "PASS",
       "assurance": "signal",
       "confidence": "low",
       "weight": 2,
-      "reason": "SECURITY.md includes private disclosure/reporting cues (heuristic text signal; channel monitoring is not validated from clone-only evidence).",
+      "message": "SECURITY.md includes private disclosure/reporting cues (heuristic text signal; channel monitoring is not validated from clone-only evidence).",
       "remediation": "Ensure the reporting channel is monitored and SLA-aligned.",
       "evidence": {
         "source_type": "heuristic_signal",
@@ -508,17 +466,16 @@
       "finding_id": "GOV-DISC-013@github-level-1"
     },
     {
-      "control_id": "GOV-WAIV-014",
+      "id": "GOV-WAIV-014",
       "title": "Versioned waiver policy file present in repository (not CLI-only waivers)",
       "category": "governance",
       "lifecycle": "stable",
       "profile": "github-level-1",
-      "status": "pass",
-      "gate_role": "passed_observation",
+      "state": "PASS",
       "assurance": "deterministic",
       "confidence": "high",
       "weight": 1,
-      "reason": "Versioned waiver file detected in repository.",
+      "message": "Versioned waiver file detected in repository.",
       "remediation": "Keep waivers justified, owned, time-bounded, and reviewed.",
       "evidence": {
         "source_type": "static_clone",
@@ -531,7 +488,7 @@
         "references": [
           {
             "kind": "path",
-            "value": "<redacted-absolute>/Projects List - Andamento\\1.Projeto - OSS Security Policy as Code Starter Kit\\examples\\hardened-repo\\waivers\\waivers.yaml",
+            "value": "<redacted-absolute>waivers.yaml",
             "redacted": true
           }
         ],
@@ -568,6 +525,10 @@
     "possible": 28,
     "percent": 100.0
   },
-  "migration": null,
+  "migration": {
+    "from": "reports/1.0",
+    "removed_in": "v9.0.0 (ADR-043)",
+    "status_mapping": "docs/reports-contract-v2.0.md#mapping-from-reports10-to-reports20"
+  },
   "extensions": {}
 }

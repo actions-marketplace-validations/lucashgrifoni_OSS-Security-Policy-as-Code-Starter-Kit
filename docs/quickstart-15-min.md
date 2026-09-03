@@ -23,9 +23,9 @@ pip install oss-policy-kit
 oss-policy-kit --version
 ```
 
-Expected output: a version line like `6.4.0`. If `oss-policy-kit` is
-not on `PATH`, use `python -m oss_policy_kit` instead (works identically
-on every command below).
+Expected output: the installed version, printed on its own line. If
+`oss-policy-kit` is not on `PATH`, use `python -m oss_policy_kit` instead
+(works identically on every command below).
 
 ## 2. Run the hardened example (2 minutes)
 
@@ -107,7 +107,7 @@ so the gap stays explicit:
 
 ```bash
 cp templates/waivers/waivers.yaml ./my-repo/waivers/waivers.yaml
-# edit with owner, justification, expires_on
+# edit with owner, justification, expires_at
 oss-policy-kit evaluate \
   --target ./my-repo \
   --profile github-level-1 \
@@ -123,7 +123,7 @@ list each applied waiver, its owner, and its expiry date.
 Use the bundled GitHub Action:
 
 ```yaml
-- uses: lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit@v7.2.0
+- uses: lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit@v10.0.19 # x-release-please-version
   with:
     profile: github-level-1
     fail-on: fail

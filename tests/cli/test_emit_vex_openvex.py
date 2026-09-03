@@ -68,7 +68,8 @@ def _run_cli(args: list[str]) -> subprocess.CompletedProcess:
 def test_build_openvex_document_structure() -> None:
     doc = _build_openvex_document(["CVE-1", "GHSA-2"], Path("fake.sarif.json"))
     assert doc["@context"] == _OPENVEX_CONTEXT
-    assert isinstance(doc["@id"], str) and doc["@id"].strip()
+    assert isinstance(doc["@id"], str)
+    assert doc["@id"].strip()
     assert doc["author"] == "oss-policy-kit emit-vex"
     assert "timestamp" in doc
     assert doc["version"] == 1
@@ -273,4 +274,4 @@ def test_cli_default_format_still_cyclonedx(tmp_path: Path) -> None:
 def test_cli_unknown_format_exits_2(tmp_path: Path) -> None:
     sarif = _write_sarif(tmp_path, _sarif_with_rules("CVE-2024-1"))
     proc = _run_cli(["emit-vex", "--osv-sarif", str(sarif), "--format", "csaf"])
-    assert proc.returncode == 2
+    assert proc.returncode == 2, proc.stderr + proc.stdout

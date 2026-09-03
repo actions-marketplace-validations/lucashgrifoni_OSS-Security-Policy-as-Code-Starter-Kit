@@ -137,7 +137,8 @@ def test_cisa_metadata_timestamp_present_and_iso8601(tmp_path: Path) -> None:
     """CISA: VEX Metadata → timestamp (creation)."""
     doc = _build_doc(tmp_path)
     ts = (doc.get("metadata") or {}).get("timestamp")
-    assert isinstance(ts, str) and ts.endswith("Z")
+    assert isinstance(ts, str)
+    assert ts.endswith("Z")
     # Minimal ISO-8601 check: YYYY-MM-DDTHH:MM:SSZ
     from datetime import datetime
 
@@ -159,11 +160,14 @@ def test_cisa_metadata_author_identity_present_as_tool(tmp_path: Path) -> None:
     """
     doc = _build_doc(tmp_path)
     tools = (doc.get("metadata") or {}).get("tools")
-    assert isinstance(tools, list) and len(tools) >= 1
+    assert isinstance(tools, list)
+    assert len(tools) >= 1
     kit_entry = next((t for t in tools if t.get("vendor") == "oss-policy-kit"), None)
     assert kit_entry is not None, "expected an oss-policy-kit tool entry in metadata.tools[]"
-    assert isinstance(kit_entry.get("name"), str) and kit_entry["name"]
-    assert isinstance(kit_entry.get("version"), str) and kit_entry["version"]
+    assert isinstance(kit_entry.get("name"), str)
+    assert kit_entry["name"]
+    assert isinstance(kit_entry.get("version"), str)
+    assert kit_entry["version"]
 
 
 # --- Category 3: Vulnerability details ---------------------------------------
@@ -176,7 +180,8 @@ def test_cisa_vulnerability_identifier_present_per_finding(tmp_path: Path) -> No
     assert len(vulns) == 3
     for v in vulns:
         vid = v.get("id")
-        assert isinstance(vid, str) and vid.strip(), f"vulnerability.id missing: {v!r}"
+        assert isinstance(vid, str), f"vulnerability.id missing: {v!r}"
+        assert vid.strip(), f"vulnerability.id missing: {v!r}"
 
 
 def test_cisa_vulnerability_identifier_supports_multiple_id_systems(tmp_path: Path) -> None:

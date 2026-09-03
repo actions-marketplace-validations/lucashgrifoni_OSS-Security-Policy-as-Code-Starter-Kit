@@ -58,7 +58,8 @@ def test_schema_id_matches_filename(schema_path: Path) -> None:
 
     data = json.loads(schema_path.read_text(encoding="utf-8-sig"))
     sid = data.get("$id")
-    assert isinstance(sid, str) and sid.strip(), f"{schema_path.name}: missing or empty $id"
+    assert isinstance(sid, str), f"{schema_path.name}: missing or empty $id"
+    assert sid.strip(), f"{schema_path.name}: missing or empty $id"
     assert sid.startswith(("http://", "https://")), f"{schema_path.name}: $id must be an absolute URL; got {sid!r}"
     assert sid.endswith("/" + schema_path.name), (
         f"{schema_path.name}: $id={sid!r} does not end with the file's basename"

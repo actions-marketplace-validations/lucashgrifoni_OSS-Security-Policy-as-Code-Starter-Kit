@@ -7,13 +7,40 @@ from oss_policy_kit.application.evaluators._shared import (
     EvalContext,
     EvalOutcome,
     Path,
+    _evidence_placeholder_outcome,
+    _gitlab_mr_rules_schema,
     _gl_no_pipeline_response,
     _scan_gitlab_pipelines,
+    _validate_json_evidence,
     contextlib,
-    json,
 )
 
 _NO_GITLAB_PIPELINES_REASON = "No GitLab CI pipelines to evaluate."
+
+
+def _gl_unreadable_pipelines(ctx: EvalContext, what: str) -> EvalOutcome | None:
+    """Manual review when a pipeline could not be parsed, for controls that PASS on absence.
+
+    A control whose PASS means "we looked and found nothing" must not return it when part of
+    what it was meant to look at never parsed. GL-PIPE-003 answered "No `curl|sh` / `wget|sh`
+    patterns detected in GitLab CI `script:` blocks" for a pipeline whose `script:` contained
+    exactly that, because one extra invalid line had emptied the structured scan. The break
+    bought the pass.
+
+    Controls that FAIL on a parse error -- GL-PIPE-001 exists to report exactly that -- do not
+    call this; they have already said the useful thing.
+    """
+
+    if not ctx.gitlab_ci.parse_errors:
+        return None
+    names = ", ".join(sorted({p.name for p, _ in ctx.gitlab_ci.parse_errors}))
+    return EvalOutcome(
+        status=ControlStatus.MANUAL_REVIEW_REQUIRED,
+        reason=f"{what} could not be read: {names} failed to parse, so this control scanned only the rest.",
+        remediation="Fix the YAML syntax in the listed pipeline file(s), then re-run evaluation.",
+        evidence_sources=[str(p.resolve()) for p, _ in ctx.gitlab_ci.parse_errors],
+        confidence="low",
+    )
 
 
 def eval_gl_pipe_001(ctx: EvalContext) -> EvalOutcome:
@@ -57,6 +84,21 @@ def eval_gl_pipe_002(ctx: EvalContext) -> EvalOutcome:
             remediation="Add a .gitlab-ci.yml with `image:` references using tags or digests.",
             evidence_sources=[],
             confidence="high",
+        )
+    if analysis.parse_errors:
+        # A workflow that did not parse contributed nothing to the search, so "not
+        # detected" would be true and useless -- nothing was detected because nothing
+        # was read. One invalid character used to buy this control a pass.
+        unread = ", ".join(sorted({p.name for p, _ in analysis.parse_errors}))
+        return EvalOutcome(
+            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
+            reason=(
+                f"GitLab CI `image:` declarations could not be read: {unread} failed to parse, so this "
+                "control searched only the files that did."
+            ),
+            remediation="Fix the YAML syntax so the pipeline can be parsed, then re-run.",
+            evidence_sources=[str(p.resolve()) for p, _ in analysis.parse_errors],
+            confidence="low",
         )
     if not analysis.image_refs_pinned and not analysis.image_refs_unpinned and not analysis.image_refs_mutable_tag:
         return EvalOutcome(
@@ -134,6 +176,9 @@ def eval_gl_pipe_003(ctx: EvalContext) -> EvalOutcome:
             evidence_sources=[str(p.resolve()) for p in analysis.script_uses_curl_pipe_shell],
             confidence="high",
         )
+    unreadable = _gl_unreadable_pipelines(ctx, "`script:` blocks")
+    if unreadable is not None:
+        return unreadable
     return EvalOutcome(
         status=ControlStatus.PASS,
         reason="No `curl|sh` / `wget|sh` patterns detected in GitLab CI `script:` blocks.",
@@ -388,16 +433,51 @@ def eval_gl_pipe_011(ctx: EvalContext) -> EvalOutcome:
     # MR review rules are a project setting; look for project-level evidence file.
     evidence = ctx.repo_root / ".oss-policy-kit" / "evidence" / "gitlab-mr-rules.json"
     if evidence.is_file():
-        with contextlib.suppress(OSError, json.JSONDecodeError):
-            data = json.loads(evidence.read_text(encoding="utf-8"))
-            if isinstance(data, dict) and data.get("min_approvers", 0) >= 1:
-                return EvalOutcome(
-                    status=ControlStatus.PASS,
-                    reason=f"MR rule evidence documents min_approvers={data['min_approvers']}.",
-                    remediation="SLSA Source L4 requires 2+ approvers; consider raising the threshold.",
-                    evidence_sources=[str(evidence.resolve())],
-                    confidence="high",
-                )
+        # The schema for this file has shipped since the control was written -- in the wheel
+        # and in reports/schema/ -- and nothing loaded it. Hand-rolled checks stood in its
+        # place and let four things through: an untouched scaffold still carrying
+        # REPLACE_ME_GITLAB_USER reported PASS "documents min_approvers=2"; a file missing a
+        # required field, or declaring a foreign schema_version, also reported PASS; and
+        # min_approvers: 1.5 passed although the schema says integer. A schema that nothing
+        # reads is documentation of an intention, not a contract.
+        data, error, placeholders = _validate_json_evidence(
+            evidence, schema_loader=_gitlab_mr_rules_schema, evidence_name="GitLab MR rules"
+        )
+        if error:
+            return EvalOutcome(
+                status=ControlStatus.MANUAL_REVIEW_REQUIRED,
+                reason=error,
+                remediation="Regenerate evidence using reports/schema/evidence-gitlab-mr-rules.schema.json.",
+                evidence_sources=[str(evidence.resolve())],
+                confidence="low",
+            )
+        blocked = _evidence_placeholder_outcome(evidence, placeholders)
+        if blocked is not None:
+            return blocked
+        assert data is not None
+        approvers = data["min_approvers"]  # schema: integer, minimum 0
+        if approvers < 1:
+            # Readable evidence showing the protection is off. ADR-045 reserves
+            # manual-review for evidence that cannot be READ; this one reads fine and says
+            # no approvals are required. It used to fall through to "No ... evidence" --
+            # the kit hiding a real finding behind a sentence denying the file exists.
+            return EvalOutcome(
+                status=ControlStatus.FAIL,
+                reason=(
+                    f"MR rule evidence documents min_approvers={approvers}: merge requests can be "
+                    "merged without an approval."
+                ),
+                remediation="Require at least one approver on the project approval settings or an approval rule.",
+                evidence_sources=[str(evidence.resolve())],
+                confidence="high",
+            )
+        return EvalOutcome(
+            status=ControlStatus.PASS,
+            reason=f"MR rule evidence documents min_approvers={approvers}.",
+            remediation="SLSA Source L4 requires 2+ approvers; consider raising the threshold.",
+            evidence_sources=[str(evidence.resolve())],
+            confidence="high",
+        )
     return EvalOutcome(
         status=ControlStatus.MANUAL_REVIEW_REQUIRED,
         reason=(

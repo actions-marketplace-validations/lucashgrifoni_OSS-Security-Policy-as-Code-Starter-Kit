@@ -70,6 +70,26 @@ Do not skip or `xfail` the test — the CLI behavior it covers is real.
 - Documentation under `docs/` should stay public-facing, accurate, and stable enough for end users.
 - Example repositories under `examples/` should continue to demonstrate clearly distinct outcomes.
 
+### Files that must never be committed
+
+This repository is public, and everything tracked here is readable by anyone. The following are
+local working context, not project surface:
+
+- **Assistant and agent instruction files** — `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`,
+  `.cursorrules`, `.github/copilot-instructions.md`, and the `.claude/` directory. These commonly
+  carry standing authorizations, private remote names, and personal workflow notes.
+- **Local planning, scratch, and analysis directories**, including anything holding drafts,
+  snapshots, or notes that were never meant for readers.
+- **Generated output** — evaluation reports, SARIF, coverage data, build artifacts, and caches.
+  The sample reports under `docs/sample-reports/` are the deliberate exception and are refreshed on
+  purpose.
+- **Anything containing a real credential, token, absolute host path, or personal data.** Test
+  fixtures should use obviously fake values.
+
+`.gitignore` covers these, but a broad `git add -A` can still pick up a newly created file before
+the pattern exists. Run `python scripts/check_public_hygiene.py` before pushing, and read
+`git status` rather than trusting the ignore rules alone.
+
 ## What to update when behavior changes
 
 If you change evaluator logic, report structure, or CLI output:
@@ -78,6 +98,11 @@ If you change evaluator logic, report structure, or CLI output:
 - update relevant golden fixtures if the change is intentional
 - update `README.md` and any affected docs under `docs/`
 - update `CHANGELOG.md` with factual, non-marketing release notes
+
+Document behavior with reproducible text, not with screenshots: the exact command to run, a
+short excerpt of its current stdout, a table explaining the statuses and fields, or a link to
+a generated report under `docs/sample-reports/`. A capture goes stale silently and cannot be
+diffed, which is why this repository ships no image assets.
 
 If you change packaged data or schemas:
 

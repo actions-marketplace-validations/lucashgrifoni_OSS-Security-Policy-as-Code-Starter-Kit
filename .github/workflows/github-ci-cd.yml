@@ -33,12 +33,46 @@ env:
 
 jobs:
   quality:
-    name: Quality (lint, types, tests, self-check)
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Three legs. The first is the gate the ruleset requires by name and is unchanged.
+    # The other two exist because six failures in one cycle were visible only on a
+    # platform the suite had never run on: `pathlib` treats a backslash as an ordinary
+    # character on POSIX, and a directory where a file belongs is "Permission denied"
+    # on Windows and "Is a directory" on Linux. Twelve commits inherited that red
+    # because the maintainer's gate runs on Windows and CI ran only on Linux. The 3.13
+    # leg covers the other half of `requires-python = ">=3.12"`, which admitted a
+    # version nothing had executed.
+    #
+    # Coverage, the property floor and the self-check gate stay on the first leg only:
+    # the other two answer "does it run there", not "is every line covered there".
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Quality (lint, types, tests, self-check)
+            os: ubuntu-latest
+            python: "3.12"
+            gate: true
+          - name: Quality (ubuntu, Python 3.13)
+            os: ubuntu-latest
+            python: "3.13"
+            gate: false
+          - name: Quality (windows, Python 3.12)
+            os: windows-latest
+            python: "3.12"
+            gate: false
+    defaults:
+      run:
+        # One shell on every leg, so a step written once runs the same on Windows.
+        shell: bash
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        # Linux only: the agent has no Windows build. The Windows leg runs without
+        # an egress policy, which is the trade for having a Windows leg at all.
+        if: runner.os == 'Linux'
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -46,20 +80,48 @@ jobs:
             api.github.com:443
             pypi.org:443
             files.pythonhosted.org:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
 
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Setup Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: ${{ matrix.python }}
           cache: pip
 
       - name: Install project (dev)
+        # pip itself comes from the same hashed lock the image builds with, so the tool that
+        # performs every other install is not itself an unpinned download.
+        #
+        # The dev extra deliberately is NOT hash-pinned, and the Scorecard reports it. A lock
+        # for it would have to be regenerated in the same pull request as every Dependabot
+        # bump of a dev tool, and a lock that drifts from `pyproject.toml` does not fail
+        # loudly: CI would quietly test one version of ruff or mypy while the project
+        # declares another, and a green run would stop meaning what it says. A false green
+        # is a worse outcome than this finding, which covers tools that run only in CI on a
+        # job with no secrets. Revisit if the job ever gains credentials.
         run: |
-          python -m pip install -U pip
+          python -m pip install --require-hashes -r .github/requirements/pip.txt
           python -m pip install -e ".[dev]"
+
+      - name: Install OPA (pinned by hash)
+        # `export-policy --format rego` is validated against the real interpreter, and
+        # that test skipped everywhere because nothing installed opa -- in CI, in the
+        # local gate, on any machine without it. A test that never runs gives the
+        # confidence of one that does not exist. The binary is a GitHub release asset,
+        # which is why the two githubusercontent hosts are in the egress allowlist.
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          curl -sSfL -o /tmp/opa "https://github.com/open-policy-agent/opa/releases/download/v1.20.1/opa_linux_amd64_static"
+          echo "0b3f152e61be276b70396cfbca49e39fc9d0c5089e0a8574e8f6a30f41a9187f  /tmp/opa" | sha256sum -c -
+          sudo install -m 0755 /tmp/opa /usr/local/bin/opa
+          opa version
 
       - name: Ruff check
         run: python -m ruff check .
@@ -70,15 +132,31 @@ jobs:
       - name: Mypy
         run: python -m mypy src/oss_policy_kit
 
+      - name: Public hygiene
+        # The CHANGELOG has called this a release gate since it was added, but it ran
+        # nowhere: only when somebody remembered it locally. It drifted red on master —
+        # eleven violations, all synthetic fixtures, none of them a real leak, and none
+        # of them noticed. A gate nobody triggers is not a gate, which is the same shape
+        # as the drift check that sat permanently green through three major versions.
+        run: python scripts/check_public_hygiene.py
+
       - name: Pytest
         # Measure coverage here but do not gate yet (--cov-fail-under=0); the
         # property-tests step appends and enforces the combined floor.
+        if: matrix.gate
         run: python -m pytest tests --ignore=tests/property --cov=oss_policy_kit --cov-report= --cov-fail-under=0
 
       - name: Property-based tests
         # Append property-test coverage and enforce the combined floor
-        # (fail_under=88 in pyproject; stated explicitly here as the gate).
-        run: python -m pytest tests/property/ -v --hypothesis-show-statistics --cov=oss_policy_kit --cov-append --cov-report=term-missing --cov-fail-under=88
+        # (fail_under=100 in pyproject; stated explicitly here as the gate).
+        if: matrix.gate
+        run: python -m pytest tests/property/ -v --hypothesis-show-statistics --cov=oss_policy_kit --cov-append --cov-report=term-missing --cov-fail-under=100
+
+      - name: Pytest (no coverage floor on this leg)
+        # The whole suite, property tests included, without the coverage instrument:
+        # this leg answers whether the code behaves here, and the floor is held once.
+        if: ${{ !matrix.gate }}
+        run: python -m pytest tests -q -p no:cacheprovider
 
       - name: CLI help smoke
         run: |
@@ -125,7 +203,7 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -135,17 +213,25 @@ jobs:
             files.pythonhosted.org:443
 
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Setup Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
 
       - name: Install build tools
+        # Hash-pinned (Scorecard Pinned-Dependencies). The `-e ".[dev]"` line below is
+        # deliberately NOT hash-pinned: it installs this project from source with the
+        # ranges pyproject.toml declares, which is what the test suite is meant to run
+        # against. Pinning it here would test a frozen tree rather than the one adopters
+        # resolve, and hide a dependency break until release day.
         run: |
-          python -m pip install -U pip build twine cyclonedx-bom
+          python -m pip install --require-hashes -r .github/requirements/pip.txt
+          python -m pip install --require-hashes -r .github/requirements/build-tools.txt
           python -m pip install -e ".[dev]"
 
       - name: Clean artifact directories
@@ -158,8 +244,14 @@ jobs:
       - name: Twine check
         run: python scripts/twine_check_dist.py
 
+      # Same rule the publishing workflow follows: inventory the built distribution, not whatever
+      # this runner happens to have installed. Without a path argument the generator described the
+      # CI environment -- dev tooling included -- which is not what the wheel carries.
       - name: Generate CycloneDX SBOM
-        run: python -m cyclonedx_py environment --output-format JSON --output-file dist/sbom.cyclonedx.json
+        run: |
+          python -m venv .sbom-env
+          .sbom-env/bin/python -m pip install dist/*.whl
+          python -m cyclonedx_py environment .sbom-env --output-format JSON --output-file dist/sbom.cyclonedx.json
 
       - name: Smoke install wheel
         run: |
@@ -169,6 +261,101 @@ jobs:
             echo "No wheel found under dist/" >&2
             exit 1
           fi
-          python -m pip install "${wheels[0]}"
+          # The glob is passed straight to pip rather than through the array element, and
+          # the array is kept only to fail loudly when the build produced nothing. An
+          # earlier comment here claimed `--no-deps` was what made this a pinned install.
+          # It is not: Scorecard's `isUnpinnedPipInstall` treats an install as pinned when
+          # an argument ends in `.whl`, and reads `"${wheels[0]}"` as an opaque token with
+          # additional arguments, so the finding stood with the flag in place. `--no-deps`
+          # earns its own keep for a different reason -- every dependency is already
+          # installed from `.[dev]` above, so this step reaches for nothing on the network.
+          python -m pip install --no-deps dist/*.whl
           python -m oss_policy_kit --help
           python -m oss_policy_kit evaluate --help
+
+  container-build:
+    name: Container (build only, no push)
+    runs-on: ubuntu-latest
+    needs: quality
+    timeout-minutes: 25
+    # The image was built for the first time when the release tag was pushed: nothing built
+    # it on a pull request, so a Dockerfile change that broke the build surfaced only after
+    # the tag existed and PyPI had already published. This job builds it and throws it away,
+    # so the Dockerfile is proven before a release depends on it. It does not log in, does
+    # not push, and needs no registry credentials.
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          # `audit` for the same reason as the base-image scan and publish-container.yml:
+          # pulling from Docker Hub crosses dynamic CloudFront hosts that allowed-endpoints
+          # cannot express. Harden-Runner's global blocklist still applies.
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Build the image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          push: false
+          load: true
+          tags: oss-policy-kit:ci
+          build-args: |
+            KIT_VERSION=0.0.0+ci
+
+      - name: The image runs, and runs as a non-root user
+        run: |
+          set -euo pipefail
+          docker run --rm oss-policy-kit:ci --version
+          uid="$(docker run --rm --entrypoint id oss-policy-kit:ci -u)"
+          if [ "${uid}" = "0" ]; then
+            echo "::error::The published image would run as root." >&2
+            exit 1
+          fi
+          echo "runs as uid ${uid}"
+
+      # Nothing scanned the image this build produces. The four Trivy jobs in
+      # security-ci-cd.yml are `scan-type: fs` against the source tree, plus one
+      # `scan-type: image` against the pinned BASE image -- and neither can see what
+      # the build ADDS on top of the base: the venv, the `[all]` dependency closure,
+      # and the pip the builder upgrades into it.
+      #
+      # Measured on the published `ghcr.io/lucashgrifoni/oss-policy-kit:10.0.15`, which
+      # is also `latest`: 32 fixable vulnerabilities, 2 CRITICAL and 9 HIGH. Most came
+      # from a base digest that was refreshed one day AFTER that release, so a build from
+      # the current Dockerfile no longer carries them -- but nothing in CI would have
+      # said so either way, which is the actual defect. The fs scan reports zero and
+      # never mentions pip, because a `pip==` pin inside a RUN string is not a manifest.
+      - name: Inventory the built image
+        # Reports MEDIUM and up so the layer the other jobs cannot see is at least
+        # visible in the log. Does not gate: the step below does that.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.36.0
+        with:
+          scan-type: image
+          image-ref: oss-policy-kit:ci
+          scanners: vuln
+          severity: MEDIUM,HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "0"
+          format: table
+
+      - name: Fail on fixable high-severity vulnerabilities in the built image
+        # This one has teeth. `ignore-unfixed` keeps it actionable: every finding it
+        # reports has a published fix, so going red always means there is something to
+        # do -- refresh the base digest, or move a pinned version.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.36.0
+        with:
+          scan-type: image
+          image-ref: oss-policy-kit:ci
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table

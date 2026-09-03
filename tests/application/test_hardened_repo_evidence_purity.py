@@ -93,9 +93,8 @@ def test_hardened_repo_evidence_files_carry_attested_metadata() -> None:
     for f in files:
         data = json.loads(f.read_text(encoding="utf-8"))
         assert isinstance(data, dict), f"{f.name}: must be a JSON object"
-        assert isinstance(data.get("schema_version"), str) and data["schema_version"].strip(), (
-            f"{f.name}: missing schema_version"
-        )
+        assert isinstance(data.get("schema_version"), str), f"{f.name}: missing schema_version"
+        assert data["schema_version"].strip(), f"{f.name}: missing schema_version"
         # Require at least one of the attestation hints.
         attested_by = data.get("attested_by")
         attested_at = data.get("attested_at")

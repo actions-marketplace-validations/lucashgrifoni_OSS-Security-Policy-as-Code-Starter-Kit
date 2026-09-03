@@ -53,20 +53,25 @@ def _run_module(argv: list[str], *, cwd: Path | None = None) -> subprocess.Compl
 
 
 def _minimal_report(*, results: list[dict[str, object]], kit_version: str = "3.0.0") -> dict[str, object]:
+    """A ``reports/2.0`` payload — the only contract ``diff-reports`` accepts."""
+
     return {
         "kit_version": kit_version,
-        "schema_version": "reports/0.2",
-        "profile": "test",
-        "results": results,
+        "contract_version": "reports/2.0",
+        "profile": {"id": "test"},
+        "controls": results,
     }
 
 
 def _result_row(control_id: str, status: str) -> dict[str, object]:
+    """One ``controls[]`` entry. ``status`` is given lowercase for readability at the
+    call sites and normalised to the ``reports/2.0`` uppercase ``state`` here."""
+
     return {
-        "control_id": control_id,
+        "id": control_id,
         "title": f"Title {control_id}",
         "category": "governance",
-        "status": status,
+        "state": status.upper().replace("-", "_"),
         "lifecycle": "stable",
         "profile": "p",
         "evidence_sources": [],
@@ -86,7 +91,7 @@ def test_diff_reports_before_missing_exits_2(tmp_path: Path) -> None:
     after = tmp_path / "after.json"
     after.write_text(json.dumps(_minimal_report(results=[_result_row("A", "pass")])), encoding="utf-8")
     proc = _run_module(["diff-reports", "--before", str(missing), "--after", str(after)])
-    assert proc.returncode == 2
+    assert proc.returncode == 2, proc.stderr + proc.stdout
     assert "before" in (proc.stderr + proc.stdout).lower()
 
 

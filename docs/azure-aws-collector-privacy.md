@@ -59,9 +59,9 @@ Synthetic placeholders to use in fixtures, docs, and tests:
 | Repo URL | `https://example.invalid/example/example-repo` |
 | Email | `noreply@example.invalid` |
 
-## How the v1 evidence model surfaces privacy
+## How the evidence model surfaces privacy
 
-`reports/1.0` projects every result through `oss_policy_kit.application.evidence_projection.project_evidence`. The projection redacts host paths and never persists raw tokens or auth headers. Specifically:
+`reports/2.0` projects every result through `oss_policy_kit.application.evidence_projection.project_evidence`. The projection redacts host paths and never persists raw tokens or auth headers. Specifically:
 
 - `evidence.references[i].value` is path-redacted (`<redacted-absolute>/...`) when the source string was an absolute filesystem path.
 - `evidence.references[i].redacted` is `True` when redaction occurred — downstream tools can flag the result as having had unsafe input.

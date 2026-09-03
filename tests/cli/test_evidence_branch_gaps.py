@@ -63,7 +63,8 @@ def test_aws_collector_requires_env(monkeypatch) -> None:
 def test_aws_collector_returns_with_env(monkeypatch) -> None:
     monkeypatch.setenv("AWS_CODEBUILD_PROJECT", "my-build")
     collector, slug = evidence._aws_collector("org/repo")
-    assert collector is not None and slug == "org/repo"
+    assert collector is not None
+    assert slug == "org/repo"
 
 
 # --------------------------------------------------------------------------- #

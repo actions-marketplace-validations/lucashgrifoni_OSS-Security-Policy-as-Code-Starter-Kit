@@ -49,7 +49,7 @@ from oss_policy_kit.application.insights_evidence import (
 from oss_policy_kit.application.insights_evidence import (
     validate_ingest_structure as _validate_ingest_structure,
 )
-from oss_policy_kit.cli.common import app, stderr_console, write_stdout_text
+from oss_policy_kit.cli.common import app, exit_for_unexpected, markup_safe, stderr_console, write_stdout_text
 from oss_policy_kit.cli.help_text import CMD_PANEL_EXPORT
 from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
 
@@ -73,7 +73,11 @@ def _resolve_input(target_path: Path, input_path: Path | None) -> Path | None:
         return _discover_insights_file(target_path)
     chosen = input_path if input_path.is_absolute() else target_path / input_path
     if not chosen.is_file():
-        raise InvalidInputError(f"--input {chosen} is not a file.")
+        # Echo the user-supplied string, never the resolved candidate: joining a
+        # relative --input onto the resolved --target produces an absolute path that
+        # leaks the auditor's home directory / OS username (M-002). Mirrors
+        # ``export-evidence --report``.
+        raise InvalidInputError(f"--input {input_path} is not a file.")
     return chosen
 
 
@@ -93,9 +97,11 @@ def _base_result(*, found: bool, input_path: str | None) -> dict[str, Any]:
     }
 
 
-def _result_not_found(root: Path) -> dict[str, Any]:
+def _result_not_found(searched: str) -> dict[str, Any]:
+    """Not-found payload; *searched* is the ``--target`` string the user typed (M-002)."""
+
     result = _base_result(found=False, input_path=None)
-    result["searched_root"] = str(root)
+    result["searched_root"] = searched
     return result
 
 
@@ -175,11 +181,14 @@ def _run_ingest_insights(target: Path, input_path: Path | None, output_format: s
         raise InvalidInputError("--format must be human or json.")
     target_path = target.resolve()
     if not target_path.is_dir():
-        raise InvalidInputError(f"--target {target_path} is not a directory.")
+        # Echo the user-supplied string, never target.resolve(): the absolute
+        # path leaks the auditor's home directory / username (M-002).
+        raise InvalidInputError(f"--target {target} is not a directory.")
 
     chosen = _resolve_input(target_path, input_path)
     if chosen is None:
-        result = _result_not_found(target_path)
+        # The JSON report is shareable; cite the typed --target, not its resolved form.
+        result = _result_not_found(str(target))
     else:
         doc, error = _load_insights_file(chosen)
         rel = _relpath(chosen, target_path)
@@ -229,10 +238,10 @@ def ingest_insights_cmd(
     try:
         _run_ingest_insights(target, input_path, output_format)
     except OssPolicyKitError as exc:
-        stderr_console().print(f"[red]Error:[/red] {exc.message}")
+        stderr_console().print(f"[red]Error:[/red] {markup_safe(exc.message)}")
         raise typer.Exit(code=2) from exc
     except typer.Exit:
         raise
-    except Exception as exc:  # noqa: BLE001 - last-resort user message, no traceback leak
-        stderr_console().print(f"[red]Unexpected error:[/red] {exc}")
-        raise typer.Exit(code=3) from exc
+    # Last-resort user message, no traceback leak.
+    except Exception as exc:  # noqa: BLE001
+        exit_for_unexpected(exc)

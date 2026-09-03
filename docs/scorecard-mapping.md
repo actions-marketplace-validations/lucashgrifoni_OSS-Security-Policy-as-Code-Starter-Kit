@@ -34,6 +34,45 @@ The kit uses Scorecard JSON as **supplemental evidence** in two places:
 Scorecard does not influence `deterministic` or `evidence-backed` rows — those decisions stand
 on their own.
 
+## Ingesting a result with `ingest-scorecard` (read-only)
+
+`oss-policy-kit ingest-scorecard` is the read-only consumer for a Scorecard v5.x JSON result. It maps
+each Scorecard check to the kit control it **corroborates**, records Scorecard's own per-check score and
+reason **verbatim**, and reports the result's freshness — symmetric with `ingest-insights`.
+
+```bash
+scorecard --repo=github.com/you/your-repo --format=json > .oss-policy-kit/evidence/scorecard-result.json
+oss-policy-kit ingest-scorecard                       # auto-discovers the file under --target
+oss-policy-kit ingest-scorecard --input result.json --format json
+```
+
+Exit codes: `0` found-and-parsed or not-found (informational); `1` a result file was found but could
+not be parsed; `2` usage error; `3` unexpected internal error.
+
+**Honesty model.** A Scorecard result is **supplemental, inferred-trust signal**. `ingest-scorecard`
+**never** elevates a control's assurance grade and changes **no** `evaluate` verdict — it reports how an
+external Scorecard result lines up with the kit's controls. A Scorecard run older than **90 days** (by its
+`date` field) is reported as `stale` and counts as no current corroboration; an undated result is `undated`.
+
+**Command crosswalk** (the single best-fit control per check that the command reports; the full per-check
+matrix below lists every related control). Source of truth: `SCORECARD_CONTROL_MAP` in
+[`application/scorecard_ingest.py`](../src/oss_policy_kit/application/scorecard_ingest.py).
+
+| Scorecard check | kit control | note |
+| --- | --- | --- |
+| `Token-Permissions` | `CI-PERM-006` | OSPS-AC-04 — least-privilege workflow tokens |
+| `Pinned-Dependencies` | `CI-PIN-008` | OSPS-BR-01 — pinned third-party actions/deps |
+| `Dangerous-Workflow` | `CI-DANGER-007` | dangerous workflow patterns |
+| `Branch-Protection` | `PLAT-BRPROT-015` | OSPS-AC-03 — default branch protection |
+| `Code-Review` | `SLSA-SRC-004` | two-party review on protected branches |
+| `Security-Policy` | `GOV-SEC-001` | OSPS-VM-01 — security policy present |
+| `SAST` | `SEC-CODEQL-010` | OSPS-VM-06 — static analysis in CI |
+| `Signed-Releases` | `GH-PROV-023` | OSPS-BR-06 — release provenance/attestation |
+| `Vulnerabilities` | `SAST-OSV-068` | known-vulnerability scanning |
+| `Fuzzing` | `SEC-FUZZ-001` | fuzzing harness present |
+| `Dependency-Update-Tool` | `DEP-UPDATE-001` | automated dependency updates |
+| `License` | `GOV-LIC-004` | license file present |
+
 ## Per-check coverage matrix
 
 The table below maps every Scorecard check (v4-line) to the bundled kit control(s) that
@@ -51,7 +90,7 @@ modeled) / GAP (registered as future work).
 | `Contributors` | (none) | OUT | Contributor breadth is not analyzed. |
 | `Dangerous-Workflow` | `CI-DANGER-007`, `GH-WF-019`, `GH-WF-020`, `AZ-PIPE-029` | YES | Multiple deterministic checks against unsafe workflow patterns. |
 | `Dependency-Update-Tool` | `DEP-UPDATE-001`, `SEC-DEPREV-011` | YES | Dependabot / Renovate config + dependency-review-action detection. |
-| `Fuzzing` | (none) | OUT | Not required by this kit. |
+| `Fuzzing` | `SEC-FUZZ-001` | PARTIAL | `signal` grade — fuzz-harness presence or a Scorecard `Fuzzing` score ≥7; coverage quality is not proven. |
 | `License` | `GOV-LIC-004` | YES | Deterministic file presence. |
 | `Maintained` | (none) | OUT | Maintenance cadence is not inferred from a single snapshot. |
 | `Packaging` | (none) | OUT | Publishing-side signals are out of scope. |
@@ -63,7 +102,7 @@ modeled) / GAP (registered as future work).
 | `Vulnerabilities` | `OSS-SCORECARD-001` | INDIRECT | The kit accepts Scorecard JSON; it does not query the OSV API itself. |
 | `Webhooks` | (none) | OUT | Repository-webhook posture is not modeled. |
 
-**Coverage**: 11 YES, 3 PARTIAL, 5 OUT, 0 GAP, 1 INDIRECT.
+**Coverage**: 11 YES, 4 PARTIAL, 4 OUT, 0 GAP, 1 INDIRECT.
 
 ## Evidence flow with Scorecard
 

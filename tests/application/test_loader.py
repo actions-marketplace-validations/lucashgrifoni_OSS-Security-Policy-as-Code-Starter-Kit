@@ -104,6 +104,7 @@ def test_load_profile_by_id_external_path_schema_validation(tmp_path: Path) -> N
     root = bundled_kit_root()
     bad = tmp_path / "bad-profile.yaml"
     bad.write_text("id: x\n", encoding="utf-8")
+    str_2 = str(bad)
     with pytest.raises(ProfileLoadError) as excinfo:
-        load_profile_by_id(root, str(bad))
+        load_profile_by_id(root, str_2)
     assert "schema validation" in str(excinfo.value.message).lower()

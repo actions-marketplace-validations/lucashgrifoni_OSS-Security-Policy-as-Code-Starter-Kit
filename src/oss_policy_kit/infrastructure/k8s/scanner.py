@@ -20,15 +20,16 @@ import re
 import shutil
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
-from importlib.metadata import PackageNotFoundError
-from importlib.metadata import version as _pkg_version
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from oss_policy_kit.application.clock import report_generated_at
+from oss_policy_kit.application.reporting import _sanitize_target_path_for_payload
 from oss_policy_kit.infrastructure.fs_walk import walk_matching_files
+from oss_policy_kit.infrastructure.scan_deadline import TIMEOUT_DIAGNOSTIC, ScanDeadline
+from oss_policy_kit.infrastructure.source_text import decode_source
 
 EVIDENCE_SCHEMA_VERSION = "oss-policy-kit/evidence/k8s-baseline/v1"
 EVIDENCE_FILENAME = "k8s-baseline.json"
@@ -94,19 +95,24 @@ class K8sScanOutcome:
 
 
 def _kit_version() -> str:
+    """The version this scanner stamps into its evidence.
+
+    The source constant is authoritative on purpose: a stale installed distribution must
+    never relabel evidence it did not produce. Looking the installed version up and then
+    discarding it whenever it differs is the same as not looking it up at all, so the
+    lookup is gone -- both former branches returned this exact value.
+    """
+
     from oss_policy_kit import __version__ as _src_version
 
-    try:
-        installed = _pkg_version("oss-policy-kit")
-    except PackageNotFoundError:  # pragma: no cover - dev-only fallback
-        return _src_version
-    if installed != _src_version:
-        return _src_version
-    return installed
+    return _src_version
 
 
 def _utc_iso() -> str:
-    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    # Route through the report clock so SOURCE_DATE_EPOCH pins the timestamp for
+    # reproducible-build environments and the test suite (X7-03). Keep the ``Z``
+    # suffix so the on-disk shape stays byte-identical to prior releases.
+    return report_generated_at().replace("+00:00", "Z")
 
 
 def _normalize_target(repo_root: Path, p: Path) -> str:
@@ -138,27 +144,65 @@ def _manifest_from_doc(doc: Any, path: Path) -> K8sManifest | None:
         file=path,
         api_version=str(doc.get("apiVersion", "")),
         kind=str(doc.get("kind", "")),
-        namespace=str((metadata or {}).get("namespace", "default") or "default"),
-        name=str((metadata or {}).get("name", "")),
+        # `metadata` is already a dict by the line above, so the `or {}` was redundant --
+        # and redundant instances of that idiom are worth removing rather than tolerating,
+        # because they teach the shape that IS unsafe two files over.
+        namespace=str(metadata.get("namespace", "default") or "default"),
+        name=str(metadata.get("name", "")),
         body=doc,
     )
+
+
+def _files_actually_scanned(
+    repo_root: Path,
+    files: list[Path],
+    parse_errors: list[dict[str, str]],
+) -> list[str]:
+    """The files this scan actually read -- discovery minus the ones that failed to parse.
+
+    ``files_scanned`` used to be the DISCOVERED list, which made it a count of candidates
+    rather than a record of work done. Downstream that difference decides verdicts: a control
+    reads a non-empty ``files_scanned`` as "there was something here and I looked at it", so a
+    repository whose only manifest was saved as UTF-16 reported 16 clean Kubernetes controls
+    over a pod declaring `privileged: true`. Every other scanner in the kit builds this list
+    from what it parsed; this one now agrees with them.
+
+    Helm templates skipped as unrendered stay IN the list: they were read successfully and
+    deliberately not evaluated, which is a different thing from unreadable.
+    """
+
+    failed = {entry["file"] for entry in parse_errors if "file" in entry}
+    return [t for t in (_normalize_target(repo_root, p) for p in files) if t not in failed]
 
 
 def _index_manifests(
     repo_root: Path,
     files: list[Path],
+    deadline: ScanDeadline | None = None,
 ) -> tuple[list[K8sManifest], list[str], list[dict[str, str]]]:
-    """Return ``(manifests, helm_templates_skipped, parse_errors)``."""
+    """Return ``(manifests, helm_templates_skipped, parse_errors)``.
+
+    ``deadline`` is the ``--timeout`` budget. When it runs out the parse stops where it
+    is; the caller checks the same deadline and reports ``status: "timeout"`` rather than
+    passing a partial index off as a finished scan.
+    """
 
     manifests: list[K8sManifest] = []
     helm_skipped: list[str] = []
     parse_errors: list[dict[str, str]] = []
     for path in files:
+        if deadline is not None and deadline.expired():
+            break
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            raw = path.read_bytes()
         except OSError as exc:
             parse_errors.append({"file": _normalize_target(repo_root, path), "error": str(exc)})
             continue
+        # YAML 1.2 REQUIRES a processor to accept UTF-8, UTF-16 and UTF-32 with a BOM, so a
+        # UTF-16 manifest is one `kubectl apply` would install -- not a broken file. Reading
+        # it as UTF-8 produced mojibake with no `kind:` in it, and a pod declaring
+        # `privileged: true` scored a clean scan.
+        text = decode_source(raw)
         if _HELM_TEMPLATE_MARKER.search(text):
             helm_skipped.append(_normalize_target(repo_root, path))
             continue
@@ -539,7 +583,10 @@ def _rule_netpol_001_no_netpol(repo_root: Path, manifests: list[K8sManifest]) ->
     out: list[K8sFinding] = []
     for ns in sorted(workload_namespaces - netpol_namespaces):
         anchor = sample_workload.get(ns)
-        if anchor is None:
+        # `ns` came from `workload_namespaces`, which is populated in the same pass that
+        # fills `sample_workload`, so the lookup cannot miss. The guard keeps the finding
+        # from being anchored to nothing if those two ever drift apart.
+        if anchor is None:  # pragma: no cover
             continue
         out.append(
             _finding(
@@ -610,6 +657,7 @@ def _apply_helm_render(
     manifests: list[K8sManifest],
     helm_skipped: list[str],
     parse_errors: list[dict[str, str]],
+    deadline: ScanDeadline | None = None,
 ) -> tuple[_HelmState, list[str]]:
     """Render Helm charts, merge their manifests, and return ``(state, updated_helm_skipped)``."""
 
@@ -626,8 +674,13 @@ def _apply_helm_render(
         tmp_root=rendered.tmp_root,
     )
     if rendered.rendered_manifest_paths:
+        # The deadline reaches here too. Rendering is bounded by the renderer's own
+        # per-chart timeout, but parsing what it produced is the same parser `--timeout`
+        # bounds everywhere else, and a chart set can render far more manifests than the
+        # repository holds. Without this the budget was checked before the render and not
+        # again until the rule pass, so `--timeout` did not bound the parse it names.
         extra_manifests, _extra_skipped, extra_parse_errors = _index_manifests(
-            repo_root, rendered.rendered_manifest_paths
+            repo_root, rendered.rendered_manifest_paths, deadline
         )
         manifests.extend(extra_manifests)
         parse_errors.extend(extra_parse_errors)
@@ -654,13 +707,13 @@ def run_scan(
     (that list is reserved for unrendered ``{{ ... }}`` templates).
     """
 
-    _ = timeout_seconds
+    deadline = ScanDeadline(timeout_seconds)
     files = _walk_yaml_files(repo_root, include_globs, exclude_globs)
-    manifests, helm_skipped, parse_errors = _index_manifests(repo_root, files)
+    manifests, helm_skipped, parse_errors = _index_manifests(repo_root, files, deadline)
 
     helm = _HelmState()
-    if helm_render:
-        helm, helm_skipped = _apply_helm_render(repo_root, manifests, helm_skipped, parse_errors)
+    if helm_render and not deadline.expired():
+        helm, helm_skipped = _apply_helm_render(repo_root, manifests, helm_skipped, parse_errors, deadline)
     helm_attempted = helm.attempted
     helm_available_flag = helm.available
     helm_version_str = helm.version
@@ -671,19 +724,46 @@ def run_scan(
 
     try:
         findings: list[K8sFinding] = []
-        try:
-            for _rid, fn in _RULES:
-                findings.extend(fn(repo_root, manifests))
-        except Exception as exc:  # noqa: BLE001 - one bad rule should not crash the scan
+        if not deadline.expired():
+            try:
+                for _rid, fn in _RULES:
+                    if deadline.expired():
+                        break
+                    findings.extend(fn(repo_root, manifests))
+            except Exception as exc:  # noqa: BLE001 - one bad rule should not crash the scan
+                return K8sScanOutcome(
+                    status="error",
+                    tool_version=_kit_version(),
+                    files_scanned=_files_actually_scanned(repo_root, files, parse_errors),
+                    helm_templates_skipped=helm_skipped,
+                    parse_errors=parse_errors,
+                    findings=[],
+                    scanned_at=_utc_iso(),
+                    diagnostics=f"rule engine raised {type(exc).__name__}: {exc}",
+                    helm_render_attempted=helm_attempted,
+                    helm_available=helm_available_flag,
+                    helm_version=helm_version_str,
+                    helm_charts_discovered=helm_charts_discovered,
+                    helm_charts_rendered=helm_charts_rendered,
+                    helm_render_errors=helm_render_errors,
+                )
+
+        if deadline.expired():
+            # No findings: half a rule pack over half the files is not a result, and the
+            # per-rule counts would read as "this rule found nothing" for rules never run.
+            # ``files_scanned`` is empty for the same reason. An interrupted index cannot
+            # name the files it reached, and the discovered list is the exact over-report
+            # ``_files_actually_scanned`` exists to prevent -- a non-empty entry there
+            # reads downstream as "there was something here and I looked at it".
             return K8sScanOutcome(
-                status="error",
+                status="timeout",
                 tool_version=_kit_version(),
-                files_scanned=[_normalize_target(repo_root, p) for p in files],
+                files_scanned=[],
                 helm_templates_skipped=helm_skipped,
                 parse_errors=parse_errors,
                 findings=[],
                 scanned_at=_utc_iso(),
-                diagnostics=f"rule engine raised {type(exc).__name__}: {exc}",
+                diagnostics=TIMEOUT_DIAGNOSTIC.format(seconds=timeout_seconds),
                 helm_render_attempted=helm_attempted,
                 helm_available=helm_available_flag,
                 helm_version=helm_version_str,
@@ -691,10 +771,11 @@ def run_scan(
                 helm_charts_rendered=helm_charts_rendered,
                 helm_render_errors=helm_render_errors,
             )
+
         return K8sScanOutcome(
             status="ok",
             tool_version=_kit_version(),
-            files_scanned=[_normalize_target(repo_root, p) for p in files],
+            files_scanned=_files_actually_scanned(repo_root, files, parse_errors),
             helm_templates_skipped=helm_skipped,
             parse_errors=parse_errors,
             findings=findings,
@@ -724,7 +805,9 @@ def render_evidence_payload(outcome: K8sScanOutcome, *, target: Path) -> dict[st
         "tool": "oss-policy-kit-k8s-parser",
         "tool_version": outcome.tool_version,
         "status": outcome.status,
-        "target": str(target.resolve()),
+        # Privacy-by-default: emit only the basename so a commonly-committed
+        # evidence artifact never leaks an absolute path / username (X6-02, M-002).
+        "target": _sanitize_target_path_for_payload(str(target), include_absolute=False),
         "scanned_at": outcome.scanned_at,
         "attested_at": outcome.scanned_at,
         "attested_by": "oss-policy-kit scan-k8s",

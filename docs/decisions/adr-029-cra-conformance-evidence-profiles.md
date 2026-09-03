@@ -1,6 +1,6 @@
 # ADR-029 - Tighten the CRA profiles from "ready" to "conformance-evidence" (v9.0.0)
 
-- **Status**: proposed (targets v9.0.0, BREAKING) — pending maintainer ratification (roadmap plan §11.4)
+- **Status**: accepted (targets v9.0.0, BREAKING) — ratified 2026-06-19; implementation in progress. Sequenced v9 → v10: this CRA tightening/rename + the `reports/1.0` removal (ADR-043) ship in **v9.0.0**; the normalized-finding model (ADR-030) follows in **v10.0.0**. The renamed-profile aliases are deprecated through the v9.x line and removed in v10.0.0.
 - **Date**: 2026-05-25
 - **Context window**: v9.x roadmap horizon — "EU CRA & regulatory readiness depth"
 - **Related**: ADR-020 (CRA Article 13/14 product class), ADR-010 (CRA + EU AI Act Art.11), ADR-019 (EU AI Act Annex IV evidence), ADR-028 (ATTESTED state), `docs/cra-readiness.md`, `ROADMAP.md`

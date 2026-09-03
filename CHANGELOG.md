@@ -6,6 +6,388 @@ This changelog follows the same public-facing format used by the GitHub release 
 
 ---
 
+## [10.0.19](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v10.0.18...v10.0.19) (2026-09-02)
+
+
+### Fixes
+
+* **ci:** pin the last three pip installs, and drop a remedy the base-image scan never had ([72ffda1](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/72ffda19a960947a7bf1962802643b8975a891de))
+* **ci:** take the build machine's paths out of the locks, and pin the two pip installs the last commit missed ([9a32ede](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/9a32ede696923237f227f2cda4d91b8e78a01bc5))
+* **ci:** watch the hashed locks, pin the CI pip, and say which findings stay open ([352adc3](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/352adc35fad77d9d8e5e35f05893c51e68f675b2))
+* **container:** ship a runtime image with no package installer and hashed installs ([6964a78](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/6964a787bdf5a971f70adb6f29543bea5538a8b8))
+* **domain:** a whitespace-only confidence is "none", not "low" ([3b11a84](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/3b11a84a3018a2d45f39afcd3612ca8203753f0b))
+* **engine:** a plugin that returns a malformed outcome no longer ends the run ([f8de4b8](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/f8de4b83f9049f02369f1863b439452d93552d0d))
+* **evaluators:** the heading title cannot trade characters with the whitespace before it ([8aed407](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/8aed40794f2635af9d35b8237b5f0a0e16693100))
+* **evaluators:** two regular expressions over target text were quadratic in the whitespace on a line ([c3169ea](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/c3169eaaa11b6ef730393241cc05589838a374c4))
+* **evaluators:** which files a large repository gets scanned was decided by the filesystem ([e18534e](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/e18534eb003c2042091e626527d49149ca1add43))
+* ignore the parallel coverage data files, which carry the machine name ([040556b](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/040556b1fa89bf37a1af05333a21fa8509d1237a))
+* **scanners:** order the remaining filesystem walks, and hold the invariant with a guard ([00ebdf5](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/00ebdf5d16d1ee7a86d693185036b19daa93e17e))
+
+
+### Improvements
+
+* name the poetry.lock literal, flatten two nested conditionals, split composite assertions ([45900a4](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/45900a4db72c6144bdeefb1273008f8ba8448a53))
+
+
+### Notes
+
+* declare the Python 3.13 support the suite now proves ([482d2aa](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/482d2aa67cb65925418a9bae185eed858dea9455))
+* **deps:** bump devops-actions/actionlint from 0.1.12 to 0.1.13 ([#205](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/issues/205)) ([5bd929c](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/5bd929cb404297971e2b4a5e08aeb7453942cec4))
+* **deps:** bump docker/setup-buildx-action from 4.2.0 to 4.3.0 ([#204](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/issues/204)) ([3e2cf03](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/3e2cf039e890dbd77328bbc57969592fb12b7bf8))
+* **deps:** bump step-security/harden-runner from 2.21.0 to 2.21.1 ([#208](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/issues/208)) ([efec278](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/efec2786b64239315c89a1e3ec12c7cf810aee5f))
+* **deps:** bump the codeql-action group across 1 directory with 4 updates ([#207](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/issues/207)) ([918144e](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/918144e8b20f161c31684609ae9d84ba5f742262))
+* **deps:** group the codeql-action bumps and let click 8.5 in ([3d01816](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/3d018162e9593e42e677f1acb79af1a6d0aa9464))
+* **deps:** take the two lock bumps by regenerating, because Dependabot cannot edit these files ([e8cf163](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/e8cf1639a72db354fa595edc07aa14cf25ee0481))
+* describe the real release flow, map the 41 controls the framework tables missed, state the Scorecard posture ([2aff2b2](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/2aff2b2da1977676350776f6a165cd7bc65e0b5f))
+* **quality:** run the suite on Windows and Python 3.13, and validate Rego against a real OPA ([6ce002a](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/6ce002aead55ddbaeee10171905ea85c93d5bf68))
+* **release:** close the transient major-bump PR, file fixes under Fixes, install the bumped tree by hash ([e7bbd7a](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/e7bbd7a03b16f6939a00e29abbd433515bd4afee))
+
+## [10.0.18](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v10.0.17...v10.0.18) (2026-08-26)
+
+
+### Improvements
+
+* **batch:** a failed write is reported as a write, not as unreadable input ([c5dafd9](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/c5dafd9fd62801f2b0b3b252d39774c8f9198139))
+* **batch:** a profile reference must not decide where reports land ([a7f58d6](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/a7f58d6458f2b2966543210a2d04c7c0cb3f9586))
+* **batch:** the batch report admits which repositories it could not evaluate ([8e781b0](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/8e781b0598cdfac24e81263c3084deea7c4c032b))
+* **cli:** closing stdout is not a kit defect ([9bacab7](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/9bacab7a7b155529e1817ee7e1b4dbcf75e12d54))
+* **cli:** naming two targets is refused instead of one being dropped ([2ad629c](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/2ad629c811e611d680187581451e2a6b00f22648))
+* **engine:** a third-party evaluator that raises no longer ends the run ([09e77b9](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/09e77b908dde8ef3e3f5ed3661d9709553e3b27e))
+* **findings:** a SARIF run is credited to the scanner it names ([91f8848](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/91f88482a0f30b6e9e5a8afe0140f18b6bde5889))
+* **findings:** one advisory against three packages is three findings ([324f100](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/324f1004b96c7a6084883ce240deb6f893ab47f2))
+* **findings:** one file written five ways is one finding ([a3b5ef1](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/a3b5ef1ca282c21924205ee55ad4110bfad7b49d))
+* **findings:** the artifact stops repeating the operator's directory chain ([584653f](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/584653f6a5b61cb8e808af6f1056eaf32304cf63))
+* **iac:** the optional hcl2 import type-checks on every version the floor allows ([5de9a49](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/5de9a4988b2443cd16aff988683bad24bdcd8574))
+* **init:** the generator label is the version of the code that ran ([502731b](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/502731b9f8b4f41b89371cef638611352131c2e2))
+* **plugins:** a plugin that lost an ID to a plugin is told that, not "built-in" ([a9bcb60](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/a9bcb602c761906a0a7c162db50440242e746b8c))
+* **release:** stop dropping the oldest commit from every release's notes ([0aae5cf](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/0aae5cf9796572221db6a9497ce6df95400b042b))
+* **reporting:** a repository cannot write control bytes into its own report ([babafaf](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/babafaf59c3f280e4e6b034ebcd4af5b162f5bf8))
+* **reporting:** a space in the path no longer defeats the redaction ([be1a4da](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/be1a4dabb493e85e1577fdf2a5b88c8822ca5e20))
+* **reporting:** every artifact of one run reports the same confidence ([a7c52e5](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/a7c52e5dff0b964d1cd748828eb88c37f5678396))
+* **reporting:** the path redaction reads both separator styles ([9c8e2c2](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/9c8e2c262594e9769b3e8eb409dac9d86cc38299))
+* **review:** close what the adversarial pass over this release found ([81c3c53](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/81c3c53062fbd514c102b3bcc827b10ff6676d7e))
+* **scanners:** --timeout bounds the scan instead of being discarded ([b83601f](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/b83601f156bf684471a4f30eef0f7bd985529c95))
+
+
+### Notes
+
+* **release:** regenerate the sample reports on the release branch ([878813e](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/878813ee5941783915e3aee70b245eb61e077c7a))
+* **samples:** the README describes the redaction the samples actually carry ([5979c13](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/5979c13b4d515bbd50795c08a59b8d022afbcb1b))
+
+## [10.0.17](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v10.0.16...v10.0.17) (2026-08-24)
+
+
+### Notes
+
+* **deps:** bump codeql-action to v4.37.7 and harden-runner to v2.21.0 ([e644ad4](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/e644ad48335b876ad76caa6604c0ac7607b0dad4))
+* **deps:** carry the action bumps into the templates, example and docs ([1a9bd12](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/1a9bd12cf5ed1852bd5b34be3ea57b87ff11dbee))
+
+## [10.0.16](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v10.0.15...v10.0.16) (2026-08-24)
+
+
+### Improvements
+
+* **cli:** the audited repository must not quietly steer the operator ([c30d7e7](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/c30d7e762f3092a1db1c228b1d29c8aad93da6b9))
+* **collectors:** a repository slug must not be able to steer the API path ([cdb0913](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/cdb0913a1082b478cd84c8361e97907e504cd95d))
+* **evaluators:** a control must not claim knowledge it does not have ([4db8d04](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/4db8d0436770a704f032da2ce2d0faa382803515))
+* **evaluators:** breaking a file must not earn a control a pass ([#185](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/issues/185)) ([14a70eb](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/14a70eb0bcff0c48c44f028473c12736edc3d927))
+* **evaluators:** sweep the comment-decides-the-verdict class instead of listing its sites ([#183](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/issues/183)) ([576dc85](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/576dc8539f0c6642112539bbb8fc26d70505ec28))
+* **findings:** a result naming three files must not be published as naming one ([b44134c](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/b44134c07bda7ed252154604f93ac216a302987a))
+* **iac:** where a repository is checked out is not a property of its contents ([c5da22c](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/c5da22c736f611aa147c96027a91aeb80e68e4f7))
+* **infrastructure:** recognise a wide encoding that carries no byte order mark ([9967651](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/9967651d9bd9bf505ed7d5c69eae9c42d007571a))
+* **loader:** a missing profile must not be reported with the host path ([3f72a62](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/3f72a629291d16dc1e69e3e5da522e0d98ca6fea))
+* **pages:** keep the local-only preview out of the published site ([98d0b07](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/98d0b0784b7b123764d7667ebd5163ffbb842b75))
+* **scripts:** the consumer smoke venv must not inherit the repository path ([3c54249](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/3c54249801f23fbc6174233d39ff6e46c431b397))
+* **scripts:** withdraw the --venv-dir override from the consumer smoke run ([a526178](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/a52617853428ac11be57671ae6506a28bc996a87))
+* **supply-chain:** the SBOM and the image describe the release, not the runner ([3c735de](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/3c735de3a433192a50b72293673cd59d9fe06083))
+* the X-ray's remaining items, and a bug I introduced fixing one of them ([#187](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/issues/187)) ([d62b924](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/d62b924ac39747b59172289e675bb631fb8ecbaa))
+* **workflows:** a composite action is executed too, and one unreadable file is not the end of the run ([aefe325](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/aefe3254fca5748b9d922bd3a9f00bde18e4ea98))
+
+
+### Notes
+
+* correct what the documentation claims, and lock each claim to the code ([5ce7026](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/5ce7026ac53d47ddc8c0b060660ff8c76cb6b649))
+
+## [10.0.15](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v10.0.14...v10.0.15) (2026-08-14)
+
+
+### Improvements
+
+* **gitlab:** GL-PIPE-011 now validates against the schema the kit has always shipped ([#181](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/issues/181)) ([f70c8fb](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/f70c8fbb736fd4e412c5af8ffcf75768fbf20888))
+
+## [10.0.14](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v10.0.13...v10.0.14) (2026-08-14)
+
+
+### Improvements
+
+* **evaluators:** controls and readers that claimed more than they established ([c3919e8](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/c3919e866b61170adf6a3243d34e196b735b1140))
+* **evidence:** the exit-3 class, third round, and a verification step that verified nothing ([#179](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/issues/179)) ([9457942](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/945794241235a23491f5ce876e396949aeae884a))
+* **gitlab:** a control that said "no evidence" about a file it had just read ([#180](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/issues/180)) ([15c6e6c](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/15c6e6c22eb054cef1c22f3553ada7c3fbe27fb6))
+* three defects the kit inflicted on its own adopters ([#175](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/issues/175)) ([a5bfbcb](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/a5bfbcbf130f136ecaab6fffad0fbd4ea3dc5d2a))
+* **workflows:** the last two controls that judged a comment instead of a step ([#178](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/issues/178)) ([46a0917](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/46a0917315ae5e0fa49fa70fe5e8b3f5fabd41b9))
+* **workflows:** the release detector I just rewrote could miss the release ([#176](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/issues/176)) ([c53dd09](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/c53dd097adad376b9c6393e1b6037bba8c899cb7))
+* **workflows:** two controls granted a PASS for security that existed only in a comment ([#177](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/issues/177)) ([f7d505d](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/f7d505d36ebbe46f629f9f26db118e85d468f5c2))
+
+## [10.0.13](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v10.0.12...v10.0.13) (2026-08-12)
+
+
+### Improvements
+
+* **evaluators:** unreadable GitHub evidence asked the gate to assert a failure it never established ([09e6297](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/09e62970b309ce6a8c4fb5a3904857ed0b5295c8))
+
+## [10.0.12](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v10.0.11...v10.0.12) (2026-08-12)
+
+
+### Improvements
+
+* clear the 33 Sonar findings the coverage push introduced ([e17c7b2](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/e17c7b29f8390d8fe44e9f36b6b1c0925189494f))
+* **evaluators:** one digest gate behind the four attestation controls ([75bcd39](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/75bcd395d9c57c6cc934e7b82cf75a3147704eb0))
+* **evaluators:** stop SAST-SEMGREP-064 reading an uncountable tally as a clean scan ([ef364c9](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/ef364c92a2786b94af3fee68ce6711d7532f8b0f))
+
+## [10.0.11](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v10.0.10...v10.0.11) (2026-08-11)
+
+
+### Improvements
+
+* **iac:** an explicit encrypted=false was reported as encryption never configured ([61424d7](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/61424d736f68ef28450028716a252e5b692f4d40))
+
+## [10.0.10](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v10.0.9...v10.0.10) (2026-08-10)
+
+
+### Improvements
+
+* **aws:** report a buildspec once per finding, not once per risky variable ([cec6c70](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/cec6c7019a299a23222e1fe536d3a1e2b27374ab))
+
+## [10.0.9](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v10.0.8...v10.0.9) (2026-08-10)
+
+
+### Improvements
+
+* **ci:** harden the workflows the kit's own scanner flags, and run it in CI ([f2bf0cd](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/f2bf0cd09cf8feea2daaa1866c3ae5959dce8f7c))
+* **docs:** stop the new waivers table shadowing the quick-reference rows ([1097841](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/109784156a280a208615f69839f29cc832c76490))
+* **quality:** clear the Sonar findings that were real, keep the ones that were not ([c30a46f](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/c30a46f7068b1ddb22ec76c7d2e1f6f9d8b31983))
+* **quality:** split the densest functions, make asserts name their failure ([fa84240](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/fa84240aa99df61b4bbd1837166f97540912485f))
+* **recommend:** drop the release-hardening fallback that cannot run ([04e6f1d](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/04e6f1db0ed8f1eea1526ba1055fdcdfdb21cbb8))
+
+
+### Notes
+
+* **deps:** bump actions/checkout from 6.0.3 to 6.1.0 ([#160](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/issues/160)) ([24e725c](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/24e725cac5f10b13e2c7c1d312611679a243a4c7))
+* **deps:** bump ossf/scorecard-action from 2.4.3 to 2.4.4 ([#161](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/issues/161)) ([3938e97](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/3938e97554f31ef99bc0fda819b69d7defcdf528))
+* **deps:** bump pypa/gh-action-pypi-publish from 1.14.1 to 1.14.2 ([#159](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/issues/159)) ([4138362](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/4138362036ae6e226b74938697b2dc686c076275))
+* **deps:** bump step-security/harden-runner from 2.20.0 to 2.20.1 ([#162](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/issues/162)) ([33b1f09](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/33b1f09c9637238928a79d7dd715cc2cf2b38365))
+* stop two version examples from claiming to be current ([9f914ea](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/9f914ea88157d374ef2de96eadbe4b5c21c25961))
+* **waivers:** record why a gate fails and a document warns ([dff217b](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/dff217b8dcfcf408e52642dcd0b19dec33723156))
+
+## [10.0.8](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v10.0.7...v10.0.8) (2026-08-07)
+
+
+### Improvements
+
+* **ci:** allow api.deps.dev so dependency review can run when a PR adds dependencies ([3eef5b3](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/3eef5b35cc016033af0ec51f5280cbd141386b8d))
+* **ci:** record the mcp advisories as a reasoned exception, not a silenced one ([497f6b7](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/497f6b78e98d3b8331742a982c4a68f31f89be49))
+* **init:** read stack labels from profile_hints instead of a second copy ([209813d](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/209813d44f475aef92115e83a40da2fd6a2a5a3c))
+* **reports:** map the two ControlStatus members that reached adopters as unmapped ([7d3172d](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/7d3172d784d2c410515603653a9ec6b781bfbce9))
+
+
+### Notes
+
+* **waivers:** name expires_at as canonical and expires_on as the accepted legacy spelling ([8aab34f](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/8aab34f42878e60fa5bb3e476b2849dc8a605755))
+
+## [10.0.7](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v10.0.6...v10.0.7) (2026-08-07)
+
+
+### Improvements
+
+* **cli:** make exit 3 mean a defect in the kit, and stop guessing which reads are guarded ([b8e688d](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/b8e688d47cc3280be0cefbed780e2fa4f95d7b07))
+* **cli:** redact the home directory at the output boundary, not command by command ([30c05d1](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/30c05d189227f59a5841bbdea969ec46ef21b143))
+* **cli:** stop Rich deleting the part of a message the adopter has to act on ([336e3a4](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/336e3a4220f8457c1f5f35378605f17b3e2fed09))
+* close the 26 findings left from the pre-publish clean-room ([bdbd900](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/bdbd9007856f870a125dd28f8d8feacf88f73b86))
+* **export:** stop a passing repository becoming a page of code-scanning alerts ([6658a60](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/6658a60ed032f55597438a9b20b04a1816b5bdf3))
+* **input:** apply the depth budget to every reader, not the two it reached first ([1f59d5d](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/1f59d5dcdae32a36a9b724f8f46d0a23635c5f65))
+* **packaging:** ship the workflow templates, so the documented quickstart works ([cc17b08](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/cc17b088694c2c1de951838944f06d92b28499d6))
+* **reporting:** stop a held file handle failing the run, and a failed batch reporting PASSED ([e54fb9f](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/e54fb9fd2a3d872a8a75cd523cd478b459941fc2))
+* **reporting:** stop advising deletion of evidence the kit wrote, and lose no report to a race ([4c1be41](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/4c1be419e2c815b2666bb5663a0d94814bc9d1b6))
+* **sca:** stop asserting "no KEV" over a SARIF that carries no KEV data ([f4684ad](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/f4684ad08ed83441fc6dd9cbfe348a77c9bc5a94))
+* **waivers:** honour expires_on on the surface the documentation sends people to ([84bd38e](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/84bd38efa1bf13fb76008dda9df5bc70b6e647a7))
+
+## [10.0.6](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v10.0.5...v10.0.6) (2026-08-06)
+
+
+### Improvements
+
+* **cli:** keep machine output machine-readable and fail closed on unusable inputs ([0cf15ca](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/0cf15ca56be2b6d580b809b64f08ae70aa9b7858))
+* **cli:** make an empty enum value fail closed instead of disabling the feature ([dede348](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/dede348221694c1db8f56936c324981f06bb0790))
+* **drift:** read reports/2.0 so the diff-reports regression gate can fire ([f41f3b6](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/f41f3b6393768f7d9551b3c7d79a1a33880c4290))
+* **findings:** attribute SARIF drops honestly and stop waivers applying by accident ([ede288a](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/ede288aeb3a47dd478dc3fe5d965fc778d531b3c))
+* **gitpage:** correct the counts and the contract claim the landing page states ([e49211d](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/e49211deb66171c19a484f812a307fd4b8a9b065))
+* **input:** make every hostile document a usage error, and stop swallowing write failures ([1eb13ad](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/1eb13ad187d1e60ece6ddf6604a4bd5fdb9b29a7))
+* **input:** refuse an over-nested document by an explicit budget, not by stack exhaustion ([6c6c542](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/6c6c5427976b15c6060155a003c5f326a803615c))
+* **messages:** tell adopters something true and actionable when a scan cannot run ([3a81329](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/3a813297a4955aa114bee5111a241b2b6412428b))
+* **reporting:** stop shareable artifacts from leaking paths or corrupting tables ([3f43873](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/3f438739345eb0e8a31ae640475c5c943ad7cc17))
+
+
+### Notes
+
+* complete the repository layout and say what must never be committed ([14e6d9f](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/14e6d9fd6899ee64e05810f58169c35514595ef3))
+* **readme:** give assurance grading its own section and state the status ([75e2fcc](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/75e2fcc8dd76ef037c04bd808f272e95f6c67d2f))
+* regenerate the shipped sample reports, and add the guard that should have caught them ([0187fe5](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/0187fe5822351c02a1e9cf58fd44a16a535be7db))
+
+## [10.0.5](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v10.0.4...v10.0.5) (2026-08-05)
+
+
+### Improvements
+
+* **templates:** refresh the action pins adopters copy and label every one ([3665bd5](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/3665bd5ed3084f29607eeeb2eeb911e3b3067c63))
+
+
+### Notes
+
+* **deps:** consolidate the codeql-action and login-action bumps ([33024e6](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/33024e6fb45d743238c0aeda2195a93a7df84430))
+
+## [10.0.4](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v10.0.3...v10.0.4) (2026-07-31)
+
+
+### Improvements
+
+* **docs:** SHA-pin the documented codeql-action reference and guard the class ([eae8db7](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/eae8db77bff1ee2967884f7ccf411b55e2b17744))
+
+## [10.0.3](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v10.0.2...v10.0.3) (2026-07-30)
+
+
+### Improvements
+
+* **ci:** unbreak the test suite and the SAST gate — pinned clock in tests, SHA-pinned starter templates ([b270893](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/b270893974f6c6964351328c0eb226a87e3af7ec))
+* **packaging:** ship py.typed and stop the documented Action references going stale ([11aec53](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/11aec538d1c47823a6421eb55d1ea0ff410209e5))
+
+
+### Notes
+
+* **deps-dev:** bump ruff to 0.16.0 and apply its formatter output ([e34b224](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/e34b224993fb6a39642f7fbb725360a4220c1ee9))
+* **deps:** bump codeql-action to v4.37.1, setup-node to v6.5.0, pypi-publish to v1.14.1 ([6a8bfa0](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/6a8bfa03b67e18d87596d49b9e964a77eba743a4))
+* **deps:** bump docker/setup-buildx-action from 4.1.0 to 4.2.0 ([#125](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/issues/125)) ([0e06d85](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/0e06d85d98cfeac87d6dc15604cb8fd432262231))
+* **deps:** bump step-security/harden-runner from 2.19.4 to 2.20.0 (all pins) ([5e7c5d3](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/5e7c5d3ac97a923151c871939fcda169cae1f97e))
+* **gitpage:** bump tailwindcss and the tailwind CLI to 4.3.3 and rebuild the served assets ([2fc8bcd](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/2fc8bcdeb965546692d6cff3a91a081cbd4fee83))
+
+## [10.0.2](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v10.0.1...v10.0.2) (2026-07-13)
+
+
+### Improvements
+
+* exit-code, determinism and privacy hardening from second extreme end-user raio-x (v10.0.2) ([44b9421](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/44b9421417c8ac92f1c26853b465cfa1397b326e))
+
+
+### Notes
+
+* align living docs with real v10.0.1 behavior (docs-vs-reality audit) ([1ea37ad](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/1ea37ad4092780560815374e863f5533c446b1ae))
+* **deps:** bump docker/build-push-action from 7.2.0 to 7.3.0 ([#116](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/issues/116)) ([709f601](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/709f601ac61af0efbdaf7e2f7942b006afe32246))
+* **deps:** bump docker/login-action from 4.2.0 to 4.4.0 ([#120](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/issues/120)) ([9ba4db1](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/9ba4db15c47cc9974aea8f6f195f4615202e9d16))
+* **deps:** bump docker/setup-qemu-action from 4.1.0 to 4.2.0 ([#117](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/issues/117)) ([186904d](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/186904da9ce7f5bb0d887f2330f6c2ab927b1c09))
+* **deps:** bump github/codeql-action from 4.36.2 to 4.36.3 (all sub-actions) ([feaaf1b](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/feaaf1b0375ded41293c8440bf5c76cd7f5b97f4))
+* **deps:** bump github/codeql-action from 4.36.3 to 4.37.0 (all sub-actions) ([4c85a4d](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/4c85a4d075b5a22bcefa046cf6f96123ed2faa78))
+
+## [10.0.1](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v10.0.0...v10.0.1) (2026-07-09)
+
+
+### Improvements
+
+* privacy, contract-honesty and UX hardening from extreme end-user raio-x (v10.0.1) ([fdc692b](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/fdc692b8d06f26f5eff74b8e3b5705b21b18accf))
+
+## [10.0.0](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v9.0.3...v10.0.0) (2026-07-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* the `cra-eu-ready-2-1` profile alias is removed (use `cra-eu-conformance-evidence-1`); the legacy evaluation-report v1/v2/v3 schema files no longer ship in the wheel or the reports/schema mirror; the `migrate-1.0-to-2.0.py` helper script is removed; `export-evidence` no longer accepts pre-2.0 report shapes (reports/2.0 fields are required). This release also introduces the normalized finding surface (ADR-030): the `correlate-findings` command, the findings/1.0 artifact contract, and the opt-in `evaluate --with-findings-summary` embed.
+
+### Highlights
+
+* **cli:** correlate-findings command — first user-visible finding surface (ADR-030 A-S6) ([2de2e58](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/2de2e587f1d2d9a1325df64de859727480e5b59f))
+* **findings:** cross-scanner correlation engine (ADR-030 A-S4) ([e638f0c](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/e638f0cd88d8be4af6935f2d59383e942a6b9aff))
+* **findings:** domain finding model + kit-evidence normalizers (ADR-030 A-S2) ([dde11f0](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/dde11f069896f2f0aedad91464d898dfd182f2a4))
+* **findings:** external-SARIF normalizers (ADR-030 A-S3) ([c577599](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/c577599503ec75716bc6a8f4ad406b45174c25eb))
+* **findings:** findings/1.0 contract + artifact assembler (ADR-030 A-S5) ([9da8a3d](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/9da8a3df47e43b4f94b784628f5edf5ff69d3af8))
+* **findings:** waiver linkage, offline enrichment, SARIF export, evaluate embed (ADR-030 A-S6b/S7/S8/S9) ([5025455](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/50254559ce8057879786710bdf15cc241fc99c95))
+* v10.0.0 breaking cleanups — CRA alias removal, legacy schema deletion, export-evidence pure reports/2.0 (ADR-029/ADR-030 Track B) ([471f959](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/471f959eabbcea57284e5d01079b9eb1db6f66f4))
+
+
+### Notes
+
+* findings-correlation guide, v10.0.0 migration guide, 23-command surface (ADR-030 A-S10) ([b91d052](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/b91d052451441315a4f460987eee370efdee8523))
+
+## [9.0.3](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v9.0.2...v9.0.3) (2026-07-02)
+
+
+### Improvements
+
+* **catalog:** retitle SAST-OSV-068 — the kit ingests OSV verdicts, it is not reachability-aware ([becb213](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/becb2130a08b74b7a42267bec027f611196f08ab))
+* **clock:** honor SOURCE_DATE_EPOCH for every outcome-affecting clock read; freeze the suite clock ([431c29b](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/431c29b2096592f167f34a20564f53a877a35c7e))
+* **export-evidence:** build Gemara state maps from pairs to clear a Snyk Code false positive ([91f4e5c](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/91f4e5cac34e133935ee4f6e876d0588a3a44f01))
+* **reports:** formalize SELF_ATTESTED in the published reports/2.0 schema (9.0.3) ([eec4930](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/eec4930a4ab8f00687b44b7634461481234bdb21))
+
+
+### Notes
+
+* **adr:** ADR-030 amendment re-grounding the v10.0.0 surface; flip ADR-021 to accepted ([513a74c](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/513a74c7e9f3306c005d569aa24b113d9158088e))
+* **deps:** bump actions/setup-python from 6.2.0 to 6.3.0 ([#107](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/issues/107)) ([b9a0234](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/b9a0234fd8a4f46cf546104e4a9347b73afac054))
+* **security:** make Snyk Code + Snyk Open Source advisory (continue-on-error) ([4e3055c](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/4e3055c897e03698eb22b8e900813bf7d90096bd))
+* **security:** suppress reviewed Snyk Code false positive via .snyk; keep the gate strict ([47c5cf0](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/47c5cf0164d939348dd9a507cc3869e691539fba))
+
+## [9.0.2](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v9.0.1...v9.0.2) (2026-06-29)
+
+
+### Improvements
+
+* v9.0.2 hotfix — 12 raio-x defects (crashes, exit-3, path leaks, dishonest gates, silent waivers) ([8fb353a](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/8fb353a446002f7853cdda90391403046954f678))
+
+
+### Notes
+
+* **readme:** use canonical CRA profile id in the profiles table ([8355aa2](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/8355aa293825eace8646ccf6969dfb9b677ba745))
+* reflect reports/2.0 as the only contract (ADR-043) across current docs ([2fac8d3](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/2fac8d342d0ecbcc83993dabb06ca92ed926c559))
+
+## [9.0.1](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v9.0.0...v9.0.1) (2026-06-22)
+
+
+### Improvements
+
+* **cli:** fail-closed on blank report contract + sanitize errors + honest init (9.0.1) ([8554cf3](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/8554cf3c28f970687a0dd35758572e89b8377e0a))
+
+## [9.0.0](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v8.1.0...v9.0.0) (2026-06-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* **reports:** the legacy report contracts reports/0.1, reports/0.2, reports/0.3, and reports/1.0 are removed. `--report-json-contract` (and the oss-policy-kit.yaml report_json_contract key) accept only `2.0`; pinning a removed contract now exits 2 with guidance instead of falling back. Consumers that parsed the legacy JSON shape must move to reports/2.0 (controls/id/state under `controls`, profile under `profile`). See docs/v9.0.0-migration-guide.md. Ships in v9.0.0.
+* **profiles:** the profile id `cra-eu-ready-2-1` is renamed to `cra-eu-conformance-evidence-1`. The old id still resolves as a deprecated alias (with a warning) through the v9.x line and is removed in v10.0.0; update your `--profile` / config references. Ships in v9.0.0.
+* **profiles:** the `cra-eu-ready-2-1` profile now requires additional obligation-evidence controls to pass; a repository that passed the previous readiness bundle may resolve to manual-review-required for the new controls until the corresponding evidence (VDP, SBOM, retention policy, audit streaming, provenance verification) is present. Recommended `--fail-on degraded` for this advisory profile. Ships in v9.0.0.
+
+### Highlights
+
+* **profiles:** rename cra-eu-ready-2-1 to cra-eu-conformance-evidence-1 + deprecated alias (ADR-029, v9.0.0 Track B slice 2) ([97ddd37](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/97ddd37f13fd0701561d98d8b93d0b44b1411340))
+* **profiles:** tighten cra-eu-ready-2-1 to CRA conformance-evidence (ADR-029, v9.0.0 Track B slice 1) ([b1ae1f8](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/b1ae1f873a41ebe09c00ce5872389dd0190016c8))
+* **reports:** remove legacy pre-2.0 report contracts; reports/2.0 is the only contract (ADR-043, v9.0.0 Track A) ([ddc6f43](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/ddc6f4336b744ad3856b34c6fa3340c91802ca08))
+
+
+### Notes
+
+* **adr:** ratify the v9-&gt;v10 breaking sequence (ADR-029, ADR-043, ADR-030) ([07418e3](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/07418e322f65df36389c04bf4efea2f390bd7ee3))
+* **cra:** finish ADR-029 rename ripple + document conformance-evidence sequencing (v9.0.0 Track B slice 3) ([898b3d0](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/898b3d0712f6e9847d1d0c1fc95173ccdc26bc4e))
+
+## [8.1.0](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v8.0.0...v8.1.0) (2026-06-19)
+
+
+### Highlights
+
+* **action:** emit a GitHub Actions job summary + per-finding annotations ([6a99765](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/6a99765928b72464f5ed986771374ffd9e04bb0f))
+* **cli:** add diff-catalogs subcommand for control/profile delta (T1.4) ([93f4661](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/93f466161fbb29c754448b8b7266e444a22d2420))
+* **cli:** add ingest-scorecard to corroborate controls from a Scorecard result (T2.3) ([2d2f892](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/2d2f8926371000061d5c2b39eccb1586bc0b2768))
+* **cli:** emit-insights --merge — idempotent Security Insights fragment ([1df1ba4](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/1df1ba4ab93139186e60b7ec4080d1b16f53d30c))
+* **controls:** add CRA-ART13-SUPPORT-003 security-update support-period signal (T2.4) ([c78ccb8](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/c78ccb8a24ab3caf0c0d132a825b63d887732da3))
+* **controls:** add OSPS-DO-07 build-instructions signal (GOV-BUILD-072) ([a74b346](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/a74b34615a24710699d7a41057349b4ff9996c34))
+* **export:** add Gemara Layer 5 Evaluation Log export format (T2.1, ADR-042) ([83fc924](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/83fc92480d46bedfe3fca6103cef3e197d2ccde1))
+* **export:** enrich OSCAL assessment-results export with assurance grade, repo subject + assessment-log (T2.2) ([325ebca](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/commit/325ebcabf3a8185fb37fada9dbb4335ca4d3f29a))
+
 ## [8.0.0](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/compare/v7.3.0...v8.0.0) (2026-06-18)
 
 

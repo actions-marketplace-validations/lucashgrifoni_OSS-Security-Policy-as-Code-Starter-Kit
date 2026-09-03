@@ -33,9 +33,11 @@ import os
 import shutil
 import subprocess
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from oss_policy_kit.application.clock import report_generated_at
+from oss_policy_kit.application.reporting import _sanitize_target_path_for_payload
 
 #: Schema version for the normalized evidence file written to disk.
 EVIDENCE_SCHEMA_VERSION = "oss-policy-kit/evidence/sast-semgrep/v1"
@@ -118,9 +120,14 @@ def _semgrep_version() -> str | None:
 
 
 def _now_iso_utc() -> str:
-    """Current UTC time in ISO 8601 with a ``Z`` suffix."""
+    """Current UTC time in ISO 8601 with a ``Z`` suffix.
 
-    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    Routes through the report clock so ``SOURCE_DATE_EPOCH`` pins the timestamp
+    for reproducible-build environments and the test suite (X7-03). The ``Z``
+    suffix is preserved so the on-disk evidence shape stays byte-identical.
+    """
+
+    return report_generated_at().replace("+00:00", "Z")
 
 
 def _normalize_finding(raw: dict[str, Any]) -> SemgrepFinding | None:
@@ -313,7 +320,9 @@ def render_evidence_payload(
         "tool_version": outcome.version,
         "status": outcome.status,
         "rulesets": list(outcome.rulesets),
-        "target": str(target.resolve()),
+        # Privacy-by-default: emit only the basename so a commonly-committed
+        # evidence artifact never leaks an absolute path / username (X6-02, M-002).
+        "target": _sanitize_target_path_for_payload(str(target), include_absolute=False),
         "scanned_at": outcome.scanned_at,
         "attested_at": outcome.scanned_at,
         "attested_by": "oss-policy-kit scan-sast",

@@ -32,7 +32,7 @@ def _write_config(target: Path, profile: str = "github-level-1") -> None:
         "profile_source: recommended\n"
         "fail_on: none\n"
         'output_dir: "./oss-policy-reports"\n'
-        'report_json_contract: "1.0"\n'
+        'report_json_contract: "2.0"\n'
         "detected:\n"
         "  platform: github\n"
         "  primary_stack: null\n"

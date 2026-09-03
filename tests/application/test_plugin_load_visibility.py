@@ -14,8 +14,11 @@ from oss_policy_kit.application import evaluators as ev
 
 
 class _FakeEP:
-    def __init__(self, name, loader):
+    # `value` is the "module:attr" string every real EntryPoint carries; the loader reads
+    # it to name which entry point kept an ID when two plugins claim the same one.
+    def __init__(self, name, loader, value=None):
         self.name = name
+        self.value = value or f"{name.lower().replace('-', '_')}:evaluate"
         self._loader = loader
 
     def load(self):
@@ -52,7 +55,8 @@ def test_broken_plugin_recorded_not_raised(monkeypatch, _restore_registry):
     _patch_eps(monkeypatch, [_FakeEP("MY-BROKEN-001", _boom)])
     ev._load_external_evaluators()  # must not raise
     errs = {e["name"]: e for e in ev.plugin_load_errors()}
-    assert "MY-BROKEN-001" in errs and errs["MY-BROKEN-001"]["kind"] == "load"
+    assert "MY-BROKEN-001" in errs
+    assert errs["MY-BROKEN-001"]["kind"] == "load"
     assert "MY-BROKEN-001" not in ev.EVALUATOR_REGISTRY
 
 

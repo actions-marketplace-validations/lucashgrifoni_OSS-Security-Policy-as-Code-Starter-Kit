@@ -17,9 +17,9 @@ from pathlib import Path
 
 from tests.conftest import EXAMPLE_HARDENED
 
-from oss_policy_kit.application.engine import REPORT_JSON_SCHEMA_URL_V1_0, evaluate_repository
+from oss_policy_kit.application.engine import REPORT_JSON_SCHEMA_URL_V2_0, evaluate_repository
 from oss_policy_kit.application.loader import bundled_kit_root, load_catalog, load_profile_by_id
-from oss_policy_kit.application.reporting import report_to_dict_v1
+from oss_policy_kit.application.reporting import report_to_dict_v2_0
 
 
 def _evaluate_v1(profile_id: str) -> dict:
@@ -34,9 +34,9 @@ def _evaluate_v1(profile_id: str) -> dict:
         scorecard=None,
         external_waiver_path=None,
         verbose_emit=None,
-        report_json_contract="1.0",
+        report_json_contract="2.0",
     )
-    return report_to_dict_v1(report)
+    return report_to_dict_v2_0(report)
 
 
 def test_results_digest_is_stable_across_runs() -> None:
@@ -44,8 +44,8 @@ def test_results_digest_is_stable_across_runs() -> None:
 
     a = _evaluate_v1("github-level-1")
     b = _evaluate_v1("github-level-1")
-    assert a["schema_version"] == REPORT_JSON_SCHEMA_URL_V1_0
-    assert b["schema_version"] == REPORT_JSON_SCHEMA_URL_V1_0
+    assert a["schema_version"] == REPORT_JSON_SCHEMA_URL_V2_0
+    assert b["schema_version"] == REPORT_JSON_SCHEMA_URL_V2_0
     assert a["results_digest"] == b["results_digest"]
     # results_digest format is sha256:<hex64>
     assert a["results_digest"].startswith("sha256:")
@@ -62,17 +62,17 @@ def test_hard_gate_signal_grade_results_cap_at_inferred() -> None:
     """github-level-3 is a hard-gate profile; signal controls must NOT project to verified."""
 
     payload = _evaluate_v1("github-level-3")
-    signal_results = [r for r in payload["results"] if r["assurance"] == "signal"]
+    signal_results = [r for r in payload["controls"] if r["assurance"] == "signal"]
     # The hardened fixture should pass several signal controls. Each must remain capped.
     assert signal_results, "expected at least one signal-grade control in github-level-3"
     for r in signal_results:
         assert r["evidence"]["trust_level"] != "verified", (
-            f"{r['control_id']}: signal-grade result must not project to 'verified' on a hard gate"
+            f"{r['id']}: signal-grade result must not project to 'verified' on a hard gate"
         )
         # Limitations must contain the signal-cap explanation when source_type is heuristic.
         if r["evidence"]["source_type"] == "heuristic_signal":
             joined = " ".join(r["evidence"]["limitations"]).lower()
-            assert "signal" in joined, f"{r['control_id']} missing signal limitation text"
+            assert "signal" in joined, f"{r['id']} missing signal limitation text"
 
 
 def test_hard_gate_evidence_backed_results_can_reach_higher_trust() -> None:
@@ -82,7 +82,7 @@ def test_hard_gate_evidence_backed_results_can_reach_higher_trust() -> None:
     """
 
     payload = _evaluate_v1("github-level-3")
-    eb_results = [r for r in payload["results"] if r["assurance"] == "evidence-backed"]
+    eb_results = [r for r in payload["controls"] if r["assurance"] == "evidence-backed"]
     # Some evidence-backed controls in the hardened fixture should reach at least 'declared'.
     if eb_results:
         trust_levels = {r["evidence"]["trust_level"] for r in eb_results}

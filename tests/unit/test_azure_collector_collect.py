@@ -68,8 +68,9 @@ def test_collect_full_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_collect_permission_error_on_repos_403(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_client(monkeypatch, lambda r: httpx.Response(403, json={"message": "denied"}))
+    collector = AzureDevOpsEvidenceCollector(organization="org", personal_access_token="pat")
     with pytest.raises(CollectionPermissionError):
-        AzureDevOpsEvidenceCollector(organization="org", personal_access_token="pat").collect("Proj/repo")
+        collector.collect("Proj/repo")
 
 
 def test_collect_repo_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -79,8 +80,9 @@ def test_collect_repo_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
         return httpx.Response(200, json={"value": []})
 
     _patch_client(monkeypatch, handler)
+    collector_2 = AzureDevOpsEvidenceCollector(organization="org", personal_access_token="pat")
     with pytest.raises(ValueError, match="not found"):
-        AzureDevOpsEvidenceCollector(organization="org", personal_access_token="pat").collect("Proj/repo")
+        collector_2.collect("Proj/repo")
 
 
 def test_collect_repos_422_aborts(monkeypatch: pytest.MonkeyPatch) -> None:

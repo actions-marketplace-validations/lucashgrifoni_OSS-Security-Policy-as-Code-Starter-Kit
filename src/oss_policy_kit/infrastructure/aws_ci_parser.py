@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from oss_policy_kit.application.evaluators_common import strip_yaml_comments
 from oss_policy_kit.infrastructure.yaml_io import load_yaml_file
 
 _AKIA_PATTERN = re.compile(r"\bAKIA[0-9A-Z]{16}\b")
@@ -83,12 +84,25 @@ def committed_codepipeline_export_is_minimal(path: Path) -> tuple[bool, str]:
 
 
 def _scan_buildspec_raw_non_env(path: Path, raw: str, raw_lower: str, result: AwsCiAnalysis) -> None:
-    """Heuristics that are not replaced by structured YAML env parsing."""
+    """Heuristics that are not replaced by structured YAML env parsing.
+
+    Two kinds of question live here, and they want opposite treatment of comments.
+
+    The secret checks below ask whether the file CONTAINS a credential. A key pasted into a
+    comment is still a leaked key -- arguably more so, since nobody is looking at it -- so
+    they read the file as written, comments and all.
+
+    Everything after them asks whether the build DOES something: does it run a scanner, emit
+    an SBOM, produce provenance. A comment does not run, so those read the comment-free text
+    and get it as ``capability`` below.
+    """
 
     if _AKIA_PATTERN.search(raw) or "aws_secret_access_key" in raw_lower:
         result.inline_secret_risk_paths.append(path)
     if "-----begin" in raw_lower and "private key-----" in raw_lower:
         result.inline_secret_risk_paths.append(path)
+
+    capability = strip_yaml_comments(raw_lower)
 
     scan_tokens = (
         "trivy",
@@ -101,7 +115,7 @@ def _scan_buildspec_raw_non_env(path: Path, raw: str, raw_lower: str, result: Aw
         "inspector-sbomgen",
         "amazon-inspector",
     )
-    if any(t in raw_lower for t in scan_tokens):
+    if any(t in capability for t in scan_tokens):
         result.security_scan_signal_paths.append(path)
 
     sca_tokens = (
@@ -113,11 +127,11 @@ def _scan_buildspec_raw_non_env(path: Path, raw: str, raw_lower: str, result: Aw
         "dependency-check",
         "bundler-audit",
     )
-    if any(t in raw_lower for t in sca_tokens):
+    if any(t in capability for t in sca_tokens):
         result.dependency_audit_signal_paths.append(path)
 
     sbom_tokens = ("cyclonedx", "syft", "spdx", "sbom")
-    if any(t in raw_lower for t in sbom_tokens):
+    if any(t in capability for t in sbom_tokens):
         result.sbom_signal_paths.append(path)
 
     prov_tokens = (
@@ -127,7 +141,7 @@ def _scan_buildspec_raw_non_env(path: Path, raw: str, raw_lower: str, result: Aw
         "attestation",
         "provenance",
     )
-    if any(t in raw_lower for t in prov_tokens):
+    if any(t in capability for t in prov_tokens):
         result.provenance_signal_paths.append(path)
 
 
@@ -141,6 +155,19 @@ def _raw_env_fallback(path: Path, raw_lower: str, result: AwsCiAnalysis) -> None
 
 
 def _plaintext_env_variables_risk(values: dict[str, Any], path: Path, result: AwsCiAnalysis) -> None:
+    """Record *path* once when any plaintext env value looks like a credential.
+
+    The finding is about the file, not the variable, and the list reaches the operator as
+    the control's ``evidence_sources``. Appending per matching value listed the same
+    buildspec several times over, which reads as several independent pieces of evidence for
+    one file. The same guard also covers the recursive walk visiting one file's ``env``
+    block more than once.
+    """
+
+    def _flag() -> None:
+        if path not in result.inline_secret_risk_paths:
+            result.inline_secret_risk_paths.append(path)
+
     for key, val in values.items():
         if not isinstance(val, str):
             continue
@@ -148,13 +175,13 @@ def _plaintext_env_variables_risk(values: dict[str, Any], path: Path, result: Aw
         if not s:
             continue
         if _AKIA_PATTERN.search(s):
-            result.inline_secret_risk_paths.append(path)
+            _flag()
             continue
         if len(s) >= 64 and re.fullmatch(r"[A-Za-z0-9+/=_-]+", s):
-            result.inline_secret_risk_paths.append(path)
+            _flag()
             continue
         if _SECRETISH_KEY.search(str(key)) and len(s) > 12:
-            result.inline_secret_risk_paths.append(path)
+            _flag()
 
 
 def _record_env_block_signals(env_block: dict[str, Any], path: Path, result: AwsCiAnalysis) -> None:
@@ -228,7 +255,10 @@ def _scan_codepipeline_export(path: Path, result: AwsCiAnalysis) -> None:
         return
     result.codepipeline_valid_export_paths.append(path)
     pipe = load_committed_codepipeline_document(path)
-    if isinstance(pipe, dict):
+    # `committed_codepipeline_export_is_minimal` already loaded this document and
+    # returned False for anything that is not an object, so the falsy arm is not
+    # reachable from here.
+    if isinstance(pipe, dict):  # pragma: no branch
         role = str(pipe.get("roleArn", "")).strip()
         if role.startswith("arn:aws:iam::"):
             result.codepipeline_committed_iam_role_paths.append(path)

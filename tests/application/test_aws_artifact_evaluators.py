@@ -95,7 +95,8 @@ def test_sbomart_058_incomplete_self_attested(tmp_path: Path) -> None:
 def test_sbomart_058_api_pass(tmp_path: Path) -> None:
     _ev(tmp_path, "aws-sbom-artifact.json", _sbom(api=True))
     out = aws_eval.eval_aws_sbomart_058(_ctx(tmp_path))
-    assert out.status == ControlStatus.PASS and out.evidence_collection_method == EvidenceCollectionMethod.LIVE
+    assert out.status == ControlStatus.PASS
+    assert out.evidence_collection_method == EvidenceCollectionMethod.LIVE
 
 
 def test_sbomart_058_self_attested_complete(tmp_path: Path) -> None:
@@ -130,7 +131,8 @@ def test_provart_059_incomplete_self_attested(tmp_path: Path) -> None:
 def test_provart_059_api_pass(tmp_path: Path) -> None:
     _ev(tmp_path, "aws-provenance-artifact.json", _prov(api=True))
     out = aws_eval.eval_aws_provart_059(_ctx(tmp_path))
-    assert out.status == ControlStatus.PASS and out.evidence_collection_method == EvidenceCollectionMethod.LIVE
+    assert out.status == ControlStatus.PASS
+    assert out.evidence_collection_method == EvidenceCollectionMethod.LIVE
 
 
 def test_provart_059_self_attested_complete(tmp_path: Path) -> None:

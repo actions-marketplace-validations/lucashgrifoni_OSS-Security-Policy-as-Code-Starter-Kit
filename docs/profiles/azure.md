@@ -25,8 +25,8 @@ release visibility; those controls stay **signal** grade per catalog — treat P
 
 Both are Azure DevOps extreme hard-gates and both expect live `collect-evidence --platform azure`. They differ in operational fit:
 
-- Use **`azure-level-3`** for **steady-state Azure DevOps hardening** — branch policies, pipeline governance, federated identity (`AZ-WIFEV-057`), service connection posture, and ORG-MFA. 8 of the 27 controls are evidence-backed (the highest evidence ratio of any profile in this kit).
-- Use **`azure-release-hardening-3`** when the gate runs at the **release event** — adds the `AZ-SEC / AZ-SBOM / AZ-SCA 031..033` signal bundle on top of the same hard-gate core, plus artifact-bound SBOM/provenance evidence files (`AZ-ARTSBOM-058`, `AZ-ARTPRV-059`). 8 of the 30 controls are evidence-backed; release signals stay `signal`-grade and are directional, not proof of execution.
+- Use **`azure-level-3`** for **steady-state Azure DevOps hardening** — branch policies, pipeline governance, federated identity (`AZ-WIFEV-057`), service connection posture, and ORG-MFA. 10 of the 30 controls are evidence-backed (the highest evidence ratio of the platform CI ladders).
+- Use **`azure-release-hardening-3`** when the gate runs at the **release event** — adds the `AZ-SEC / AZ-SBOM / AZ-SCA 031..033` signal bundle on top of the same hard-gate core, plus artifact-bound SBOM/provenance evidence files (`AZ-ARTSBOM-058`, `AZ-ARTPRV-059`). 10 of the 34 controls are evidence-backed; release signals stay `signal`-grade and are directional, not proof of execution.
 
 Operational rule of thumb:
 

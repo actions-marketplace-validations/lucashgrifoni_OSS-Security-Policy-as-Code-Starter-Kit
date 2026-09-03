@@ -23,40 +23,23 @@ already-computed ``ControlResult`` for the ``reports/1.0`` projection. Existing
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
-from oss_policy_kit.domain.models import ControlResult, ControlStatus
+from oss_policy_kit.domain.models import (
+    ControlResult,
+    ControlStatus,
+    utc_now,
+)
 
 EVIDENCE_PROVENANCE_VERSION = "evidence/2.0"
 
 # Conservative default freshness window for API-collected platform evidence.
 # Stale evidence on a hard-gate profile cannot back a `verified` trust level.
 DEFAULT_FRESHNESS_WINDOW_DAYS = 90
-
-_CONFIDENCE_NORMALIZATION: dict[str, str] = {
-    "high": "high",
-    "strong": "high",
-    "medium": "medium",
-    "med": "medium",
-    "moderate": "medium",
-    "low": "low",
-    "weak": "low",
-    "none": "none",
-    "n/a": "none",
-    "not-applicable": "none",
-    "not_applicable": "none",
-}
-
-
-def normalize_confidence(raw: str | None) -> str:
-    """Map free-form ``confidence`` strings into the v1 enum."""
-
-    if not raw:
-        return "none"
-    key = raw.strip().lower()
-    return _CONFIDENCE_NORMALIZATION.get(key, "low")
 
 
 def _is_placeholder_path(value: str) -> bool:
@@ -66,28 +49,106 @@ def _is_placeholder_path(value: str) -> bool:
     return v in {"<placeholder>", "tbd", "todo", "n/a"}
 
 
+_REDACTION_MARKER = "<redacted-absolute>"
+
+# Evidence sources cross platforms (a report rendered on POSIX can carry Windows
+# paths and vice versa), so separator handling never relies on the local os.sep.
+_SEPARATOR_RE = re.compile(r"[\\/]+")
+_DRIVE_RE = re.compile(r"[A-Za-z]:")
+
+
+def _root_style(p: str) -> str | None:
+    """Classify how ``p`` is rooted on a host, or ``None`` when it is repo-relative.
+
+    Two consequences are deliberate rather than accidental:
+
+    ``//host/path`` is read as a UNC share, not as a protocol-relative URL, and so
+    collapses to the bare marker. Windows accepts forward slashes in UNC paths, so
+    the alternative reading would let ``//internal-fileserver/share/audit.md`` ship
+    verbatim. Losing an unusual reference is recoverable; publishing an internal
+    server name is not. Only ``http://`` and ``https://`` are treated as URLs.
+
+    A ``~``-rooted reference is redacted even though ``~`` hides the account name by
+    construction, because what follows it still describes the layout of a private
+    machine and the leaf is the only part a reader of a shared report can act on.
+    """
+
+    if p.startswith(("\\\\", "//")):
+        # UNC share: the server and share names disclose internal infrastructure.
+        return "unc"
+    if p.startswith(("/", "~/")):
+        return "posix"
+    if p.startswith(("\\", "~\\")):
+        return "windows"
+    if _DRIVE_RE.fullmatch(p[:2]):
+        return "windows"
+    return None
+
+
+def _home_chain() -> tuple[str, ...]:
+    """Home-directory components below the filesystem root (``Users``, account name...)."""
+
+    try:
+        parts = Path.home().parts
+    except (OSError, RuntimeError):  # pragma: no cover - only when HOME is unresolvable
+        return ()
+    return tuple(seg for seg in parts[1:] if seg)
+
+
+def _starts_with_home_chain(p: str) -> bool:
+    """True when a relative-looking path still leads with the real home directory.
+
+    An upstream layer that strips only the drive letter turns a home path into
+    something that no longer *looks* rooted while still carrying the account name.
+    """
+
+    chain = _home_chain()
+    if not chain:
+        return False
+    parts = [seg for seg in _SEPARATOR_RE.split(p) if seg]
+    if len(parts) < len(chain):
+        return False
+    return [seg.lower() for seg in parts[: len(chain)]] == [seg.lower() for seg in chain]
+
+
+def _leaf_component(p: str, style: str) -> str:
+    """Return the final path component, with host-identifying roots dropped first."""
+
+    parts = [seg for seg in _SEPARATOR_RE.split(p) if seg and seg != "~"]
+    if style == "unc":
+        # \\server\share is host-identifying in its own right, never a usable leaf.
+        parts = parts[2:]
+    elif parts and _DRIVE_RE.fullmatch(parts[0]):
+        parts = parts[1:]
+    return parts[-1] if parts else ""
+
+
 def _redact_path(path: str) -> tuple[str, bool]:
     """Best-effort: return (redacted_value, was_redacted).
 
-    The kit already operates on relative repo paths in most evidence sources,
-    but defensive normalization here strips a leading drive letter or absolute
-    POSIX root so reports/1.0 never leaks workstation paths.
+    Redaction is decided by CONTENT — a host root (drive, UNC share, POSIX root) or
+    the real home-directory chain — and keeps only the final component. Dropping a
+    fixed NUMBER of leading components instead let any target nested deeper than that
+    keep real host directory names, including the OS account name, in a reference the
+    report labels ``"redacted": true``; a field that claims redaction and does not
+    deliver it is worse than none, because a reviewer stops looking at it.
+
+    Repo-relative sources (the common case) pass through untouched.
     """
 
     p = path.strip()
     if not p:
         return p, False
-    if len(p) >= 2 and p[1] == ":":
-        # Windows user-profile absolute path: drop drive and home segments.
-        rest = p[2:].lstrip("\\/")
-        return (
-            f"<redacted-absolute>/{rest.split(chr(92), 4)[-1]}" if "\\" in rest else f"<redacted-absolute>/{rest}",
-            True,
-        )
-    if p.startswith("/"):
-        # POSIX absolute path
-        return f"<redacted-absolute>{p.rsplit('/', 1)[-1]}", True
-    return p, False
+    style = _root_style(p)
+    if style is None:
+        if not _starts_with_home_chain(p):
+            return p, False
+        style = "windows" if "\\" in p else "posix"
+    leaf = _leaf_component(p, style)
+    # Historical output shapes are part of the report surface: POSIX roots render as
+    # ``<redacted-absolute>file.md``, every other root as ``<redacted-absolute>/file.md``.
+    separator = "" if style == "posix" else "/"
+    return (f"{_REDACTION_MARKER}{separator}{leaf}" if leaf else _REDACTION_MARKER), True
 
 
 def _classify_reference(value: str) -> dict[str, Any]:
@@ -95,6 +156,17 @@ def _classify_reference(value: str) -> dict[str, Any]:
         return {"kind": "url", "value": value, "redacted": False}
     redacted_value, was_redacted = _redact_path(value)
     return {"kind": "path", "value": redacted_value, "redacted": was_redacted}
+
+
+def classify_reference(value: str) -> dict[str, Any]:
+    """Public wrapper over :func:`_classify_reference`.
+
+    The Markdown report (M-002) reuses the same evidence-reference redaction the
+    JSON report already applies, so a shareable ``.md`` never leaks an absolute
+    path that the JSON path would have redacted.
+    """
+
+    return _classify_reference(value)
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,7 +203,7 @@ def _freshness_status(
         return "not_applicable"
     if collected_at is None:
         return "unknown"
-    now = datetime.now(UTC)
+    now = utc_now()
     if now - collected_at > timedelta(days=ctx.window_days):
         return "stale"
     return "fresh"
@@ -196,10 +268,11 @@ def _trust_level(
     if source_type == "user_supplied":
         return "declared"
     if source_type == "api_collected":
+        # Only a fresh, attested collection is verified. Everything else -- stale, unattested,
+        # or freshness we could not establish -- lands on "declared" alike, so there is no
+        # separate stale branch to take: it returned the same value as the fall-through.
         if freshness == "fresh" and attestation in {"signed", "self_attested"}:
             return "verified"
-        if freshness == "stale":
-            return "declared"
         return "declared"
     if source_type == "derived":
         return "inferred"

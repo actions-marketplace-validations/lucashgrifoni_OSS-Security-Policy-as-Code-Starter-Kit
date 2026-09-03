@@ -1,65 +1,74 @@
-"""Tests for ``_kit_version()`` in the IaC and K8s scanner modules.
+"""Every scanner stamps its evidence with the version of the code that ran.
 
-The scanners stamp their evidence files with a ``tool_version`` field. When the
-working tree and the installed wheel disagree (typical during dev: pyproject
-already bumped to ``X.Y+1.0.dev0`` while only ``X.Y.0`` is installed in the
-venv), the scanner must prefer the source ``oss_policy_kit.__version__`` so
-evidence reflects the code actually doing the scanning, not a stale wheel.
+A scanner writes ``tool_version`` into the evidence file an evaluator later reads. When the
+working tree and the installed wheel disagree -- the normal state during development, and
+measured on this checkout as source 10.0.17 against installed metadata 10.0.4 -- stamping
+the wheel's version would label evidence with code that did not produce it.
+
+This file used to assert that three times over, once per branch of a lookup that read the
+installed version and then discarded it whenever it differed:
+
+    installed == source        -> returns the installed string
+    installed != source        -> source wins
+    package not installed      -> source wins
+
+Three tests, one answer. The lookup was equivalent to returning the source constant, which
+is what the bicep, CloudFormation and Pulumi scanners already say in so many words; the
+Terraform and Kubernetes ones kept the branches, and ``init`` never got the rule at all --
+it stamped the metadata version, or ``unknown`` when there was none.
+
+So the property is asserted once, and across all five scanners rather than the two that
+happened to have the dead branches.
 """
 
 from __future__ import annotations
 
-from importlib.metadata import PackageNotFoundError
+import importlib.metadata
+from pathlib import Path
+from typing import Any
 
 import pytest
 
 import oss_policy_kit
 from oss_policy_kit.infrastructure.iac import scanner as iac_scanner
+from oss_policy_kit.infrastructure.iac.bicep import scanner as bicep_scanner
+from oss_policy_kit.infrastructure.iac.cfn import scanner as cfn_scanner
+from oss_policy_kit.infrastructure.iac.pulumi import scanner as pulumi_scanner
 from oss_policy_kit.infrastructure.k8s import scanner as k8s_scanner
 
+_SCANNERS = [iac_scanner, k8s_scanner, cfn_scanner, pulumi_scanner, bicep_scanner]
+_IDS = ["iac", "k8s", "cfn", "pulumi", "bicep"]
 
-@pytest.mark.parametrize(
-    "scanner_module",
-    [iac_scanner, k8s_scanner],
-    ids=["iac", "k8s"],
-)
-def test_kit_version_returns_installed_when_matching_source(scanner_module, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Installed wheel == source __version__ -> returns the installed string."""
 
-    monkeypatch.setattr(scanner_module, "_pkg_version", lambda _name: oss_policy_kit.__version__)
+@pytest.mark.parametrize("scanner_module", _SCANNERS, ids=_IDS)
+def test_the_stamped_version_is_the_source_constant(scanner_module: Any) -> None:
     assert scanner_module._kit_version() == oss_policy_kit.__version__
 
 
-@pytest.mark.parametrize(
-    "scanner_module",
-    [iac_scanner, k8s_scanner],
-    ids=["iac", "k8s"],
-)
-def test_kit_version_prefers_source_when_installed_diverges(scanner_module, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Installed wheel diverges from source __version__ -> source wins.
+@pytest.mark.parametrize("scanner_module", _SCANNERS, ids=_IDS)
+def test_the_stamped_version_does_not_depend_on_installed_metadata(
+    scanner_module: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Running from a checkout with no install, or with a stale one, changes nothing.
 
-    Dev cycles bump ``oss_policy_kit.__version__`` ahead of the installed
-    package; stamping evidence with the stale wheel version would lie about
-    which code produced the findings.
+    Not redundant with the test above. That one only distinguishes a metadata lookup from
+    the source constant on a machine where the two happen to DIFFER -- true on a dev
+    checkout, false in CI, which installs the wheel it just built. Breaking the lookup
+    outright asserts the same property everywhere: the installed distribution has no say.
     """
 
-    monkeypatch.setattr(scanner_module, "_pkg_version", lambda _name: "0.0.1-stale-wheel")
-    assert scanner_module._kit_version() == oss_policy_kit.__version__
-
-
-@pytest.mark.parametrize(
-    "scanner_module",
-    [iac_scanner, k8s_scanner],
-    ids=["iac", "k8s"],
-)
-def test_kit_version_falls_back_to_source_when_package_not_installed(
-    scanner_module, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """``PackageNotFoundError`` (running from a source checkout without ``pip install -e``)
-    must surface the source version, not raise."""
-
     def _raise(_name: str) -> str:
-        raise PackageNotFoundError("oss-policy-kit")
+        raise importlib.metadata.PackageNotFoundError("oss-policy-kit")
 
-    monkeypatch.setattr(scanner_module, "_pkg_version", _raise)
+    monkeypatch.setattr(importlib.metadata, "version", _raise)
+
     assert scanner_module._kit_version() == oss_policy_kit.__version__
+
+
+@pytest.mark.parametrize("scanner_module", _SCANNERS, ids=_IDS)
+def test_the_stamped_version_reaches_the_evidence_file(scanner_module: Any, tmp_path: Path) -> None:
+    """The field this exists for. A helper nothing writes out would be free to be wrong."""
+
+    payload = scanner_module.render_evidence_payload(scanner_module.run_scan(tmp_path), target=tmp_path)
+
+    assert payload["tool_version"] == oss_policy_kit.__version__

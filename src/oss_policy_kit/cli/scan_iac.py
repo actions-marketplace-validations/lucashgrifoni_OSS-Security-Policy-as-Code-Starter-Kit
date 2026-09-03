@@ -21,8 +21,16 @@ import sys
 import typer
 
 from oss_policy_kit.adapters.local_paths import resolve_existing_dir
-from oss_policy_kit.cli.common import app, stderr_console, write_stdout_text
+from oss_policy_kit.cli.common import (
+    app,
+    display_path,
+    exit_for_unexpected,
+    markup_safe,
+    stderr_console,
+    write_stdout_text,
+)
 from oss_policy_kit.cli.help_text import CMD_PANEL_SCAN
+from oss_policy_kit.cli.scan_errors import exit_for_unwritable_evidence, warn_if_timed_out
 from oss_policy_kit.domain.errors import OssPolicyKitError
 from oss_policy_kit.infrastructure.iac.scanner import (
     DEFAULT_INCLUDE_GLOBS,
@@ -32,6 +40,11 @@ from oss_policy_kit.infrastructure.iac.scanner import (
     run_scan,
     write_evidence,
 )
+
+# Rich parses ``[iac]`` as a markup tag and silently drops it, which turned the
+# remediation into the no-op ``pip install 'oss-policy-kit'``. ``\[`` is Rich's
+# literal-bracket escape, so the printed command matches the JSON diagnostics.
+_IAC_EXTRA_INSTALL_CMD = r"pip install 'oss-policy-kit\[iac]'"
 
 
 @app.command("scan-iac", rich_help_panel=CMD_PANEL_SCAN)
@@ -96,24 +109,34 @@ def scan_iac_cmd(
         evidence_path = write_evidence(payload, repo_root=repo, filename=EVIDENCE_FILENAME)
 
         if outcome.status == "error":
+            # Name the containing directory, not just the file: `write_evidence` always
+            # writes under `.oss-policy-kit/evidence/`, a dot-directory the operator has
+            # no reason to guess. Kept repo-relative so no host path reaches stderr.
             stderr_console().print(
-                f"[red]Terraform scan failed:[/red] see diagnostics in {evidence_path.name}.",
+                f"[red]Terraform scan failed:[/red] see diagnostics in "
+                f".oss-policy-kit/evidence/{evidence_path.name} (relative to --target).",
             )
             raise typer.Exit(code=2)
 
         if fmt == "json":
             sys.stdout.write(json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
         else:
+            # `write_evidence` returns the resolved path, and echoing it answered a relative
+            # --target with the host layout on a clean run -- the common case, not the rare
+            # one (M-002). `redact_home` is not the guard here: it rewrites paths under HOME
+            # and leaves every other absolute path whole, so a target outside HOME shipped
+            # the lot. Rendered at the point of display, so the write keeps its own contract.
             write_stdout_text(
                 f"scan-iac: {outcome.status} -- "
                 f"files={len(outcome.files_scanned)} "
                 f"findings={len(outcome.findings)} "
-                f"-> {evidence_path}\n",
+                f"-> {display_path(evidence_path, root=repo)}\n",
             )
+            warn_if_timed_out(outcome.status, seconds=timeout)
             if outcome.status == "not_available":
                 stderr_console().print(
                     "[yellow]python-hcl2 is not installed.[/yellow] "
-                    "Install the iac extra with `pip install 'oss-policy-kit[iac]'` to enable real findings.",
+                    f"Install the iac extra with `{_IAC_EXTRA_INSTALL_CMD}` to enable real findings.",
                 )
             elif outcome.parse_errors:
                 stderr_console().print(
@@ -122,13 +145,11 @@ def scan_iac_cmd(
                 )
 
     except OssPolicyKitError as exc:
-        stderr_console().print(f"[red]Error:[/red] {exc.message}")
+        stderr_console().print(f"[red]Error:[/red] {markup_safe(exc.message)}")
         raise typer.Exit(code=2) from exc
     except typer.Exit:
         raise
     except OSError as exc:
-        stderr_console().print(f"[red]Error:[/red] {exc}")
-        raise typer.Exit(code=2) from exc
+        exit_for_unwritable_evidence(exc)
     except Exception as exc:  # noqa: BLE001 - last-resort user message
-        stderr_console().print(f"[red]Unexpected error:[/red] {exc}")
-        raise typer.Exit(code=3) from exc
+        exit_for_unexpected(exc)

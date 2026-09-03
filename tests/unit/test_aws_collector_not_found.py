@@ -17,8 +17,9 @@ def test_codebuild_project_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
     monkeypatch.setenv(_ENV_CODEBUILD, "no-such-project")
     monkeypatch.delenv(_ENV_CODEPIPELINE, raising=False)
+    collector = AWSEvidenceCollector()
     with pytest.raises(ValueError, match="not found"):
-        AWSEvidenceCollector().collect("")
+        collector.collect("")
 
 
 @mock_aws
@@ -26,5 +27,6 @@ def test_codepipeline_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
     monkeypatch.delenv(_ENV_CODEBUILD, raising=False)
     monkeypatch.setenv(_ENV_CODEPIPELINE, "no-such-pipeline")
+    collector_2 = AWSEvidenceCollector()
     with pytest.raises(ValueError, match="not found"):
-        AWSEvidenceCollector().collect("")
+        collector_2.collect("")

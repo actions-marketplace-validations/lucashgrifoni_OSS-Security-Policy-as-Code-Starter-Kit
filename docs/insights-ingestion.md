@@ -94,7 +94,7 @@ Absent fields are reported as `null` / `false` / `[]` — never inferred.
 ```json
 {
   "tool": "oss-policy-kit ingest-insights",
-  "kit_version": "6.7.0",
+  "kit_version": "10.0.1",
   "schema_version_supported": "1.0.0",
   "found": true,
   "input_path": "SECURITY-INSIGHTS.yml",

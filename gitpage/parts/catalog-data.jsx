@@ -2,7 +2,7 @@
 // Regenerate with: python scripts/generate-gitpage-catalog-data.py
 // Source of truth: src/oss_policy_kit/data/controls/catalog.yaml + bundled profiles.
 window.CATALOG_DATA = {
-  "controlCount": 221,
+  "controlCount": 222,
   "profileCount": 56,
   "facets": {
     "categories": [
@@ -47,8 +47,8 @@ window.CATALOG_DATA = {
       "cis-supply-chain-1",
       "container-baseline-1",
       "cra-eu-ai-act-art11-1",
+      "cra-eu-conformance-evidence-1",
       "cra-eu-ready-1",
-      "cra-eu-ready-2-1",
       "cra-eu-reporting-1",
       "cra-eu-strict-1",
       "github-aws-level-2",
@@ -110,8 +110,8 @@ window.CATALOG_DATA = {
         "azure-release-hardening-2",
         "azure-release-hardening-3",
         "cra-eu-ai-act-art11-1",
+        "cra-eu-conformance-evidence-1",
         "cra-eu-ready-1",
-        "cra-eu-ready-2-1",
         "cra-eu-reporting-1",
         "cra-eu-strict-1",
         "github-aws-level-2",
@@ -458,8 +458,8 @@ window.CATALOG_DATA = {
         "azure-release-hardening-2",
         "azure-release-hardening-3",
         "cra-eu-ai-act-art11-1",
+        "cra-eu-conformance-evidence-1",
         "cra-eu-ready-1",
-        "cra-eu-ready-2-1",
         "cra-eu-reporting-1",
         "cra-eu-strict-1",
         "github-aws-level-2",
@@ -516,8 +516,8 @@ window.CATALOG_DATA = {
         "azure-release-hardening-2",
         "azure-release-hardening-3",
         "cra-eu-ai-act-art11-1",
+        "cra-eu-conformance-evidence-1",
         "cra-eu-ready-1",
-        "cra-eu-ready-2-1",
         "cra-eu-reporting-1",
         "cra-eu-strict-1",
         "github-aws-level-2",
@@ -571,8 +571,8 @@ window.CATALOG_DATA = {
         "azure-release-hardening-2",
         "azure-release-hardening-3",
         "cra-eu-ai-act-art11-1",
+        "cra-eu-conformance-evidence-1",
         "cra-eu-ready-1",
-        "cra-eu-ready-2-1",
         "cra-eu-reporting-1",
         "cra-eu-strict-1",
         "github-aws-level-2",
@@ -1505,6 +1505,7 @@ window.CATALOG_DATA = {
         "azure-level-3",
         "azure-release-hardening-3",
         "cis-supply-chain-1",
+        "cra-eu-conformance-evidence-1",
         "cra-eu-ready-1",
         "cra-eu-reporting-1",
         "cra-eu-strict-1",
@@ -1538,6 +1539,7 @@ window.CATALOG_DATA = {
         "aws-release-hardening-3",
         "azure-level-3",
         "azure-release-hardening-3",
+        "cra-eu-conformance-evidence-1",
         "cra-eu-ready-1",
         "cra-eu-reporting-1",
         "cra-eu-strict-1",
@@ -1563,6 +1565,7 @@ window.CATALOG_DATA = {
         "azure-level-3",
         "azure-release-hardening-3",
         "cis-supply-chain-1",
+        "cra-eu-conformance-evidence-1",
         "cra-eu-ready-1",
         "cra-eu-strict-1",
         "github-level-3",
@@ -1604,6 +1607,7 @@ window.CATALOG_DATA = {
         "aws-release-hardening-3",
         "azure-release-hardening-3",
         "cis-supply-chain-1",
+        "cra-eu-conformance-evidence-1",
         "cra-eu-ready-1",
         "cra-eu-strict-1",
         "github-release-hardening-3",
@@ -1654,7 +1658,7 @@ window.CATALOG_DATA = {
       "weight": 2,
       "profiles": [
         "cra-eu-ai-act-art11-1",
-        "cra-eu-ready-2-1",
+        "cra-eu-conformance-evidence-1",
         "cra-eu-reporting-1",
         "gitlab-level-3",
         "gitlab-release-hardening-3"
@@ -1685,7 +1689,7 @@ window.CATALOG_DATA = {
     },
     {
       "id": "SAST-OSV-068",
-      "title": "OSV-Scanner v2 SARIF findings (reachability-aware SCA)",
+      "title": "OSV-Scanner v2 SARIF findings (SCA)",
       "category": "supply_chain",
       "assurance": "evidence-backed",
       "lifecycle": "experimental",
@@ -1694,7 +1698,7 @@ window.CATALOG_DATA = {
         "appsec-llm-ssdf-218a-1",
         "appsec-sast-sca-1",
         "cra-eu-ai-act-art11-1",
-        "cra-eu-ready-2-1",
+        "cra-eu-conformance-evidence-1",
         "s2c2f-l2-1",
         "s2c2f-l3-1"
       ]
@@ -3040,7 +3044,7 @@ window.CATALOG_DATA = {
       "lifecycle": "experimental",
       "weight": 2,
       "profiles": [
-        "cra-eu-ready-2-1"
+        "cra-eu-conformance-evidence-1"
       ]
     },
     {
@@ -3051,7 +3055,7 @@ window.CATALOG_DATA = {
       "lifecycle": "experimental",
       "weight": 2,
       "profiles": [
-        "cra-eu-ready-2-1"
+        "cra-eu-conformance-evidence-1"
       ]
     },
     {
@@ -3062,7 +3066,7 @@ window.CATALOG_DATA = {
       "lifecycle": "experimental",
       "weight": 2,
       "profiles": [
-        "cra-eu-ready-2-1"
+        "cra-eu-conformance-evidence-1"
       ]
     },
     {
@@ -3073,7 +3077,7 @@ window.CATALOG_DATA = {
       "lifecycle": "experimental",
       "weight": 2,
       "profiles": [
-        "cra-eu-ready-2-1"
+        "cra-eu-conformance-evidence-1"
       ]
     },
     {
@@ -3084,7 +3088,18 @@ window.CATALOG_DATA = {
       "lifecycle": "experimental",
       "weight": 1,
       "profiles": [
-        "cra-eu-ready-2-1"
+        "cra-eu-conformance-evidence-1"
+      ]
+    },
+    {
+      "id": "CRA-ART13-SUPPORT-003",
+      "title": "Security-update support period declared (CRA Annex I)",
+      "category": "governance",
+      "assurance": "signal",
+      "lifecycle": "experimental",
+      "weight": 1,
+      "profiles": [
+        "cra-eu-conformance-evidence-1"
       ]
     },
     {
@@ -3095,6 +3110,7 @@ window.CATALOG_DATA = {
       "lifecycle": "experimental",
       "weight": 2,
       "profiles": [
+        "cra-eu-conformance-evidence-1",
         "oss-publish-readiness-1"
       ]
     },

@@ -25,13 +25,13 @@ from __future__ import annotations
 import ast
 from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
-from importlib.metadata import PackageNotFoundError
-from importlib.metadata import version as _pkg_version
 from pathlib import Path
 from typing import Any
 
+from oss_policy_kit.application.clock import report_generated_at
+from oss_policy_kit.application.reporting import _sanitize_target_path_for_payload
 from oss_policy_kit.infrastructure.fs_walk import walk_matching_files
+from oss_policy_kit.infrastructure.scan_deadline import TIMEOUT_DIAGNOSTIC, ScanDeadline
 
 EVIDENCE_SCHEMA_VERSION = "oss-policy-kit/evidence/iac-pulumi/v1"
 EVIDENCE_FILENAME = "iac-pulumi.json"
@@ -55,6 +55,9 @@ class PulumiFinding:
     file: str
     resource_type: str
     resource_name: str
+    # Source line of the resource constructor call (v9.x captured it in PulumiCall but
+    # dropped it at the evidence boundary; surfaced additively for the finding model).
+    line_start: int | None = None
 
 
 @dataclass(slots=True)
@@ -77,22 +80,28 @@ class PulumiScanOutcome:
     findings: list[PulumiFinding] = field(default_factory=list)
     scanned_at: str = ""
     diagnostics: str = ""
+    files_read: int = 0
 
 
 def _kit_version() -> str:
+    """The version this scanner stamps into its evidence.
+
+    The source constant is authoritative on purpose: a stale installed distribution must
+    never relabel evidence it did not produce. Looking the installed version up and then
+    discarding it whenever it differs is the same as not looking it up at all, so the
+    lookup is gone -- both former branches returned this exact value.
+    """
+
     from oss_policy_kit import __version__ as _src_version
 
-    try:
-        installed = _pkg_version("oss-policy-kit")
-    except PackageNotFoundError:  # pragma: no cover - dev-only fallback
-        return _src_version
-    if installed != _src_version:
-        return _src_version
-    return installed
+    return _src_version
 
 
 def _utc_iso() -> str:
-    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    # Route through the report clock so SOURCE_DATE_EPOCH pins the timestamp for
+    # reproducible-build environments and the test suite (X7-03). Keep the ``Z``
+    # suffix so the on-disk shape stays byte-identical to prior releases.
+    return report_generated_at().replace("+00:00", "Z")
 
 
 def _normalize_target(repo_root: Path, p: Path) -> str:
@@ -197,7 +206,7 @@ def _extract_pulumi_calls(tree: ast.AST, source: Path) -> list[PulumiCall]:
 
 
 def _is_s3_bucket(c: PulumiCall) -> bool:
-    return c.resource_type.endswith(".s3.Bucket") or c.resource_type.endswith(".s3.BucketV2")
+    return c.resource_type.endswith((".s3.Bucket", ".s3.BucketV2"))
 
 
 def _is_security_group(c: PulumiCall) -> bool:
@@ -238,6 +247,7 @@ def _pulumi_finding(rule_id: str, severity: str, message: str, *, repo_root: Pat
         file=_normalize_target(repo_root, c.source),
         resource_type=c.resource_type,
         resource_name=c.resource_name,
+        line_start=c.line if c.line > 0 else None,
     )
 
 
@@ -288,6 +298,7 @@ def _rule_iac_pul_001_public_storage(repo_root: Path, calls: list[PulumiCall]) -
                     file=_normalize_target(repo_root, c.source),
                     resource_type=c.resource_type,
                     resource_name=c.resource_name,
+                    line_start=c.line if c.line > 0 else None,
                 )
             )
     return findings
@@ -396,40 +407,40 @@ def _rule_iac_pul_005_default_network(repo_root: Path, calls: list[PulumiCall]) 
                     file=_normalize_target(repo_root, c.source),
                     resource_type=c.resource_type,
                     resource_name=c.resource_name,
+                    line_start=c.line if c.line > 0 else None,
                 )
             )
     return findings
 
 
+# (predicate, snake_case kwarg, camelCase kwarg) -- the two ways a Pulumi resource can
+# hand out a public IP. The kwarg name is what the message quotes, so it stays paired
+# with the predicate that selects it.
+_PUBLIC_IP_KWARGS: tuple[tuple[Callable[[PulumiCall], bool], str, str], ...] = (
+    (_is_subnet, "map_public_ip_on_launch", "mapPublicIpOnLaunch"),
+    (_is_instance, "associate_public_ip_address", "associatePublicIpAddress"),
+)
+
+
 def _rule_iac_pul_006_public_ip(repo_root: Path, calls: list[PulumiCall]) -> list[PulumiFinding]:
     findings: list[PulumiFinding] = []
     for c in calls:
-        if _is_subnet(c):
-            v = c.kwargs.get("map_public_ip_on_launch", c.kwargs.get("mapPublicIpOnLaunch"))
-            if v is True:
+        for matches, snake, camel in _PUBLIC_IP_KWARGS:
+            if not matches(c):
+                continue
+            if c.kwargs.get(snake, c.kwargs.get(camel)) is True:
                 findings.append(
                     PulumiFinding(
                         rule_id="IAC-PUL-006",
                         severity="MEDIUM",
-                        message=f"{c.resource_type}({c.resource_name!r}) has map_public_ip_on_launch=True.",
+                        message=f"{c.resource_type}({c.resource_name!r}) has {snake}=True.",
                         file=_normalize_target(repo_root, c.source),
                         resource_type=c.resource_type,
                         resource_name=c.resource_name,
+                        line_start=c.line if c.line > 0 else None,
                     )
                 )
-        elif _is_instance(c):
-            v = c.kwargs.get("associate_public_ip_address", c.kwargs.get("associatePublicIpAddress"))
-            if v is True:
-                findings.append(
-                    PulumiFinding(
-                        rule_id="IAC-PUL-006",
-                        severity="MEDIUM",
-                        message=f"{c.resource_type}({c.resource_name!r}) has associate_public_ip_address=True.",
-                        file=_normalize_target(repo_root, c.source),
-                        resource_type=c.resource_type,
-                        resource_name=c.resource_name,
-                    )
-                )
+            break
     return findings
 
 
@@ -456,42 +467,79 @@ def run_scan(
     exclude_globs: Iterable[str] | None = None,
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> PulumiScanOutcome:
-    _ = timeout_seconds
+    deadline = ScanDeadline(timeout_seconds)
     files = _walk_python_files(repo_root, include_globs, exclude_globs)
     calls: list[PulumiCall] = []
     files_scanned: list[Path] = []
     parse_errors: list[dict[str, str]] = []
+    files_read = 0
     for f in files:
+        if deadline.expired():
+            break
         try:
-            text = f.read_text(encoding="utf-8", errors="replace")
+            # BYTES, not text. `ast.parse` honours a PEP 263 `# -*- coding: latin-1 -*-`
+            # line and a BOM, so a legal module in another encoding still parses. Reading
+            # it as strict UTF-8 first rejected such a module and DELETED its findings --
+            # a public-read bucket went from FAIL to PASS.
+            source: bytes | str = f.read_bytes()
         except OSError as exc:
             parse_errors.append({"file": _normalize_target(repo_root, f), "error": str(exc)})
             continue
         try:
-            tree = ast.parse(text)
-        except SyntaxError as exc:
-            parse_errors.append({"file": _normalize_target(repo_root, f), "error": f"{exc.msg} (line {exc.lineno})"})
+            tree = ast.parse(source)
+        except (SyntaxError, ValueError) as exc:
+            # One handler, and the message is read defensively. Python 3.12 reports NUL
+            # bytes -- what a UTF-16 file looks like to the tokenizer -- as a SyntaxError,
+            # so the separate ValueError branch this used to carry was unreachable, and the
+            # comment inside it asserted the opposite of what the interpreter does. Older
+            # and future versions have used ValueError for the same input, which carries no
+            # `.msg` or `.lineno`, so both are caught and neither attribute is assumed.
+            detail = getattr(exc, "msg", None) or str(exc)
+            line = getattr(exc, "lineno", None)
+            where = f" (line {line})" if line is not None else ""
+            parse_errors.append({"file": _normalize_target(repo_root, f), "error": f"{detail}{where}"})
             continue
+        files_read += 1
         if not _file_imports_pulumi(tree):
             continue
         files_scanned.append(f)
         calls.extend(_extract_pulumi_calls(tree, f))
 
     findings: list[PulumiFinding] = []
-    try:
-        for _rid, fn in _RULES:
-            findings.extend(fn(repo_root, calls))
-    except Exception as exc:  # noqa: BLE001 - rule engine errors must not crash the scan
+    if not deadline.expired():
+        try:
+            for _rid, fn in _RULES:
+                if deadline.expired():
+                    break
+                findings.extend(fn(repo_root, calls))
+        except Exception as exc:  # noqa: BLE001 - rule engine errors must not crash the scan
+            return PulumiScanOutcome(
+                files_read=files_read,
+                status="error",
+                tool_version=_kit_version(),
+                files_scanned=[_normalize_target(repo_root, f) for f in files_scanned],
+                parse_errors=parse_errors,
+                findings=[],
+                scanned_at=_utc_iso(),
+                diagnostics=f"rule engine raised {type(exc).__name__}: {exc}",
+            )
+
+    if deadline.expired():
+        # No findings: half a rule pack over half the files is not a result, and the
+        # per-rule counts would read as "this rule found nothing" for rules never run.
         return PulumiScanOutcome(
-            status="error",
+            files_read=files_read,
+            status="timeout",
             tool_version=_kit_version(),
             files_scanned=[_normalize_target(repo_root, f) for f in files_scanned],
             parse_errors=parse_errors,
             findings=[],
             scanned_at=_utc_iso(),
-            diagnostics=f"rule engine raised {type(exc).__name__}: {exc}",
+            diagnostics=TIMEOUT_DIAGNOSTIC.format(seconds=timeout_seconds),
         )
+
     return PulumiScanOutcome(
+        files_read=files_read,
         status="ok",
         tool_version=_kit_version(),
         files_scanned=[_normalize_target(repo_root, f) for f in files_scanned],
@@ -512,7 +560,9 @@ def render_evidence_payload(outcome: PulumiScanOutcome, *, target: Path) -> dict
         "tool": "oss-policy-kit-pulumi-parser",
         "tool_version": outcome.tool_version,
         "status": outcome.status,
-        "target": str(target.resolve()),
+        # Privacy-by-default: emit only the basename so a commonly-committed
+        # evidence artifact never leaks an absolute path / username (X6-02, M-002).
+        "target": _sanitize_target_path_for_payload(str(target), include_absolute=False),
         "scanned_at": outcome.scanned_at,
         "attested_at": outcome.scanned_at,
         "attested_by": "oss-policy-kit scan-pulumi",
@@ -524,6 +574,12 @@ def render_evidence_payload(outcome: PulumiScanOutcome, *, target: Path) -> dict
         "findings": [asdict(f) for f in outcome.findings],
         "diagnostics": {
             "parse_errors": outcome.parse_errors,
+            # How many candidate files the scan actually READ, which is not the same as
+            # `files_scanned`: this family filters that list down to sources of the
+            # technology, so a repository with one broken file and ten fine ones that are
+            # simply not Pulumi left it empty -- and a control read the emptiness as
+            # "nothing here was legible" and withdrew its verdict.
+            "files_read": outcome.files_read,
             "raw_message": outcome.diagnostics,
         },
     }

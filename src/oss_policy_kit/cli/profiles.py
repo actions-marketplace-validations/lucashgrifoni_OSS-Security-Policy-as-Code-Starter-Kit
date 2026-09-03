@@ -20,11 +20,7 @@ from oss_policy_kit.application.loader import (
     merge_kit_root,
 )
 from oss_policy_kit.cli import terminal_ui
-from oss_policy_kit.cli.common import (
-    app,
-    normalize_profiles_format,
-    stderr_console,
-)
+from oss_policy_kit.cli.common import app, exit_for_unexpected, markup_safe, normalize_profiles_format, stderr_console
 from oss_policy_kit.cli.help_text import CMD_PANEL_DISCOVER
 from oss_policy_kit.domain.errors import InvalidInputError, LoadError, OssPolicyKitError
 
@@ -237,9 +233,14 @@ def _filter_profile_display_rows(
     only_extreme: bool,
     advisory_only: bool,
 ) -> list[_ProfileDisplayRow]:
-    fam = family.strip().lower() if family else None
-    if fam and fam not in {"github", "gitlab", "azure", "aws", "multi"}:
-        raise InvalidInputError("--family must be one of: github, gitlab, azure, aws, multi.")
+    # Same fail-closed rule as --fail-on-severity: an omitted flag means "no filter", but
+    # a supplied empty or whitespace value is a mistake and must not silently widen the
+    # listing to all profiles. `if fam and ...` swallowed both.
+    fam: str | None = None
+    if family is not None:
+        fam = family.strip().lower()
+        if fam not in {"github", "gitlab", "azure", "aws", "multi"}:
+            raise InvalidInputError("--family must be one of: github, gitlab, azure, aws, multi.")
     want_platform = (
         {"github": "GitHub", "gitlab": "GitLab", "azure": "Azure", "aws": "AWS", "multi": "Multi"}.get(fam)
         if fam
@@ -386,7 +387,9 @@ def _iter_bundled_profiles() -> list[_ProfileDisplayRow]:
         aud_clean = terminal_ui.sanitize_cli_display_text(" ".join(profile.audience.split()))
         rows.append(
             _ProfileDisplayRow(
-                profile_id=profile.id,
+                # Display the deprecated alias id (not the canonical profile.id) so the row renders
+                # "<legacy-id> (legacy -> <canonical-id>)"; the canonical lookup keys off this id.
+                profile_id=legacy_id,
                 title=title_clean,
                 platform=_profile_platform(profile.id),
                 level=_profile_level(profile.id),
@@ -589,8 +592,13 @@ def profiles_cmd(
                 # fmt == "table": full grid lines, default column balance (not density-compact).
                 _print_profiles_table(detailed=False, compact_layout=False, rows=filtered)
     except LoadError as exc:
-        stderr_console().print(f"[red]Error:[/red] {exc.message}")
+        stderr_console().print(f"[red]Error:[/red] {markup_safe(exc.message)}")
         raise typer.Exit(code=2) from exc
     except OssPolicyKitError as exc:
-        stderr_console().print(f"[red]Error:[/red] {exc.message}")
+        stderr_console().print(f"[red]Error:[/red] {markup_safe(exc.message)}")
         raise typer.Exit(code=2) from exc
+    except typer.Exit:
+        raise
+    # Last-resort user message, no traceback leak.
+    except Exception as exc:  # noqa: BLE001
+        exit_for_unexpected(exc)

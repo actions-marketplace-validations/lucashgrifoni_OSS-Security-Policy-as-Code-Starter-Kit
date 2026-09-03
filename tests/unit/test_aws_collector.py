@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 from typing import Any, cast
 from unittest.mock import MagicMock
 
@@ -38,7 +37,7 @@ def _iam_role_arn(iam: Any, *, name: str, service: str) -> str:
 
 
 @mock_aws
-def test_collect_codebuild_project_via_env() -> None:
+def test_collect_codebuild_project_via_env(monkeypatch: pytest.MonkeyPatch) -> None:
     region = "us-east-1"
     iam = boto3.client("iam", region_name=region)
     cb_role = _iam_role_arn(iam, name="codebuild-kit-role", service="codebuild.amazonaws.com")
@@ -61,25 +60,20 @@ def test_collect_codebuild_project_via_env() -> None:
         },
         serviceRole=cb_role,
     )
-    old = os.environ.get(_ENV_CODEBUILD)
-    os.environ[_ENV_CODEBUILD] = "kit-test-build"
-    try:
-        rows = AWSEvidenceCollector(region_name=region).collect("")
-        assert {r.evidence_key for r in rows} == {"aws-codebuild-project"}
-        data = rows[0].data
-        assert data["posture"]["privileged_mode_disabled"] is True
-        assert data["posture"]["no_plaintext_credentials_in_project_config"] is True
-        assert data["collection"]["evidence_collection_method"] == "live"
-        assert data["identity"]["service_role_arn_present"] is True
-    finally:
-        if old is None:
-            os.environ.pop(_ENV_CODEBUILD, None)
-        else:
-            os.environ[_ENV_CODEBUILD] = old
+    monkeypatch.setenv(_ENV_CODEBUILD, "kit-test-build")
+
+    rows = AWSEvidenceCollector(region_name=region).collect("")
+
+    assert {r.evidence_key for r in rows} == {"aws-codebuild-project"}
+    data = rows[0].data
+    assert data["posture"]["privileged_mode_disabled"] is True
+    assert data["posture"]["no_plaintext_credentials_in_project_config"] is True
+    assert data["collection"]["evidence_collection_method"] == "live"
+    assert data["identity"]["service_role_arn_present"] is True
 
 
 @mock_aws
-def test_collect_codepipeline_encryption_and_approval() -> None:
+def test_collect_codepipeline_encryption_and_approval(monkeypatch: pytest.MonkeyPatch) -> None:
     region = "us-east-1"
     iam = boto3.client("iam", region_name=region)
     pipe_role = _iam_role_arn(iam, name="codepipeline-kit-role", service="codepipeline.amazonaws.com")
@@ -151,23 +145,18 @@ def test_collect_codepipeline_encryption_and_approval() -> None:
         }
     )
 
-    old = os.environ.get(_ENV_CODEPIPELINE)
-    os.environ[_ENV_CODEPIPELINE] = "kit-pipe"
-    try:
-        rows = AWSEvidenceCollector(region_name=region).collect("")
-        assert {r.evidence_key for r in rows} == {"aws-codepipeline"}
-        row0 = rows[0]
-        posture = cast(dict[str, Any], row0.data["posture"])
-        assert posture["manual_approval_before_production"] is True
-        assert posture["artifact_store_encryption_enabled"] is True
-        assert posture["production_execution_mode_not_parallel"] is True
-        assert row0.data["collection"]["evidence_collection_method"] == "live"
-        assert row0.data["iam"]["pipeline_service_role_arn_configured"] is True
-    finally:
-        if old is None:
-            os.environ.pop(_ENV_CODEPIPELINE, None)
-        else:
-            os.environ[_ENV_CODEPIPELINE] = old
+    monkeypatch.setenv(_ENV_CODEPIPELINE, "kit-pipe")
+
+    rows = AWSEvidenceCollector(region_name=region).collect("")
+
+    assert {r.evidence_key for r in rows} == {"aws-codepipeline"}
+    row0 = rows[0]
+    posture = cast(dict[str, Any], row0.data["posture"])
+    assert posture["manual_approval_before_production"] is True
+    assert posture["artifact_store_encryption_enabled"] is True
+    assert posture["production_execution_mode_not_parallel"] is True
+    assert row0.data["collection"]["evidence_collection_method"] == "live"
+    assert row0.data["iam"]["pipeline_service_role_arn_configured"] is True
 
 
 def test_collect_raises_value_error_when_no_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -175,8 +164,9 @@ def test_collect_raises_value_error_when_no_env(monkeypatch: pytest.MonkeyPatch)
 
     monkeypatch.delenv(_ENV_CODEBUILD, raising=False)
     monkeypatch.delenv(_ENV_CODEPIPELINE, raising=False)
+    collector = AWSEvidenceCollector(region_name="us-east-1")
     with pytest.raises(ValueError) as excinfo:
-        AWSEvidenceCollector(region_name="us-east-1").collect("")
+        collector.collect("")
     msg = str(excinfo.value)
     assert _ENV_CODEBUILD in msg
     assert _ENV_CODEPIPELINE in msg
@@ -205,8 +195,9 @@ def test_access_denied_on_codebuild_is_permission_error(monkeypatch: pytest.Monk
     monkeypatch.setenv(_ENV_CODEBUILD, "restricted-build")
     monkeypatch.delenv(_ENV_CODEPIPELINE, raising=False)
 
+    collector_2 = AWSEvidenceCollector(region_name="us-east-1")
     with pytest.raises(CollectionPermissionError) as excinfo:
-        AWSEvidenceCollector(region_name="us-east-1").collect("")
+        collector_2.collect("")
     # Error text must mention the operation name (actionable for IAM policy widening).
     assert "BatchGetProjects" in str(excinfo.value)
 
@@ -233,8 +224,9 @@ def test_throttling_on_codepipeline_is_rate_limit_error(monkeypatch: pytest.Monk
     monkeypatch.delenv(_ENV_CODEBUILD, raising=False)
     monkeypatch.setenv(_ENV_CODEPIPELINE, "busy-pipe")
 
+    collector_3 = AWSEvidenceCollector(region_name="us-east-1")
     with pytest.raises(RateLimitError):
-        AWSEvidenceCollector(region_name="us-east-1").collect("")
+        collector_3.collect("")
 
 
 def test_unmapped_codebuild_client_error_wrapped_as_network(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -259,5 +251,6 @@ def test_unmapped_codebuild_client_error_wrapped_as_network(monkeypatch: pytest.
     monkeypatch.setenv(_ENV_CODEBUILD, "some-build")
     monkeypatch.delenv(_ENV_CODEPIPELINE, raising=False)
 
+    collector_4 = AWSEvidenceCollector(region_name="us-east-1")
     with pytest.raises(CollectionNetworkError):
-        AWSEvidenceCollector(region_name="us-east-1").collect("")
+        collector_4.collect("")

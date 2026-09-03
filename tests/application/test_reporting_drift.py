@@ -67,7 +67,8 @@ def test_render_drift_markdown_full() -> None:
     assert "## New controls in after" in out
     assert "## Removed controls" in out
     assert "## Expired waivers" in out
-    assert "`C-1`" in out and "`C-2`" in out
+    assert "`C-1`" in out
+    assert "`C-2`" in out
 
 
 def test_render_drift_markdown_alias_md_and_empty() -> None:

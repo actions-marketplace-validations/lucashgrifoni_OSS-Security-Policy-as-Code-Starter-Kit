@@ -17,13 +17,28 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-try:  # pragma: no cover - exercised via integration paths
-    import hcl2 as _hcl2  # type: ignore[import-untyped]
+from oss_policy_kit.infrastructure.source_text import decode_source
 
-    _HCL2_AVAILABLE = True
+#: Deliberately ``Any``, and deliberately assigned before the import rather than by it.
+#:
+#: ``python-hcl2`` is an optional extra with a floor of ``>=6.1``, and its TYPING STATUS
+#: changes across that range: 8.1.3 added a ``py.typed`` marker. Binding the name with
+#: ``import hcl2 as _hcl2`` makes mypy declare it from whichever version happens to be
+#: installed, so the ``= None`` fallback became "Incompatible types in assignment
+#: (expression has type None, variable has type Module)" the day a runner picked up 8.1.3
+#: -- against code nobody had touched. The ignore below carries ``unused-ignore`` for the
+#: same reason: ``import-untyped`` is needed on an older release and is dead weight on a
+#: current one, and only listing both is correct for every version the floor allows.
+_hcl2: Any = None
+_HCL2_AVAILABLE = False
+
+try:  # pragma: no cover - exercised via integration paths
+    import hcl2 as _hcl2_import  # type: ignore[import-untyped, unused-ignore]
 except Exception:  # noqa: BLE001 - we want any import error to mean "not available"
-    _hcl2 = None
-    _HCL2_AVAILABLE = False
+    pass
+else:
+    _hcl2 = _hcl2_import
+    _HCL2_AVAILABLE = True
 
 
 class HclLoadError(RuntimeError):
@@ -74,8 +89,11 @@ def load_hcl_file(path: Path) -> dict[str, Any]:
     if not _HCL2_AVAILABLE or _hcl2 is None:
         raise HclLoadError(path, RuntimeError("python-hcl2 is not installed"))
     try:
-        with path.open("r", encoding="utf-8") as fp:
-            raw = _hcl2.load(fp)
+        # Decode by BOM before handing text to hcl2. An editor that saved this as UTF-16
+        # left a file a human still reads as Terraform, and reading it as UTF-8 raised
+        # UnicodeDecodeError -- which every control then reported as "this repository has
+        # no Terraform", a claim about the repository rather than about the read.
+        raw = _hcl2.loads(decode_source(path.read_bytes()))
     except FileNotFoundError as exc:  # pragma: no cover - caller checks existence
         raise HclLoadError(path, exc) from exc
     except Exception as exc:  # noqa: BLE001 - surface any parse failure as HclLoadError

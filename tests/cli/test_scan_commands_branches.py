@@ -71,8 +71,8 @@ def test_scan_k8s_human(tmp_path: Path) -> None:
     assert "scan-k8s:" in res.output
 
 
-def test_scan_sast_human_no_semgrep(tmp_path: Path) -> None:
-    # Semgrep is not installed in CI; the command should still complete and write a stub.
+def test_scan_sast_human_no_semgrep(tmp_path: Path, semgrep_absent: None) -> None:
+    # Semgrep missing from PATH; the command should still complete and write a stub.
     (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
     res = _scan(["scan-sast", "--target", str(tmp_path), "--format", "human"])
     assert res.exit_code == 0, res.output

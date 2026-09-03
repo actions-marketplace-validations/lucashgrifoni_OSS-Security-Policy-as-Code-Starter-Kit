@@ -675,7 +675,7 @@ controls:
     assurance: evidence-backed
     weight: 2
   - id: SAST-OSV-068
-    title: OSV-Scanner v2 SARIF findings (reachability-aware SCA)
+    title: OSV-Scanner v2 SARIF findings (SCA)
     category: supply_chain
     automation: not_observable_locally
     lifecycle: experimental
@@ -1626,6 +1626,13 @@ controls:
     weight: 2
   - id: CRA-PRODUCT-CLASS-001
     title: CRA product classification declared (Implementing Reg (EU) 2025/2392)
+    category: governance
+    automation: deterministic
+    lifecycle: experimental
+    assurance: signal
+    weight: 1
+  - id: CRA-ART13-SUPPORT-003
+    title: Security-update support period declared (CRA Annex I)
     category: governance
     automation: deterministic
     lifecycle: experimental

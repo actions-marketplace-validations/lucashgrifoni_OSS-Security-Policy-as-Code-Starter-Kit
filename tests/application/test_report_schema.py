@@ -12,7 +12,7 @@ from oss_policy_kit.application.engine import evaluate_repository
 from oss_policy_kit.application.loader import bundled_kit_root, load_catalog, load_profile_by_id
 from oss_policy_kit.application.reporting import report_to_dict
 
-SCHEMA_PATH = ROOT / "reports" / "schema" / "evaluation-result.schema.json"
+SCHEMA_PATH = ROOT / "src" / "oss_policy_kit" / "data" / "schema" / "reports" / "2.0.json"
 
 
 @pytest.fixture(scope="module")

@@ -13,7 +13,8 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 def _load_impact_module():
     path = _REPO_ROOT / "scripts" / "v8-applicability-impact.py"
     spec = importlib.util.spec_from_file_location("v8_applicability_impact", path)
-    assert spec and spec.loader, "could not locate scripts/v8-applicability-impact.py"
+    assert spec, "could not locate scripts/v8-applicability-impact.py"
+    assert spec.loader, "could not locate scripts/v8-applicability-impact.py"
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

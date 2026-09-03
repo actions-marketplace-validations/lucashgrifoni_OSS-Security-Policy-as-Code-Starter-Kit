@@ -71,13 +71,5 @@ def test_recommend_profiles_wrapper(tmp_path: Path) -> None:
     out = ph.recommend_profiles(tmp_path)
     assert isinstance(out, list)
     if out:
-        assert isinstance(out[0], tuple) and len(out[0]) == 2
-
-
-def test_based_on_helpers(tmp_path: Path) -> None:
-    wf = [_w(tmp_path, ".github/workflows/release.yml", "on: release\n")]
-    gh_ev = [_w(tmp_path, ".oss-policy-kit/evidence/branch-protection.json")]
-    assert isinstance(ph._normalize_based_on(["github-level-1"], wf, gh_ev), list)
-    az = [_w(tmp_path, "azure-pipelines.yml", "steps: []\n")]
-    assert isinstance(ph._normalize_based_on_az(["azure-level-1"], az, []), list)
-    assert isinstance(ph._normalize_based_on_aws(["aws-level-1"], True, []), list)
+        assert isinstance(out[0], tuple)
+        assert len(out[0]) == 2

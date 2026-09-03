@@ -22,14 +22,15 @@ from oss_policy_kit.application.evaluators._shared import (
     Path,
     _eval_sarif_adapter,
     _iter_structured_workflow_uses_with_location,
+    _lockfile_has_content,
     _parse_zizmor_severity_properties,
     _python_lock_or_pins,
     _reusable_workflow_ref_has_full_sha,
     checks_as_map,
     contextlib,
-    json,
     load_yaml_file,
 )
+from oss_policy_kit.application.evaluators_common import read_scanner_evidence
 
 _NO_WORKFLOWS_REASON = "No workflows present."
 
@@ -120,7 +121,9 @@ def eval_ci_danger_007(ctx: EvalContext) -> EvalOutcome:
 
 
 def eval_ci_pin_008(ctx: EvalContext) -> EvalOutcome:
-    if not ctx.workflows.workflow_paths:
+    # A repository whose product IS an action has no workflows and still runs third-party
+    # actions, so `not-applicable` -- itself a positive claim -- would be wrong there.
+    if not (ctx.workflows.workflow_paths or ctx.workflows.composite_action_paths):
         return EvalOutcome(
             status=ControlStatus.NOT_APPLICABLE,
             reason=_NO_WORKFLOWS_REASON,
@@ -409,13 +412,16 @@ def eval_sec_pinlock_052(ctx: EvalContext) -> EvalOutcome:
             confidence="high",
         )
 
+    # Presence was the whole test for every ecosystem here, so a zero-byte lockfile -- what an
+    # interrupted `uv lock` or a stray `touch` leaves behind -- satisfied the control. An
+    # empty file pins nothing, and this control exists to establish that versions are fixed.
     missing: list[str] = []
     node_lock_names = ("package-lock.json", "yarn.lock", "pnpm-lock.yaml", "npm-shrinkwrap.json")
-    if "node" in stacks and not any((repo / name).is_file() for name in node_lock_names):
+    if "node" in stacks and not any(_lockfile_has_content(repo / name) for name in node_lock_names):
         missing.append("Node.js lockfile (package-lock.json, yarn.lock, or pnpm-lock.yaml)")
     if "python" in stacks and not _python_lock_or_pins(repo):
         missing.append("Python lockfile or pinned requirements (== in requirements.txt, poetry.lock, etc.)")
-    if "go" in stacks and not (repo / "go.sum").is_file():
+    if "go" in stacks and not _lockfile_has_content(repo / "go.sum"):
         missing.append("go.sum")
 
     if not missing:
@@ -546,6 +552,46 @@ def eval_ci_wfcallsha_055(ctx: EvalContext) -> EvalOutcome:
     )
 
 
+def _semgrep_count(value: Any) -> int | None:
+    """One count from the evidence file, or ``None`` when the value is not a count.
+
+    ``bool`` is rejected explicitly because it is an ``int`` subclass, so ``true`` would
+    otherwise be counted as one finding.
+    """
+
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
+
+
+def _semgrep_counts(data: dict[str, Any]) -> tuple[dict[str, int], int] | None:
+    """Severity counts and total from Semgrep evidence, or ``None`` when they cannot be read.
+
+    The schema is explicit: ``findings_by_severity`` is an object of non-negative integers and
+    ``findings_total`` is a non-negative integer. Anything else is a file the reader cannot
+    count, and an uncountable file is *unknown*. Unknown must not reach the adopter as a clean
+    scan -- coercing the wrong shape to ``{}`` reported ``pass`` at high confidence on evidence
+    nobody could read -- and must not reach them as ``exit 3`` either, which is what ``int()``
+    on a non-numeric count did.
+    """
+
+    raw_counts = data.get("findings_by_severity")
+    if raw_counts is None:
+        raw_counts = {}
+    if not isinstance(raw_counts, dict):
+        return None
+    counts: dict[str, int] = {}
+    for key, value in raw_counts.items():
+        count = _semgrep_count(value)
+        if count is None:
+            return None
+        counts[str(key)] = count
+    total = _semgrep_count(data.get("findings_total", 0))
+    if total is None:
+        return None
+    return counts, total
+
+
 def eval_sast_semgrep_064(ctx: EvalContext) -> EvalOutcome:
     """SAST-SEMGREP-064: SAST evidence (Semgrep) is present and current.
 
@@ -572,29 +618,14 @@ def eval_sast_semgrep_064(ctx: EvalContext) -> EvalOutcome:
             confidence="medium",
         )
 
-    try:
-        data = json.loads(evidence.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        return EvalOutcome(
-            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
-            reason=f"Could not parse Semgrep evidence file: {exc}",
-            remediation="Re-run `oss-policy-kit scan-sast` to regenerate the evidence file.",
-            evidence_sources=[str(evidence.resolve())],
-            confidence="low",
-        )
-
-    schema = str(data.get("schema_version", ""))
-    if not schema.startswith(_SAST_SEMGREP_SCHEMA_PREFIX):
-        return EvalOutcome(
-            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
-            reason=(
-                f"Unexpected schema_version in {evidence.name}: {schema!r}. "
-                f"Expected prefix {_SAST_SEMGREP_SCHEMA_PREFIX!r}."
-            ),
-            remediation="Regenerate via `oss-policy-kit scan-sast` to align with the current contract.",
-            evidence_sources=[str(evidence.resolve())],
-            confidence="low",
-        )
+    data = read_scanner_evidence(
+        evidence,
+        label="Semgrep SAST",
+        regenerate_cmd="oss-policy-kit scan-sast",
+        schema_prefix=_SAST_SEMGREP_SCHEMA_PREFIX,
+    )
+    if isinstance(data, EvalOutcome):
+        return data
 
     status = str(data.get("status", "unknown")).lower()
     if status == "not_available":
@@ -619,11 +650,21 @@ def eval_sast_semgrep_064(ctx: EvalContext) -> EvalOutcome:
             confidence="low",
         )
 
-    severity_counts = data.get("findings_by_severity", {}) or {}
-    if not isinstance(severity_counts, dict):
-        severity_counts = {}
-    high = int(severity_counts.get("ERROR", 0) or 0) + int(severity_counts.get("HIGH", 0) or 0)
-    critical = int(severity_counts.get("CRITICAL", 0) or 0)
+    countable = _semgrep_counts(data)
+    if countable is None:
+        return EvalOutcome(
+            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
+            reason=(
+                f"{evidence.name} carries no countable finding tally; `findings_by_severity` must be an "
+                "object of non-negative integers and `findings_total` a non-negative integer."
+            ),
+            remediation="Re-run `oss-policy-kit scan-sast` to regenerate the evidence file.",
+            evidence_sources=[str(evidence.resolve())],
+            confidence="low",
+        )
+    severity_counts, findings_total = countable
+    high = severity_counts.get("ERROR", 0) + severity_counts.get("HIGH", 0)
+    critical = severity_counts.get("CRITICAL", 0)
     if critical or high:
         return EvalOutcome(
             status=ControlStatus.FAIL,
@@ -633,7 +674,7 @@ def eval_sast_semgrep_064(ctx: EvalContext) -> EvalOutcome:
             ),
             remediation=(
                 "Review evaluation-report.md and fix HIGH/CRITICAL findings, or document an "
-                "explicit waiver in waivers.yaml with owner, reason, and expires_on."
+                "explicit waiver in waivers.yaml with owner, justification, and expires_at."
             ),
             evidence_sources=[str(evidence.resolve())],
             confidence="high",
@@ -642,10 +683,7 @@ def eval_sast_semgrep_064(ctx: EvalContext) -> EvalOutcome:
 
     return EvalOutcome(
         status=ControlStatus.PASS,
-        reason=(
-            f"Semgrep completed cleanly: {int(data.get('findings_total', 0) or 0)} total finding(s), "
-            "no HIGH or CRITICAL severity entries."
-        ),
+        reason=(f"Semgrep completed cleanly: {findings_total} total finding(s), no HIGH or CRITICAL severity entries."),
         remediation="Keep Semgrep up to date and re-scan at least once per release.",
         evidence_sources=[str(evidence.resolve())],
         confidence="high",
@@ -690,7 +728,7 @@ def eval_sast_poutine_067(ctx: EvalContext) -> EvalOutcome:
 
 
 def eval_sast_osv_068(ctx: EvalContext) -> EvalOutcome:
-    """SAST-OSV-068: OSV-Scanner v2 SARIF findings (reachability-aware SCA)."""
+    """SAST-OSV-068: OSV-Scanner v2 SARIF findings (SCA; the kit ingests verdicts, not reachability data)."""
     return _eval_sarif_adapter(
         ctx,
         tool_name="osv-scanner",

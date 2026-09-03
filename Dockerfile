@@ -25,10 +25,22 @@
 # ---------------------------------------------------------------------------
 # Stage 1: builder
 # ---------------------------------------------------------------------------
-# Base image pinned by digest (supply-chain hardening). The human-readable tag
-# is kept for clarity; .github/dependabot.yml (docker ecosystem) refreshes the
-# digest through reviewable pull requests.
-FROM python:3.12-slim-bookworm@sha256:93ab4b7fa528b25124c97bcc755415e60eb671a86b4dbe0328df2fe2d1c1193d AS builder
+# Base image pinned by digest (supply-chain hardening). The human-readable tag is
+# kept for clarity.
+#
+# NOTHING REFRESHES THIS AUTOMATICALLY, despite the docker ecosystem being
+# configured in .github/dependabot.yml. Dependabot's docker updater fires when a
+# newer TAG appears; `3.12-slim-bookworm` is a rolling tag whose name never
+# changes, so the digest behind it moves upstream and Dependabot has nothing to
+# propose. It has opened zero docker pull requests on this repository while
+# opening them routinely for pip, npm and github-actions -- the coverage looked
+# real and was not. This comment previously claimed Dependabot refreshed the
+# digest; it never has.
+#
+# Until something watches it, refresh by hand and check what it buys:
+#   docker buildx imagetools inspect python:3.12-slim-bookworm --format '{{.Manifest.Digest}}'
+#   trivy image --severity CRITICAL,HIGH --ignore-unfixed python@<digest>
+FROM python:3.12-slim-bookworm@sha256:a116514e19457bcb7af7efe9c3dd0b9b71e85b317694e7882a1c52aa15a78134 AS builder
 
 # Build-time environment hygiene. PIP_NO_CACHE_DIR keeps the wheel cache
 # out of the final image; PYTHONDONTWRITEBYTECODE avoids stray __pycache__
@@ -66,16 +78,40 @@ ENV PATH="/opt/venv/bin:$PATH"
 # on PyPI propagation timing.
 ARG KIT_VERSION=5.9.0
 COPY pyproject.toml README.md LICENSE NOTICE ./
+COPY .github/requirements/pip.txt .github/requirements/runtime-all.txt /tmp/requirements/
 COPY src ./src
 # --no-cache-dir is redundant with ENV PIP_NO_CACHE_DIR=1 above, but stated
 # explicitly so KICS "Pip install Keeping Cached Packages" reads it directly.
-RUN pip install --no-cache-dir --upgrade "pip==26.1.1" \
-    && pip install --no-cache-dir ".[all]"
+#
+# Every byte that crosses the network is checked against a hash recorded in the
+# repository:
+#
+#   1. pip itself, from .github/requirements/pip.txt. The venv's pip is upgraded
+#      because the base image's copy is old: 25.0.1 carried five advisories, and
+#      26.1.2 -- the previous pin -- had since gained one of its own (CVE-2026-13346,
+#      fixed in 26.2.0). A `pip==` pin inside a RUN string is invisible to the
+#      filesystem scans; the built-image scan in github-ci-cd.yml is what sees it.
+#   2. the runtime dependency closure of `.[all]`, from runtime-all.txt. Regenerate
+#      with the `uv pip compile` line recorded at the top of that file.
+#   3. the kit itself: built into a wheel, then installed from that wheel. The
+#      checkout is the one artifact with no hash to carry, because it is the thing
+#      being built.
+#
+# The build and the install are two steps rather than a single `pip install .`
+# because Scorecard reads an install whose argument is a bare path as an unpinned
+# download, and one whose argument ends in `.whl` as pinned -- `isUnpinnedPipInstall`
+# in ossf/scorecard sets `hasWheel` on the suffix alone. `--no-deps` does not change
+# that verdict for a non-editable install; only the wheel does. Nothing about what
+# reaches the image changes, and /tmp/wheel stays in the discarded builder stage.
+RUN pip install --no-cache-dir --require-hashes -r /tmp/requirements/pip.txt \
+    && pip install --no-cache-dir --require-hashes -r /tmp/requirements/runtime-all.txt \
+    && pip wheel --no-cache-dir --no-deps --wheel-dir /tmp/wheel . \
+    && pip install --no-cache-dir --no-deps /tmp/wheel/*.whl
 
 # ---------------------------------------------------------------------------
 # Stage 2: runtime
 # ---------------------------------------------------------------------------
-FROM python:3.12-slim-bookworm@sha256:93ab4b7fa528b25124c97bcc755415e60eb671a86b4dbe0328df2fe2d1c1193d AS runtime
+FROM python:3.12-slim-bookworm@sha256:a116514e19457bcb7af7efe9c3dd0b9b71e85b317694e7882a1c52aa15a78134 AS runtime
 
 # Container-baseline-1 expectations:
 # - non-root user
@@ -94,6 +130,18 @@ RUN groupadd --system --gid 10001 appuser \
 
 # Copy the venv from the builder stage.
 COPY --from=builder /opt/venv /opt/venv
+
+# No package installer ships in the runtime image. Two pips were in every published
+# image: the base image's 25.0.1 at /usr/local (five advisories, the five open alerts on
+# this repository) and the venv's own. The venv's pip is not clean either: pip vendors
+# msgpack and setuptools under pip/_vendor and, since 26.x, ships a CycloneDX BOM that
+# lets Trivy see them -- so an image with ANY pip carries whatever those vendored copies
+# are missing. The kit never invokes pip at runtime; every mention of it in src/ is
+# remediation text shown to the operator. The system python is addressed by absolute
+# path because PATH already prefers the venv.
+RUN /usr/local/bin/python3 -m pip uninstall --yes pip \
+    && /opt/venv/bin/python -m pip uninstall --yes pip \
+    && rm -rf /root/.cache/pip
 
 # Drop privileges before declaring the entrypoint. WORKDIR /work is the
 # canonical mount point for the adopter's repository.

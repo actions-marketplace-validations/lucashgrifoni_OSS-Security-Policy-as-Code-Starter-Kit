@@ -23,15 +23,16 @@ Mirrors `workflow_parser.py` (GitHub Actions) and `azure_pipeline_parser.py` (Az
 @dataclass(slots=True)
 class GitLabCiAnalysis:
     """Aggregated signals from a .gitlab-ci.yml plus its includes."""
+
     pipeline_paths: list[Path]
-    includes_remote: list[tuple[Path, str]]            # includes referencing remote YAML (supply-chain risk)
-    image_refs_unpinned: list[tuple[Path, str]]        # image: ubuntu (no tag/digest)
-    image_refs_pinned: list[tuple[Path, str]]          # image: ubuntu@sha256:...
-    script_uses_curl_pipe_shell: list[Path]            # script: curl ... | sh
-    jobs_with_id_tokens: list[Path]                    # OIDC for cloud auth
-    jobs_with_inherit_secrets: list[Path]              # inherit: secrets: true
-    jobs_with_tag_self_hosted: list[Path]              # tags: [self-hosted]
-    jobs_with_rules_only_or_except: list[Path]         # trigger restrictions present
+    includes_remote: list[tuple[Path, str]]  # includes referencing remote YAML (supply-chain risk)
+    image_refs_unpinned: list[tuple[Path, str]]  # image: ubuntu (no tag/digest)
+    image_refs_pinned: list[tuple[Path, str]]  # image: ubuntu@sha256:...
+    script_uses_curl_pipe_shell: list[Path]  # script: curl ... | sh
+    jobs_with_id_tokens: list[Path]  # OIDC for cloud auth
+    jobs_with_inherit_secrets: list[Path]  # inherit: secrets: true
+    jobs_with_tag_self_hosted: list[Path]  # tags: [self-hosted]
+    jobs_with_rules_only_or_except: list[Path]  # trigger restrictions present
     jobs_without_when_manual_on_protected: list[Path]  # missing manual approval for protected branches
     parse_errors: list[tuple[Path, str]]
 ```

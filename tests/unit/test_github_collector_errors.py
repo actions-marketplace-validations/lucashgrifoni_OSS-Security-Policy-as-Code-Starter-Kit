@@ -13,11 +13,22 @@ from oss_policy_kit.infrastructure.collectors.github_collector import GitHubEvid
 # --------------------------------------------------------------------------- #
 
 
-def test_parse_owner_repo() -> None:
+def test_a_valid_slug_splits_into_owner_and_repo() -> None:
     assert gc._parse_owner_repo("o/r") == ("o", "r")
-    for bad in ("noslash", "o/", "/r", "a/b/c"):
-        with pytest.raises(ValueError, match="Invalid GitHub repo slug"):
-            gc._parse_owner_repo(bad)
+
+
+@pytest.mark.parametrize("bad", ["noslash", "o/", "/r", "a/b/c"])
+def test_a_slug_that_is_not_owner_slash_repo_is_refused(bad: str) -> None:
+    """One case per run, rather than a loop inside one test.
+
+    A loop stops at the first value that fails, so the three after it are never tried, and the
+    failure says only that a `ValueError` was expected -- not which slug slipped through. Each
+    of these is a distinct way to malform a slug: no separator, a missing half on either side,
+    and one separator too many.
+    """
+
+    with pytest.raises(ValueError, match="Invalid GitHub repo slug"):
+        gc._parse_owner_repo(bad)
 
 
 def test_status_block_enabled() -> None:
@@ -28,7 +39,8 @@ def test_status_block_enabled() -> None:
 
 def test_github_collection_block() -> None:
     b = gc._github_collection_block("2026-05-01T00:00:00Z", "https://api.github.com/repos/o/r")
-    assert b["evidence_collection_method"] == "live" and b["mode"] == "api"
+    assert b["evidence_collection_method"] == "live"
+    assert b["mode"] == "api"
 
 
 # --------------------------------------------------------------------------- #
@@ -71,8 +83,9 @@ def test_collect_graceful_on_404_and_422(monkeypatch: pytest.MonkeyPatch) -> Non
 
 def test_collect_invalid_slug(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_client(monkeypatch, lambda r: httpx.Response(200, json={}))
+    collector = GitHubEvidenceCollector("tok")
     with pytest.raises(ValueError, match="Invalid GitHub repo slug"):
-        GitHubEvidenceCollector("tok").collect("bogus-no-slash")
+        collector.collect("bogus-no-slash")
 
 
 def test_collect_repo_metadata_422_returns_empty(monkeypatch: pytest.MonkeyPatch) -> None:

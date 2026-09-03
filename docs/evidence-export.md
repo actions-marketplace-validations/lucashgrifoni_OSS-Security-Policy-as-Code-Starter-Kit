@@ -22,7 +22,7 @@ $ oss-policy-kit export-evidence --target . --format chainloop --output evidence
 The subcommand:
 
 1. **Reads the target repository** — same `--target` semantics as `evaluate`.
-2. **Re-projects the most recent evaluation output** (or runs evaluation internally if no prior output exists) into the requested format.
+2. **Re-projects the most recent stored `reports/2.0` evaluation report** into the requested format. If no `reports/2.0` report is found (checked at `--report`, then `<target>/out/evaluation-report.json`, then `<cwd>/out/evaluation-report.json`), it exits 2 with a usage error telling you to run `evaluate` first — it never runs evaluation internally, and a stored pre-2.0 report is rejected (exit 2).
 3. **Writes the output** to the path specified by `--output` (default depends on format).
 4. **Exits 0** on successful export, **1** on contract validation failure, **2** on usage errors.
 
@@ -33,8 +33,9 @@ The subcommand:
 | `chainloop` | experimental | Chainloop attestation envelope (JSON) wrapping the kit's report + SARIF. |
 | `sarif` | stable | Re-export of the SARIF the `evaluate` subcommand already produces. Provided for parity with the registry pattern. |
 | `spdx` | GA (v7.0.0) | SPDX 2.3 JSON **evidence projection** — one package (the evaluated repo) with one annotation per control. **Not** a dependency/component SBOM of the target (the kit is a clone-only evaluator, not a dependency resolver). See ADR-034. |
-| `oscal` | GA (v7.0.0) | OSCAL 1.1 `assessment-results` JSON — each control result becomes an observation. Unsigned. See ADR-036. |
+| `oscal` | GA (v7.0.0) | OSCAL 1.1 `assessment-results` JSON — each control result becomes an `EXAMINE` observation carrying the kit's verdict + assurance grade (as `props` under the `https://oss-policy-kit` namespace) and a reference to the evaluated repository; the result also carries an `assessment-subjects` entry and an `assessment-log` (run timestamp + tool). Unsigned. See ADR-036. Assurance/subject/log enrichment added in v8.1.0. |
 | `in-toto-bundle` | GA (v7.0.0) | **Unsigned** in-toto v1 statement with a custom policy-evaluation predicate. Signing (cosign/Sigstore) is the v8 ATTESTED track; this statement is its input. See ADR-036. |
+| `gemara` | GA (v8.1.0) | OpenSSF **Gemara Layer 5 Evaluation Log** (JSON) — the kit is a conformance gate (Layer 5). Each control becomes a `ControlEvaluation`; the kit state maps to a Gemara `Result` (`Passed`/`Failed`/`Needs Review`/`Not Applicable`) and the assurance grade to a `ConfidenceLevel`. Structurally valid, unsigned; the Gemara schema is pre-1.0 (CUE), so the targeted model version is pinned in `gemara-version` and no CUE dependency is added. See ADR-042. |
 
 Planned for a future release (not yet shipped):
 
@@ -56,7 +57,7 @@ Adopters running `export-evidence --format chainloop` in production should pin t
 
 - Push to a Chainloop server. The subcommand writes a local file; piping into Chainloop is a separate step (`chainloop attestation add ...`).
 - Validate that Chainloop accepted the evidence. Adopters should run their own ingest verification.
-- Re-implement the kit's evaluation logic. If the working tree has no prior `evaluation-report.json`, the subcommand runs `evaluate` internally with the default profile and exports the result.
+- Re-implement the kit's evaluation logic. If no prior `reports/2.0` `evaluation-report.json` is found (checked at `--report`, then `<target>/out/`, then `<cwd>/out/`), the subcommand exits 2 with a usage error pointing you to run `evaluate` first — it never runs evaluation internally.
 - Add new controls to the catalog. The format registry is renderer-only.
 
 ## What you should still do

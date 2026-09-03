@@ -46,7 +46,7 @@ def _github_slug_from_url(url: str) -> str | None:
         path = u.removeprefix("git@github.com:").removesuffix(".git")
         return path if "/" in path else None
     u = u.replace("ssh://git@github.com/", "https://github.com/")
-    if u.startswith("https://github.com/") or u.startswith("http://github.com/"):
+    if u.startswith(("https://github.com/", "http://github.com/")):
         path = u.split("github.com/", 1)[-1].split("?", 1)[0].removesuffix(".git").strip("/")
         parts = [p for p in path.split("/") if p]
         if len(parts) >= 2:

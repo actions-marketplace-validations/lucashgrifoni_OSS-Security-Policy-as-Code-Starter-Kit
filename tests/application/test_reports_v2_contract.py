@@ -2,16 +2,10 @@
 
 from __future__ import annotations
 
-import json
-import subprocess
-import sys
-from pathlib import Path
-
 import pytest
 from tests.conftest import EXAMPLE_HARDENED
 
 from oss_policy_kit.application.engine import (
-    REPORT_JSON_SCHEMA_URL_V1_0,
     REPORT_JSON_SCHEMA_URL_V2_0,
     evaluate_repository,
     map_status_to_reports_v2,
@@ -24,8 +18,7 @@ from oss_policy_kit.domain.errors import LoadError
 # --- URL constants + resolver ----------------------------------------------
 
 
-def test_v2_url_distinct_from_v1() -> None:
-    assert REPORT_JSON_SCHEMA_URL_V2_0 != REPORT_JSON_SCHEMA_URL_V1_0
+def test_v2_url_is_reports_2_0() -> None:
     assert REPORT_JSON_SCHEMA_URL_V2_0.endswith("/reports/2.0")
 
 
@@ -34,10 +27,13 @@ def test_resolver_accepts_2_0() -> None:
 
 
 def test_resolver_default_is_2_0() -> None:
-    """v7.0.0 (ADR-027) flipped the default report contract to reports/2.0: an empty
-    contract now resolves to 2.0. reports/1.0 stays explicitly selectable for one cycle."""
-    assert report_json_schema_url("") == REPORT_JSON_SCHEMA_URL_V2_0
-    assert report_json_schema_url("1.0") == REPORT_JSON_SCHEMA_URL_V1_0
+    """reports/2.0 is the only contract (ADR-043, v9.0.0): a removed legacy contract
+    (e.g. 1.0) is a hard error, and a blank value fails closed instead of silently
+    mapping to the default (9.0.1: the default is the explicit '2.0' Option default)."""
+    with pytest.raises(LoadError, match=r"removed in v9.0.0"):
+        report_json_schema_url("1.0")
+    with pytest.raises(LoadError):
+        report_json_schema_url("")
 
 
 def test_resolver_unknown_mentions_2_0_in_error() -> None:
@@ -95,83 +91,10 @@ def test_evaluate_report_contract_2_0_emits_projected_controls() -> None:
     assert out["contract_version"] == "reports/2.0"
     assert "controls" in out
     assert "results" not in out
-    assert set(out["summary_by_status"]) <= {"PASS", "FAIL", "UNKNOWN", "NOT_APPLICABLE", "ATTESTED"}
+    # Full reports/2.0 state vocabulary (six states since v9.0.3: SELF_ATTESTED formalized).
+    states = {"PASS", "FAIL", "UNKNOWN", "NOT_APPLICABLE", "ATTESTED", "SELF_ATTESTED"}
+    assert set(out["summary_by_status"]) <= states
     first = out["controls"][0]
     assert "state" in first
-    assert first["state"] in {"PASS", "FAIL", "UNKNOWN", "NOT_APPLICABLE", "ATTESTED"}
+    assert first["state"] in states
     assert "message" in first
-
-
-# --- migrate-1.0-to-2.0.py script ------------------------------------------
-
-
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_MIGRATE_SCRIPT = _REPO_ROOT / "scripts" / "migrate-1.0-to-2.0.py"
-
-
-def _sample_v1_report() -> dict:
-    # reports/1.0 emits controls under the ``results`` key, each keyed by ``control_id``
-    # (see report_to_dict_v1). The earlier sample used a ``controls``/``id`` shape the kit
-    # never produces, which masked a bug in the migration script.
-    return {
-        "schema_version": REPORT_JSON_SCHEMA_URL_V1_0,
-        "summary_by_status": {"pass": 5, "fail": 1, "degraded": 1, "manual-review-required": 2},
-        "results": [
-            {
-                "control_id": "GOV-SEC-001",
-                "status": "pass",
-                "reason": "SECURITY.md present.",
-                "profile": "github-level-1",
-            },
-            {
-                "control_id": "GH-PROV-023",
-                "status": "manual-review-required",
-                "reason": "No evidence.",
-                "profile": "github-level-1",
-            },
-            {
-                "control_id": "CI-LEAST-009",
-                "status": "degraded",
-                "reason": "Broad token perms.",
-                "profile": "github-level-1",
-            },
-        ],
-    }
-
-
-def test_migrate_script_converts_v1_to_v2(tmp_path: Path) -> None:
-    in_file = tmp_path / "old.json"
-    out_file = tmp_path / "new.json"
-    in_file.write_text(json.dumps(_sample_v1_report()), encoding="utf-8")
-    proc = subprocess.run(
-        [sys.executable, str(_MIGRATE_SCRIPT), "--input", str(in_file), "--output", str(out_file)],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=30,
-    )
-    assert proc.returncode == 0, proc.stderr + proc.stdout
-    assert out_file.is_file()
-    out = json.loads(out_file.read_text(encoding="utf-8"))
-    assert out["schema_version"] == REPORT_JSON_SCHEMA_URL_V2_0
-    assert out["contract_version"] == "reports/2.0"
-    assert out["summary_by_status"] == {"PASS": 5, "FAIL": 2, "UNKNOWN": 2}
-    states = {c["id"]: c["state"] for c in out["controls"]}
-    assert states == {"GOV-SEC-001": "PASS", "GH-PROV-023": "UNKNOWN", "CI-LEAST-009": "FAIL"}
-    # degraded preserves the per-control flag.
-    degraded = next(c for c in out["controls"] if c["id"] == "CI-LEAST-009")
-    assert degraded.get("degraded") is True
-
-
-def test_migrate_script_rejects_malformed_json(tmp_path: Path) -> None:
-    in_file = tmp_path / "bad.json"
-    out_file = tmp_path / "new.json"
-    in_file.write_text("{ not json", encoding="utf-8")
-    proc = subprocess.run(
-        [sys.executable, str(_MIGRATE_SCRIPT), "--input", str(in_file), "--output", str(out_file)],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=30,
-    )
-    assert proc.returncode == 1

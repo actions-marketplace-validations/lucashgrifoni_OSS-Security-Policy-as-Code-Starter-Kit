@@ -12,6 +12,8 @@ from oss_policy_kit.application.profile_hints import ProfileRecommendation, buil
 from oss_policy_kit.cli import terminal_ui
 from oss_policy_kit.cli.common import (
     app,
+    exit_for_unexpected,
+    markup_safe,
     normalize_recommend_format,
     stderr_console,
     write_wrapped_stdout_block,
@@ -62,5 +64,10 @@ def recommend_profile_cmd(
         else:
             _write_recommend_text(rec)
     except OssPolicyKitError as exc:
-        stderr_console().print(f"[red]Error:[/red] {exc.message}")
+        stderr_console().print(f"[red]Error:[/red] {markup_safe(exc.message)}")
         raise typer.Exit(code=2) from exc
+    except typer.Exit:
+        raise
+    # Last-resort user message, no traceback leak.
+    except Exception as exc:  # noqa: BLE001
+        exit_for_unexpected(exc)

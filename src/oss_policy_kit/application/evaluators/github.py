@@ -83,6 +83,21 @@ def eval_gh_wf_018(ctx: EvalContext) -> EvalOutcome:
             evidence_sources=[str(p.resolve()) for p in ctx.workflows.reusable_secrets_inherit_paths],
             confidence="medium",
         )
+    if ctx.workflows.parse_errors:
+        # A workflow that did not parse contributed nothing to the search, so "not
+        # detected" would be true and useless -- nothing was detected because nothing
+        # was read. One invalid character used to buy this control a pass.
+        unread = ", ".join(sorted({p.name for p, _ in ctx.workflows.parse_errors}))
+        return EvalOutcome(
+            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
+            reason=(
+                f"Reusable-workflow secret flow could not be read: {unread} failed to parse, so this "
+                "control searched only the files that did."
+            ),
+            remediation="Fix the YAML syntax so reusable workflow calls can be read, then re-run.",
+            evidence_sources=[str(p.resolve()) for p, _ in ctx.workflows.parse_errors],
+            confidence="low",
+        )
     return EvalOutcome(
         status=ControlStatus.PASS,
         reason="No reusable workflow calls using `secrets: inherit` were detected.",
@@ -115,6 +130,21 @@ def eval_gh_wf_019(ctx: EvalContext) -> EvalOutcome:
             evidence_sources=[str(p.resolve()) for p in ctx.workflows.pr_self_hosted_runner_paths],
             confidence="medium",
         )
+    if ctx.workflows.parse_errors:
+        # A workflow that did not parse contributed nothing to the search, so "not
+        # detected" would be true and useless -- nothing was detected because nothing
+        # was read. One invalid character used to buy this control a pass.
+        unread = ", ".join(sorted({p.name for p, _ in ctx.workflows.parse_errors}))
+        return EvalOutcome(
+            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
+            reason=(
+                f"Runner labels on pull-request triggers could not be read: {unread} failed to parse, so this "
+                "control searched only the files that did."
+            ),
+            remediation="Fix the YAML syntax so runner labels can be evaluated, then re-run.",
+            evidence_sources=[str(p.resolve()) for p, _ in ctx.workflows.parse_errors],
+            confidence="low",
+        )
     return EvalOutcome(
         status=ControlStatus.PASS,
         reason="No self-hosted runner usage detected in pull-request-triggered workflows.",
@@ -144,6 +174,23 @@ def eval_gh_wf_020(ctx: EvalContext) -> EvalOutcome:
             evidence_sources=[str(sample[0].resolve())],
             confidence="medium",
         )
+    if ctx.workflows.parse_errors:
+        # Job-level permissions live in the parsed structure, so a workflow that did not
+        # parse contributed nothing to the search. Saying "no broad write scopes were
+        # detected" about it is true and useless: nothing was detected because nothing was
+        # read. Adding one invalid line to a workflow declaring `permissions: write-all`
+        # moved this control from FAIL to PASS -- the break bought the pass.
+        names = ", ".join(sorted({p.name for p, _ in ctx.workflows.parse_errors}))
+        return EvalOutcome(
+            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
+            reason=(
+                f"Job-level permissions could not be read: {names} failed to parse, so this "
+                "control searched only the workflows that did."
+            ),
+            remediation="Fix the YAML syntax so job permissions can be evaluated, then re-run.",
+            evidence_sources=[str(p.resolve()) for p, _ in ctx.workflows.parse_errors],
+            confidence="low",
+        )
     return EvalOutcome(
         status=ControlStatus.PASS,
         reason="No obvious broad job-level write scopes were detected.",
@@ -163,6 +210,21 @@ def eval_gh_rel_021(ctx: EvalContext) -> EvalOutcome:
             remediation="Define release/package workflows with explicit concurrency groups.",
             evidence_sources=[],
             confidence="high",
+        )
+    if ctx.workflows.parse_errors:
+        # A workflow that did not parse contributed nothing to the search, so "not
+        # detected" would be true and useless -- nothing was detected because nothing
+        # was read. One invalid character used to buy this control a pass.
+        unread = ", ".join(sorted({p.name for p, _ in ctx.workflows.parse_errors}))
+        return EvalOutcome(
+            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
+            reason=(
+                f"Release/deploy workflow detection could not be read: {unread} failed to parse, so this "
+                "control searched only the files that did."
+            ),
+            remediation="Fix the YAML syntax so release workflows can be detected, then re-run.",
+            evidence_sources=[str(p.resolve()) for p, _ in ctx.workflows.parse_errors],
+            confidence="low",
         )
     if not ctx.workflows.release_workflow_paths:
         return EvalOutcome(
@@ -200,7 +262,10 @@ def eval_gh_rel_021(ctx: EvalContext) -> EvalOutcome:
         )
     return EvalOutcome(
         status=ControlStatus.PASS,
-        reason="Release/deploy workflow signals include top-level concurrency controls.",
+        # Says the level it actually checked. It read "top-level concurrency controls" while
+        # the check also accepts a group on the releasing job -- the same overclaim, in the
+        # PASS message, of the defect that widening this check set out to fix.
+        reason="Release/deploy workflows declare `concurrency:` at the workflow or job level.",
         remediation="Keep concurrency groups stable across release workflow edits.",
         evidence_sources=[],
         confidence="medium",
@@ -287,8 +352,8 @@ def _gh_provenance_verification_recorded(evidence_path: Path) -> bool:
 
     if not evidence_path.is_file():
         return False
-    with contextlib.suppress(OSError, json.JSONDecodeError):
-        data = json.loads(evidence_path.read_text(encoding="utf-8"))
+    with contextlib.suppress(OSError, UnicodeDecodeError, json.JSONDecodeError):
+        data = json.loads(evidence_path.read_text(encoding="utf-8-sig"))
         if isinstance(data, dict):
             verification = data.get("verification")
             if isinstance(verification, dict) and verification.get("transparency_log_inclusion"):
@@ -310,6 +375,21 @@ def eval_gh_prov_023(ctx: EvalContext) -> EvalOutcome:
     has_release_intent = bool(ctx.workflows.release_workflow_paths or ctx.workflows.cloud_deploy_workflow_paths)
     if not has_release_intent and _any_github_workflow_suggests_release_or_deploy(ctx):
         has_release_intent = True
+    if ctx.workflows.parse_errors:
+        # A workflow that did not parse contributed nothing to the search, so "not
+        # detected" would be true and useless -- nothing was detected because nothing
+        # was read. One invalid character used to buy this control a pass.
+        unread = ", ".join(sorted({p.name for p, _ in ctx.workflows.parse_errors}))
+        return EvalOutcome(
+            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
+            reason=(
+                f"Release-intent detection could not be read: {unread} failed to parse, so this "
+                "control searched only the files that did."
+            ),
+            remediation="Fix the YAML syntax so release workflows can be detected, then re-run.",
+            evidence_sources=[str(p.resolve()) for p, _ in ctx.workflows.parse_errors],
+            confidence="low",
+        )
     if not has_release_intent:
         return EvalOutcome(
             status=ControlStatus.NOT_APPLICABLE,
@@ -399,8 +479,12 @@ def eval_gh_plat_024(ctx: EvalContext) -> EvalOutcome:
         evidence_name="GitHub rulesets",
     )
     if error:
+        # ADR-045: unreadable evidence is `manual-review-required`, never `fail`. A schema
+        # violation is a fact about the FILE, not about the repository -- the kit did not
+        # find the control unsatisfied, it failed to read the document that would say.
+        # Operators who want that to block a merge use `--fail-on degraded`.
         return EvalOutcome(
-            status=ControlStatus.FAIL,
+            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
             reason=error,
             remediation=(
                 "Regenerate github-rulesets evidence using reports/schema/evidence-github-rulesets.schema.json."
@@ -464,9 +548,11 @@ def eval_gh_immutrel_070(ctx: EvalContext) -> EvalOutcome:
     """GH-IMMUTREL-070: GitHub immutable releases / release attestation via explicit evidence.
 
     Org/release platform posture is not clone-visible, so this is evidence-backed: the file
-    is absent -> manual review (not a fail); present + valid -> PASS/FAIL on the recorded
-    posture. The kit composes GitHub's release attestation; it does not re-verify it here
-    (cryptographic verification is the deferred ATTESTED path, ADR-028).
+    is absent -> not-evaluated (the input was never supplied, so no verdict was attempted);
+    present but unreadable -> manual review (ADR-045); present + valid -> PASS/FAIL on the
+    recorded posture. The kit never re-verifies the signature itself: when the evidence
+    carries a complete, fresh verification record it upgrades PASS to ATTESTED on the
+    strength of that record (ADR-028, on by default since v8.0.0 per ADR-041).
     """
 
     evidence = ctx.repo_root / _KIT_DIR / "evidence" / "github-release-immutability.json"
@@ -491,8 +577,12 @@ def eval_gh_immutrel_070(ctx: EvalContext) -> EvalOutcome:
         evidence_name="GitHub release immutability",
     )
     if error:
+        # ADR-045: unreadable evidence is `manual-review-required`, never `fail`. A schema
+        # violation is a fact about the FILE, not about the repository -- the kit did not
+        # find the control unsatisfied, it failed to read the document that would say.
+        # Operators who want that to block a merge use `--fail-on degraded`.
         return EvalOutcome(
-            status=ControlStatus.FAIL,
+            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
             reason=error,
             remediation=(
                 "Regenerate github-release-immutability evidence using "
@@ -522,7 +612,7 @@ def eval_gh_immutrel_070(ctx: EvalContext) -> EvalOutcome:
             confidence="medium",
             evidence_collection_method=ecm,
         )
-    # ADR-028 ATTESTED upgrade (opt-in --enable-attested): when the release attestation is
+    # ADR-028 ATTESTED upgrade (--enable-attested, on by default): when the release attestation is
     # present AND a fresh, transparency-log-confirmed verification record exists, resolve to
     # ATTESTED instead of PASS. Fail-closed — any verification gap keeps the historical PASS.
     if (
@@ -587,8 +677,12 @@ def eval_org_actpol_071(ctx: EvalContext) -> EvalOutcome:
         evidence_name="GitHub organization Actions policy",
     )
     if error:
+        # ADR-045: unreadable evidence is `manual-review-required`, never `fail`. A schema
+        # violation is a fact about the FILE, not about the repository -- the kit did not
+        # find the control unsatisfied, it failed to read the document that would say.
+        # Operators who want that to block a merge use `--fail-on degraded`.
         return EvalOutcome(
-            status=ControlStatus.FAIL,
+            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
             reason=error,
             remediation=(
                 "Regenerate github-actions-policy evidence using "
@@ -658,8 +752,12 @@ def eval_gh_plat_025(ctx: EvalContext) -> EvalOutcome:
         evidence_name="GitHub environment protection",
     )
     if error:
+        # ADR-045: unreadable evidence is `manual-review-required`, never `fail`. A schema
+        # violation is a fact about the FILE, not about the repository -- the kit did not
+        # find the control unsatisfied, it failed to read the document that would say.
+        # Operators who want that to block a merge use `--fail-on degraded`.
         return EvalOutcome(
-            status=ControlStatus.FAIL,
+            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
             reason=error,
             remediation=(
                 "Regenerate environment protection evidence using "
@@ -734,8 +832,12 @@ def eval_gh_plat_026(ctx: EvalContext) -> EvalOutcome:
         evidence_name="GitHub secret scanning",
     )
     if error:
+        # ADR-045: unreadable evidence is `manual-review-required`, never `fail`. A schema
+        # violation is a fact about the FILE, not about the repository -- the kit did not
+        # find the control unsatisfied, it failed to read the document that would say.
+        # Operators who want that to block a merge use `--fail-on degraded`.
         return EvalOutcome(
-            status=ControlStatus.FAIL,
+            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
             reason=error,
             remediation=(
                 "Regenerate secret scanning evidence using reports/schema/evidence-github-secret-scanning.schema.json."
@@ -865,7 +967,10 @@ def eval_gh_runner_062(ctx: EvalContext) -> EvalOutcome:
     posture_outcome = _gh_ephemeral_posture_outcome(all_self, ephemeral, evidence)
     if posture_outcome is not None:
         return posture_outcome
-    if not evidence.is_file():
+    # Unreachable: `_gh_ephemeral_posture_outcome` returns None only when the evidence
+    # file exists, so by here it does. Kept because the two functions are separately
+    # editable and this arm is what stops a missing file reading as a clean posture.
+    if not evidence.is_file():  # pragma: no cover
         return EvalOutcome(
             status=ControlStatus.MANUAL_REVIEW_REQUIRED,
             reason="Self-hosted runner posture cannot be fully assessed without a runner-groups.json evidence file.",
@@ -889,7 +994,10 @@ def eval_gh_runner_062(ctx: EvalContext) -> EvalOutcome:
         return blocked
     assert data is not None
     groups = data.get("runner_groups") or []
-    if not isinstance(groups, list) or not groups:
+    # Unreachable while the schema keeps `runner_groups` required with `minItems: 1`,
+    # which is where an empty list is actually refused. This arm is the second line of
+    # defence if that constraint is ever relaxed.
+    if not isinstance(groups, list) or not groups:  # pragma: no cover
         return EvalOutcome(
             status=ControlStatus.FAIL,
             reason="runner-groups.json contains no runner_groups entries.",

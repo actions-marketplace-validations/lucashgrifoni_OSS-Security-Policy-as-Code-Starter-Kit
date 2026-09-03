@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, cast
 
+from oss_policy_kit.application.evaluators_common import strip_yaml_comments
+from oss_policy_kit.application.input_limits import bad_input_detail
+from oss_policy_kit.infrastructure.source_text import decode_source
 from oss_policy_kit.infrastructure.yaml_io import load_yaml_file
 
 
@@ -15,6 +19,11 @@ class WorkflowAnalysis:
     """Aggregated signals from all workflows in a repository."""
 
     workflow_paths: list[Path] = field(default_factory=list)
+    #: `action.yml` / `action.yaml` at the repository root and under `.github/actions/`. A
+    #: composite action's steps run exactly like a workflow's, so its `uses:` refs count toward
+    #: CI-PIN-008 -- without this, a workflow pinned entirely to SHAs vouched for a composite
+    #: action running `some-vendor/publish@main`.
+    composite_action_paths: list[Path] = field(default_factory=list)
     missing_top_level_permissions: list[Path] = field(default_factory=list)
     uses_pull_request_target: list[Path] = field(default_factory=list)
     mutable_action_refs: list[tuple[Path, str]] = field(default_factory=list)
@@ -87,7 +96,7 @@ def _scan_reusable_workflow_pins(
 
 def _is_immutable_action_ref(ref: str) -> bool:
     r = ref.strip().strip("'\"")
-    if r.startswith("${{") or r.startswith("./") or r.startswith("docker://"):
+    if r.startswith(("${{", "./", "docker://")):
         return True
     if "@" not in r:
         return True
@@ -102,30 +111,74 @@ def _is_immutable_action_ref(ref: str) -> bool:
     return bool(re.fullmatch(r"[0-9a-f]{7,39}", pin_l))
 
 
+def _record_mutable_ref(ref: str, path: Path, out: list[tuple[Path, str]]) -> None:
+    ref = ref.strip()
+    if not ref or ref.startswith("${{"):
+        return
+    if not _is_immutable_action_ref(ref):
+        out.append((path, ref))
+
+
+def _scan_parsed_uses_for_mutable(data: dict[str, Any], path: Path, out: list[tuple[Path, str]]) -> None:
+    """Flag mutable action pins from the steps the workflow really declares.
+
+    CI-PIN-008 used to run :data:`_MUTABLE_REF` over the file text, and that pattern has no
+    line anchor, so it matched ``uses:`` anywhere on a line -- including after a ``#``. A
+    workflow pinned entirely to commit SHAs failed the control because of one commented-out
+    step:
+
+        # - uses: actions/setup-node@v4  # disabled, too slow
+
+    A false positive rather than a false PASS, but the same defect: the adopter did the work,
+    left a note about what they removed, and the note failed them. Reproduced, then fixed by
+    reading the parsed steps.
+    """
+
+    for ref in _iter_step_uses(data):
+        _record_mutable_ref(ref, path, out)
+
+
 def _scan_uses_for_mutable(content: str, path: Path, out: list[tuple[Path, str]]) -> None:
+    """Text fallback, used only where the workflow failed to parse and there is no structure."""
+
     for m in _MUTABLE_REF.finditer(content):
-        ref = m.group(1).strip()
-        if not ref or ref.startswith("${{"):
-            continue
-        if not _is_immutable_action_ref(ref):
-            out.append((path, ref))
+        _record_mutable_ref(m.group(1), path, out)
 
 
 def _content_has_token(text: str, token: str) -> bool:
     return token in text
 
 
-def _contains_pr_event(data: dict[str, Any], raw: str) -> bool:
-    """Best-effort detection for pull-request-triggered workflows."""
+def _on_block(data: dict[str, Any]) -> Any:
+    """Return a workflow's trigger block, under whichever key YAML parked it.
 
-    on_block = data.get("on")
+    ``on`` is a YAML 1.1 boolean. An unquoted ``on:`` in a GitHub Actions workflow --
+    which is how every workflow in the wild is written -- parses to the key ``True``,
+    not to the string ``"on"``. So ``data.get("on")`` returns ``None`` for real files
+    and only ever worked on hand-built dicts in tests.
+
+    Both callers had a raw-text fallback that quietly absorbed this, which is why it
+    went unnoticed: the parsed branch never ran, the substring branch always did, and
+    the substring branch cannot tell a trigger from a comment.
+    """
+
+    block = data.get("on")
+    # ``data`` is typed ``dict[str, Any]`` because every other key in a workflow is a
+    # string; the boolean key is real at runtime regardless of the annotation.
+    return cast(dict[Any, Any], data).get(True) if block is None else block
+
+
+def _contains_pr_event(data: dict[str, Any]) -> bool:
+    """True when the workflow is triggered by a pull request."""
+
+    on_block = _on_block(data)
     if isinstance(on_block, str):
         return on_block in {"pull_request", "pull_request_target"}
     if isinstance(on_block, list):
         return any(item in {"pull_request", "pull_request_target"} for item in on_block)
     if isinstance(on_block, dict):
         return "pull_request" in on_block or "pull_request_target" in on_block
-    return "pull_request" in raw or "pull_request_target" in raw
+    return False
 
 
 def _is_self_hosted_runs_on(value: Any) -> bool:
@@ -136,14 +189,178 @@ def _is_self_hosted_runs_on(value: Any) -> bool:
     return False
 
 
-def _detect_release_workflow(data: dict[str, Any], raw: str) -> bool:
-    lower = raw.lower()
-    if any(tok in lower for tok in ("release", "deploy", "publish", "package")):
+#: Actions whose presence means the workflow ships something outward.
+_RELEASE_ACTION_RE = re.compile(
+    r"(?:^|/)(?:"
+    r"gh-action-pypi-publish|action-gh-release|create-release|release-action|release-drafter"
+    r"|goreleaser-action|release-please-action|release-please|semantic-release"
+    r"|deploy-pages|github-pages-deploy-action|action-electron-builder"
+    r"|build-push-action|ghcr-push"
+    r")\b"
+)
+
+#: ``run:`` commands that publish or deploy. Anchored on the verb at the START, so prose
+#: that merely mentions a release does not match.
+#:
+#: Deliberately NOT anchored at the end. The first version closed with ``)\b`` and wrote the
+#: JVM alternatives as ``\bpublish\b``, which requires a word boundary after the verb -- and a
+#: following capital letter never provides one. That silently dropped
+#: ``./gradlew publishToSonatype``, ``publishToMavenCentral`` and ``sbt publishSigned``, which
+#: is how essentially every JVM project publishes to Maven Central. Those workflows answered
+#: "No release or deploy workflow detected", and the substring detector this replaced had
+#: caught them, so it was a regression rather than a pre-existing gap.
+#:
+#: The cost of dropping the trailing boundary is that ``cargo publisher`` would match. That is
+#: not a shape anyone writes, and missing a real release workflow is the worse failure.
+_RELEASE_RUN_RE = re.compile(
+    r"\b(?:"
+    r"twine\s+upload"
+    r"|(?:npm|yarn|pnpm)\s+publish"
+    r"|(?:poetry|flit|uv|hatch|maturin)\s+publish"
+    r"|cargo\s+publish"
+    r"|gem\s+push"
+    r"|(?:dotnet\s+)?nuget\s+push"
+    r"|helm\s+push"
+    r"|(?:docker|podman|buildah)\s+push"
+    r"|docker\s+buildx\s+(?:build|bake)[^\n]*--push"
+    r"|skopeo\s+copy"
+    r"|gh\s+release\s+(?:create|upload)"
+    r"|goreleaser\s+release"
+    r"|mvn\b[^\n]*\bdeploy"
+    r"|gradle\w*\b[^\n]*\bpublish"
+    r"|sbt\b[^\n]*\bpublish"
+    r"|kubectl\s+(?:apply|rollout|set\s+image)"
+    r"|helm\s+upgrade"
+    r"|terraform\s+apply"
+    r"|pulumi\s+up"
+    r"|(?:serverless|sls|cdk)\s+deploy"
+    r"|aws\s+s3\s+sync"
+    r")"
+)
+
+#: Workflow / job names and job ids that declare release intent. Matched only on the
+#: ``name:`` fields and job keys the author chose -- declared intent, not free text.
+_RELEASE_NAME_RE = re.compile(r"\b(?:release|deploy|publish|package)\w*\b", re.IGNORECASE)
+
+
+def _release_trigger(on_block: Any) -> bool:
+    """True when the workflow's triggers alone mark it as a release workflow.
+
+    ``workflow_dispatch`` is deliberately absent. A manually-dispatched workflow is a
+    manually-dispatched workflow; treating it as a release made every repo with a manual
+    utility job answer for release concurrency.
+    """
+
+    if isinstance(on_block, str):
+        return on_block == "release"
+    if isinstance(on_block, list):
+        return "release" in on_block
+    if not isinstance(on_block, dict):
+        return False
+    if "release" in on_block:
         return True
-    on_block = data.get("on")
-    if isinstance(on_block, dict) and ("release" in on_block or "workflow_dispatch" in on_block):
+    push = on_block.get("push")
+    return isinstance(push, dict) and bool(push.get("tags") or push.get("tags-ignore"))
+
+
+def _job_publishes(job: Any) -> bool:
+    """True when any step in *job* runs a publishing action or command."""
+
+    if not isinstance(job, dict):
+        return False
+    steps = job.get("steps")
+    if not isinstance(steps, list):
+        return False
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        uses = step.get("uses")
+        if isinstance(uses, str) and _RELEASE_ACTION_RE.search(uses.split("@", 1)[0].lower()):
+            return True
+        run = step.get("run")
+        if isinstance(run, str) and _RELEASE_RUN_RE.search(run.lower()):
+            return True
+    return False
+
+
+def _releasing_job_ids(jobs: dict[str, Any]) -> set[str]:
+    """Job ids that actually ship something, by name or by what their steps run."""
+
+    return {
+        str(job_id)
+        for job_id, job in jobs.items()
+        if _RELEASE_NAME_RE.search(str(job_id))
+        or (isinstance(job, dict) and _RELEASE_NAME_RE.search(str(job.get("name", ""))))
+        or _job_publishes(job)
+    }
+
+
+def _declares_concurrency(data: dict[str, Any]) -> bool:
+    """True when concurrency protects the publishing, at the workflow level or on the job.
+
+    GH-REL-021 reports a workflow as not declaring concurrency "at the workflow or job
+    level", but the check only ever looked at the top level. Job-level ``concurrency:`` is
+    valid GitHub Actions and is the natural way to write it when one job of several
+    publishes, so a workflow that did exactly what the remediation asks was failed and told
+    it had not.
+
+    Widening it to *any* job was too much, and adversarial review caught it before release:
+    a workflow with a ``concurrency`` group on a ``docs`` job and a bare ``publish`` job
+    running ``twine upload`` reported PASS, which is precisely the double-publish this
+    control exists to prevent. The group has to be where the publishing happens.
+
+    Every releasing job must carry one -- ``any`` would let a two-publisher workflow pass on
+    the strength of protecting one of them. When no job looks like the releasing job, the
+    signal came from the trigger alone and there is nothing to attribute a job-level group
+    to, so only a workflow-level declaration counts.
+    """
+
+    if "concurrency" in data:
         return True
-    return "tags:" in lower
+    jobs = data.get("jobs")
+    if not isinstance(jobs, dict):
+        return False
+    releasing = _releasing_job_ids(jobs)
+    if not releasing:
+        return False
+    return all(isinstance(jobs[job_id], dict) and "concurrency" in jobs[job_id] for job_id in releasing)
+
+
+def _detect_release_workflow(data: dict[str, Any]) -> bool:
+    """True when this workflow releases, deploys, or publishes something.
+
+    Read from the parsed structure, never from the workflow text. The previous version
+    lowercased the whole file and returned True on the bare substring ``release``,
+    ``deploy``, ``publish``, or ``package`` -- which meant a comment decided the answer.
+    Every workflow template this kit ships carries the line
+
+        # Actions are pinned to immutable commit SHAs (release tag in the trailing ...
+
+    so all three were classified as release workflows and failed GH-REL-021 for missing
+    ``concurrency:``. An adopter running ``init --with-workflow`` and then ``evaluate``
+    got a FAIL, produced by the kit, about a workflow the kit wrote, for a control that
+    did not apply to it. Deleting the comment made the finding disappear, which is the
+    signature of a detector reading the wrong thing.
+
+    Stripping comments before the scan would fix these three files and leave the design
+    intact: any prose in a ``name:`` or an ``echo`` would still decide it. Reading the
+    structure removes the whole class -- comments cannot reach these fields at all.
+
+    A workflow counts when its triggers say release (``on: release``, or a tag-filtered
+    push), when a job id or name declares it, or when a step actually runs a publishing
+    action or command.
+    """
+
+    if _release_trigger(_on_block(data)):
+        return True
+    if _RELEASE_NAME_RE.search(str(data.get("name", ""))):
+        return True
+    jobs = data.get("jobs")
+    if not isinstance(jobs, dict):
+        return False
+    # Same helper the concurrency check uses, so "is this a release workflow" and "which job
+    # is the release" can never answer from different rules.
+    return bool(_releasing_job_ids(jobs))
 
 
 def _workflow_body_for_sast_heuristics(raw: str) -> str:
@@ -384,6 +601,161 @@ def _collect_implicit_permission_risks(
             _collect_no_top_perm_risk(str(job_name), steps, path, seen, out)
 
 
+def _iter_step_uses(data: dict[str, Any]) -> Iterator[str]:
+    """Every ``uses:`` the workflow really declares, read from the parsed structure.
+
+    Covers step-level ``uses:`` and the job-level form that calls a reusable workflow. A
+    ``uses:`` written inside a comment or quoted in a ``run:`` block is not a step and does
+    not appear here, which is the entire point.
+    """
+
+    jobs = data.get("jobs")
+    if not isinstance(jobs, dict):
+        return
+    for job in jobs.values():
+        if not isinstance(job, dict):
+            continue
+        job_uses = job.get("uses")
+        if isinstance(job_uses, str):
+            yield job_uses
+        steps = job.get("steps")
+        if not isinstance(steps, list):
+            continue
+        for step in steps:
+            if isinstance(step, dict) and isinstance(step.get("uses"), str):
+                yield str(step["uses"])
+
+
+def _iter_composite_action_uses(data: dict[str, Any]) -> Iterator[str]:
+    """Every ``uses:`` a composite action declares, read from the parsed structure.
+
+    A composite action hangs its steps off ``runs.steps``, not off ``jobs``, which is why
+    :func:`_iter_step_uses` finds nothing in one. Reading the parsed steps rather than the file
+    text is deliberate and carries the same guarantee it does for workflows: a ``uses:`` sitting
+    in a comment is not a step, so widening the search cannot reintroduce the false positive that
+    scanner was written to remove.
+    """
+
+    runs = data.get("runs")
+    if not isinstance(runs, dict):
+        return
+    steps = runs.get("steps")
+    if not isinstance(steps, list):
+        return
+    for step in steps:
+        if isinstance(step, dict) and isinstance(step.get("uses"), str):
+            yield str(step["uses"])
+
+
+def _iter_composite_action_files(repo_root: Path) -> Iterator[Path]:
+    """The two conventional homes of a composite action: the repository root, and `.github/actions/`.
+
+    Deliberately not a repository-wide sweep for ``action.yml``. A broader search reaches
+    ``examples/`` and vendored trees, and a deliberately-insecure fixture or somebody else's
+    dependency would then be reported as the adopter's own unpinned action. These two locations
+    are what GitHub documents and what the adopter is answerable for.
+    """
+
+    for name in ("action.yml", "action.yaml"):
+        candidate = repo_root / name
+        if candidate.is_file():
+            yield candidate
+    actions_dir = repo_root / ".github" / "actions"
+    if not actions_dir.is_dir():
+        return
+    yield from sorted(p for p in actions_dir.rglob("action.yml") if p.is_file())
+    yield from sorted(p for p in actions_dir.rglob("action.yaml") if p.is_file())
+
+
+def _analyze_one_composite_action(path: Path, result: WorkflowAnalysis) -> None:
+    """Record one composite action's mutable pins, or the fact that it could not be read."""
+
+    result.composite_action_paths.append(path)
+    try:
+        data: Any = load_yaml_file(path)
+    except Exception as exc:  # noqa: BLE001  # an unreadable action is recorded, never assumed empty
+        result.parse_errors.append((path, str(exc)))
+        return
+    if not isinstance(data, dict):
+        result.parse_errors.append((path, "composite action root must be a mapping"))
+        return
+    _scan_composite_uses_for_mutable(data, path, result.mutable_action_refs)
+
+
+def _scan_composite_uses_for_mutable(data: dict[str, Any], path: Path, out: list[tuple[Path, str]]) -> None:
+    """Flag mutable action pins from the steps a composite action really declares."""
+
+    for ref in _iter_composite_action_uses(data):
+        _record_mutable_ref(ref, path, out)
+
+
+#: ``actions/dependency-review-action`` and the GHES ``advanced-security/`` variant.
+_DEPENDENCY_REVIEW_RE = re.compile(r"(?:^|/)dependency-review-action$")
+
+
+def _has_dependency_review_step(data: dict[str, Any]) -> bool:
+    """True when a real step runs the dependency-review action.
+
+    SEC-DEPREV-011 used to be granted by ``re.search("dependency-review-action", raw)`` over
+    the whole file, so a workflow that had the step COMMENTED OUT still reported PASS -- the
+    kit told an adopter their pull requests were screened for vulnerable dependencies while
+    the screening was switched off. Commenting a step out is the ordinary way to disable it,
+    which makes this the worst possible input to get wrong.
+    """
+
+    return any(_DEPENDENCY_REVIEW_RE.search(uses.split("@", 1)[0].strip().lower()) for uses in _iter_step_uses(data))
+
+
+#: Actions and reusable workflows that produce an attestation or a signature.
+_ATTESTATION_ACTION_RE = re.compile(
+    r"(?:^|/)(?:"
+    r"attest|attest-build-provenance|attest-sbom"
+    r"|slsa-github-generator|generator_generic_slsa3\.yml|generator_container_slsa3\.yml"
+    r"|gh-action-sigstore-python|sign-blob"
+    r")\b"
+)
+
+#: ``run:`` commands that sign or attest. Installing cosign is not signing with it.
+_ATTESTATION_RUN_RE = re.compile(r"\bcosign\s+(?:sign|attest)\b|\bsyft\s+attest\b|\bslsa-verifier\b")
+
+
+def _has_attestation_step(data: dict[str, Any]) -> bool:
+    """True when the workflow really produces provenance, an attestation, or a signature.
+
+    GH-PROV-023 used to match the bare words ``slsa``, ``provenance`` and ``attestation``
+    anywhere in the file, then return PASS **citing the workflow as its evidence**. Both of
+    these earned it:
+
+        # TODO: add SLSA provenance and cosign signing some day
+        - name: check attestation docs
+
+    A plan to add provenance became proof of provenance, with a file reference attached to
+    make it look substantiated. Reproduced on both shapes before the fix.
+
+    ``sigstore/cosign-installer`` was dropped from the action list on the way past: installing
+    cosign is not signing with it, and a workflow that installs and then signs is caught by
+    ``cosign sign`` in the run text.
+    """
+
+    for uses in _iter_step_uses(data):
+        if _ATTESTATION_ACTION_RE.search(uses.split("@", 1)[0].strip().lower()):
+            return True
+    jobs = data.get("jobs")
+    if not isinstance(jobs, dict):
+        return False
+    for job in jobs.values():
+        if not isinstance(job, dict):
+            continue
+        steps = job.get("steps")
+        if not isinstance(steps, list):
+            continue
+        for step in steps:
+            run = step.get("run") if isinstance(step, dict) else None
+            if isinstance(run, str) and _ATTESTATION_RUN_RE.search(run.lower()):
+                return True
+    return False
+
+
 def _step_indicates_oidc(step: Any) -> bool:
     """True when a step uses a provider OIDC-federation action (AWS/GCP/Azure)."""
 
@@ -411,9 +783,23 @@ def _job_indicates_oidc(job: Any) -> bool:
     return any(_step_indicates_oidc(step) for step in job.get("steps") or [])
 
 
-def _workflow_has_oidc_posture(raw: str, data: dict[str, Any]) -> bool:
-    if "id-token: write" in raw.lower():
-        return True
+def _workflow_has_oidc_posture(data: dict[str, Any]) -> bool:
+    """True when the workflow really requests an OIDC token or federates to a cloud provider.
+
+    This used to open with ``if "id-token: write" in raw.lower()``, so GH-DEPLOY-022 returned
+    PASS -- "this deployment uses OIDC federation" -- for a workflow where those words
+    appeared only inside a comment. A reviewer who had written
+
+        # TODO: switch to OIDC, needs id-token: write
+
+    was told the migration was already done. That is the inversion this kit exists to catch:
+    asserting a control is in place on the strength of text that describes not having it.
+
+    The raw branch added no detection the parsed checks below lack -- workflow-level
+    ``permissions``, then per-job permissions and the AWS/GCP/Azure federation steps. It only
+    added comment sensitivity, so it is gone rather than narrowed.
+    """
+
     perms = data.get("permissions")
     if isinstance(perms, dict) and str(perms.get("id-token", "")).lower() == "write":
         return True
@@ -429,17 +815,10 @@ def _scan_workflow_raw(raw: str, path: Path, result: WorkflowAnalysis, signal_ac
     if _content_has_token(raw, "pull_request_target"):
         result.uses_pull_request_target.append(path)
     signal_acc.update(_collect_sast_ci_signals(raw))
-    if re.search(r"dependency-review-action", raw, re.IGNORECASE) or re.search(
-        r"advanced-security\/dependency-review-action", raw, re.IGNORECASE
-    ):
-        result.has_dependency_review = True
-    if re.search(
-        r"actions/attest-build-provenance|actions/attest\b|slsa|provenance|attestation"
-        r"|slsa-framework/slsa-github-generator|sigstore/cosign-installer|cosign\s+sign",
-        raw,
-        re.IGNORECASE,
-    ):
-        result.has_artifact_attestation = True
+    # `dependency-review-action` and the attestation signals moved to the parsed pass -- see
+    # _has_dependency_review_step and _has_attestation_step. Matching them here credited
+    # SEC-DEPREV-011 for a step that existed only in a comment, and GH-PROV-023 for the bare
+    # word `slsa`, `provenance` or `attestation` anywhere in the file.
     if (
         re.search(r"(?m)(^\s*merge_group:\s*$|merge-queue|github\s+merge\s+queue)", raw, re.IGNORECASE)
         and path not in result.merge_queue_signal_paths
@@ -474,10 +853,8 @@ def _classify_job_permissions(job_name: str, job: dict[str, Any], path: Path, re
                 break
 
 
-def _scan_workflow_jobs(
-    jobs: dict[str, Any], data: dict[str, Any], raw: str, path: Path, result: WorkflowAnalysis
-) -> None:
-    if _contains_pr_event(data, raw):
+def _scan_workflow_jobs(jobs: dict[str, Any], data: dict[str, Any], path: Path, result: WorkflowAnalysis) -> None:
+    if _contains_pr_event(data):
         for job in jobs.values():
             if isinstance(job, dict) and _is_self_hosted_runs_on(job.get("runs-on")):
                 result.pr_self_hosted_runner_paths.append(path)
@@ -499,13 +876,17 @@ def _scan_workflow_parsed(data: dict[str, Any], raw: str, path: Path, result: Wo
     """Parsed-dict signals: permissions, jobs, mutable refs, release + cloud-deploy posture."""
 
     _classify_top_level_permissions(data, path, result)
-    _scan_uses_for_mutable(raw, path, result.mutable_action_refs)
+    _scan_parsed_uses_for_mutable(data, path, result.mutable_action_refs)
+    if _has_dependency_review_step(data):
+        result.has_dependency_review = True
+    if _has_attestation_step(data):
+        result.has_artifact_attestation = True
     jobs = data.get("jobs")
     if isinstance(jobs, dict):
-        _scan_workflow_jobs(jobs, data, raw, path, result)
-    if _detect_release_workflow(data, raw):
+        _scan_workflow_jobs(jobs, data, path, result)
+    if _detect_release_workflow(data):
         result.release_workflow_paths.append(path)
-        if "concurrency" not in data:
+        if not _declares_concurrency(data):
             result.release_workflows_missing_concurrency.append(path)
     if re.search(
         r"aws-actions/configure-aws-credentials|azure/login|google-github-actions/auth|gcloud auth|kubectl|helm",
@@ -513,13 +894,42 @@ def _scan_workflow_parsed(data: dict[str, Any], raw: str, path: Path, result: Wo
         re.IGNORECASE,
     ):
         result.cloud_deploy_workflow_paths.append(path)
-        if _workflow_has_oidc_posture(raw, data):
+        if _workflow_has_oidc_posture(data):
             result.cloud_deploy_with_oidc_paths.append(path)
 
 
 def _analyze_one_workflow(path: Path, result: WorkflowAnalysis, signal_acc: set[str]) -> None:
     result.workflow_paths.append(path)
-    raw = path.read_text(encoding="utf-8", errors="replace")
+    # Comments are blanked once, here, rather than at each scan below. Six controls were
+    # moved to the parsed structure in earlier releases; a derived sweep -- add ONE comment
+    # to a file and diff every verdict -- then found four more still reading this text:
+    # CI-DANGER-007 (a note saying "we deliberately do NOT use pull_request_target" failed
+    # the gate), GH-MERGEQ-053, and the APPLICABILITY of GH-DEPLOY-022 and GH-PROV-023,
+    # which is decided by the cloud-deploy regex further down. Fixing the verdict half and
+    # leaving the applicability half is how this class kept coming back.
+    #
+    # Every consumer of this text asks whether the workflow DOES something. Nothing here
+    # asks whether the file CONTAINS something -- if a secret scanner ever moves in, it must
+    # read `path` itself, because a credential in a comment is still a leaked credential.
+    # The raw scan is the fallback CI-PIN-008 leans on when a workflow will not parse, so it
+    # has to read the same bytes the parser now does. A UTF-16 workflow used to arrive here as
+    # mojibake, which defeated the fallback too -- both roads to the finding were closed at once.
+    try:
+        raw = strip_yaml_comments(decode_source(path.read_bytes()))
+    except OSError as exc:
+        # The read sat outside this guard, so an unreadable workflow raised past the parser and
+        # out to the CLI's bad-input handler, which ended the whole evaluation with exit 2 and no
+        # report. That handler is right about the exception and wrong about the scope: the input
+        # it names is the repository, and one file inside a repository nobody vouched for is the
+        # ordinary condition this product exists to survive. Measured against eight other hostile
+        # shapes -- a `.gitlab-ci.yml` or a `.tf` that is a directory, evidence with the wrong
+        # root, 5000 levels of nesting, a 6000-digit integer, binary bytes, malformed SARIF --
+        # every one degraded and finished. This reader was the only one that refused.
+        #
+        # ``bad_input_detail`` rather than ``str(exc)``: the latter appends the resolved filename,
+        # and this reason is published in the report (M-002).
+        result.parse_errors.append((path, bad_input_detail(exc)))
+        return
     _scan_workflow_raw(raw, path, result, signal_acc)
     try:
         data: Any = load_yaml_file(path)
@@ -538,6 +948,8 @@ def analyze_workflows(repo_root: Path) -> WorkflowAnalysis:
     """Scan `.github/workflows` for static patterns."""
 
     result = WorkflowAnalysis()
+    for action_path in _iter_composite_action_files(repo_root):
+        _analyze_one_composite_action(action_path, result)
     wf_dir = repo_root / ".github" / "workflows"
     if not wf_dir.is_dir():
         return result

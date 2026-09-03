@@ -22,13 +22,13 @@ The v5.0.0 release introduces `reports/1.0` (default), Evidence Model v2, SARIF 
 - [ ] `pyproject.toml` `version` bumped to `5.0.0` and matches `src/oss_policy_kit/__init__.py`.
 - [ ] `CHANGELOG.md` v5.0.0 entry written (highlights, improvements, notes, breaking changes).
 - [ ] `docs/v5.0.0-migration-guide.md` reflects final shipped behavior.
-- [ ] `docs/reports-contract-v1.0.md` matches the bundled `evaluation-report-v1.schema.json`.
+- [ ] `docs/reports-contract-v2.0.md` matches the bundled `data/schema/reports/2.0.json` (legacy v1/v2/v3 schema files were removed in v10.0.0).
 - [ ] Default report contract is `reports/1.0` and `--report-json-contract 0.1` returns the migration error.
 - [ ] Legacy alias `github-release-hardening` returns the migration error (exit code 2).
 - [ ] SARIF output validates as SARIF 2.1.0 for hardened, vulnerable, and healthy runs.
 - [ ] `docs/signal-controls-audit.md` captures the v5.0.0 signal control disposition.
 - [ ] `docs/azure-aws-collector-privacy.md` describes credentials and privacy boundaries.
-- [ ] Bundled `evaluation-report-v3.schema.json` is UTF-8 (no BOM); v1 schema is strict (`additionalProperties: false`).
+- [ ] Bundled `data/schema/reports/2.0.json` and `data/schema/findings/1.0.json` are UTF-8 (no BOM); findings/1.0 is strict (`additionalProperties: false`).
 - [ ] `python scripts/check_public_hygiene.py` (see below) returns clean against tracked files.
 - [ ] Mirror clone validation per `docs/release-readiness.md` mirror block returns clean.
 - [ ] Wheel and sdist install in a clean venv (`scripts/consumer_smoke.py`).
@@ -80,7 +80,7 @@ This script grep-scans tracked files for the forbidden tokens and exits non-zero
 - [ ] `README.md` explains what the project is and is not
 - [ ] `SECURITY.md` matches the actual vulnerability reporting path
 - [ ] `CHANGELOG.md` reflects the intended release
-- [ ] `pyproject.toml` version matches `src/oss_policy_kit/__init__.py` (for example `4.0.0` on the current release line)
+- [ ] `pyproject.toml` version matches `src/oss_policy_kit/__init__.py` (the two must agree; the value itself is whatever the release is cutting)
 
 ## Quality gates
 

@@ -21,24 +21,16 @@ evaluator stack just to read a timestamp.
 
 from __future__ import annotations
 
-import os
-from datetime import UTC, datetime
+from oss_policy_kit.domain.models import utc_now
 
 
 def report_generated_at() -> str:
     """Return the ``generated_at`` ISO-8601 UTC timestamp for a report.
 
-    Honours ``SOURCE_DATE_EPOCH`` for reproducible builds; otherwise uses the
-    current time. Microseconds are always stripped so the value is stable
-    across re-runs in the same second.
+    Honours ``SOURCE_DATE_EPOCH`` for reproducible builds (the env parsing lives
+    in :func:`oss_policy_kit.domain.models.utc_now`, shared with the evaluation
+    freshness/expiry clock reads); otherwise uses the current time. Microseconds
+    are always stripped so the value is stable across re-runs in the same second.
     """
 
-    raw = os.environ.get("SOURCE_DATE_EPOCH")
-    if raw:
-        try:
-            epoch = int(raw.strip())
-        except ValueError:
-            epoch = -1
-        if epoch >= 0:
-            return datetime.fromtimestamp(epoch, tz=UTC).replace(microsecond=0).isoformat()
-    return datetime.now(UTC).replace(microsecond=0).isoformat()
+    return utc_now().replace(microsecond=0).isoformat()

@@ -81,23 +81,27 @@ def test_waiver_applies_to() -> None:
 
 
 def test_parse_waivers_bad_read(tmp_path: Path) -> None:
+    yaml = _yaml(tmp_path, ": : [ unbalanced")
     with pytest.raises(LoadError, match="Failed to read"):
-        parse_waivers_file(_yaml(tmp_path, ": : [ unbalanced"))
+        parse_waivers_file(yaml)
 
 
 def test_parse_waivers_root_not_mapping(tmp_path: Path) -> None:
+    yaml_2 = _yaml(tmp_path, "- a\n- b\n")
     with pytest.raises(LoadError, match="must be a mapping"):
-        parse_waivers_file(_yaml(tmp_path, "- a\n- b\n"))
+        parse_waivers_file(yaml_2)
 
 
 def test_parse_waivers_no_list(tmp_path: Path) -> None:
     out = parse_waivers_file(_yaml(tmp_path, "other: 1\n"))
-    assert out.by_control == {} and any("No 'waivers' list" in w for w in out.warnings)
+    assert out.by_control == {}
+    assert any("No 'waivers' list" in w for w in out.warnings)
 
 
 def test_parse_waivers_not_a_list(tmp_path: Path) -> None:
+    yaml_3 = _yaml(tmp_path, "waivers: {}\n")
     with pytest.raises(LoadError, match="must be a list"):
-        parse_waivers_file(_yaml(tmp_path, "waivers: {}\n"))
+        parse_waivers_file(yaml_3)
 
 
 def test_parse_waivers_valid_with_applies_to(tmp_path: Path) -> None:
@@ -123,4 +127,5 @@ def test_parse_waivers_valid_with_applies_to(tmp_path: Path) -> None:
 def test_parse_waivers_invalid_expires(tmp_path: Path) -> None:
     src = "waivers:\n  - control_id: C1\n    justification: j\n    owner: o\n    expires_at: 'not-a-date'\n"
     out = parse_waivers_file(_yaml(tmp_path, src))
-    assert "C1" not in out.by_control and any("invalid expires_at" in w for w in out.warnings)
+    assert "C1" not in out.by_control
+    assert any("invalid expires_at" in w for w in out.warnings)

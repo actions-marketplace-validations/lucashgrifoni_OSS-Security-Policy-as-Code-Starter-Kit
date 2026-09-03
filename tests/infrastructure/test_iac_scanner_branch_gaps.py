@@ -87,7 +87,8 @@ def test_pulumi_run_scan_rule_engine_error(tmp_path: Path, monkeypatch) -> None:
 
     monkeypatch.setattr(pulumi, "_RULES", [("IAC-PUL-BAD", _boom)])
     out = pulumi.run_scan(tmp_path)
-    assert out.status == "error" and "RuntimeError" in out.diagnostics
+    assert out.status == "error"
+    assert "RuntimeError" in out.diagnostics
 
 
 # --------------------------------------------------------------------------- #
@@ -126,7 +127,8 @@ def test_bicep_body_has_int_range_absent() -> None:
 def test_bicep_001_public_network_access_medium() -> None:
     r = _br("publicNetworkAccess: 'Enabled'")
     findings = bicep._rule_iac_bicep_001_public_storage(Path("."), [r])
-    assert len(findings) == 1 and findings[0].severity == "MEDIUM"
+    assert len(findings) == 1
+    assert findings[0].severity == "MEDIUM"
 
 
 def test_bicep_open_inbound_nsg_range_guards() -> None:
@@ -158,7 +160,8 @@ def test_bicep_run_scan_rule_engine_error(tmp_path: Path, monkeypatch) -> None:
 
     monkeypatch.setattr(bicep, "_RULES", [("IAC-BICEP-BAD", _boom)])
     out = bicep.run_scan(tmp_path)
-    assert out.status == "error" and "RuntimeError" in out.diagnostics
+    assert out.status == "error"
+    assert "RuntimeError" in out.diagnostics
 
 
 # --------------------------------------------------------------------------- #
@@ -198,7 +201,8 @@ def test_cfn_iter_resources_skips_malformed() -> None:
         }
     }
     out = list(cfn._iter_resources(tpl))
-    assert len(out) == 1 and out[0][0] == "Good"
+    assert len(out) == 1
+    assert out[0][0] == "Good"
 
 
 def test_cfn_iter_resources_non_dict_resources_block() -> None:
@@ -235,4 +239,5 @@ def test_cfn_run_scan_rule_engine_error(tmp_path: Path, monkeypatch) -> None:
 
     monkeypatch.setattr(cfn, "_RULES", [("IAC-CFN-BAD", _boom)])
     out = cfn.run_scan(tmp_path)
-    assert out.status == "error" and "RuntimeError" in out.diagnostics
+    assert out.status == "error"
+    assert "RuntimeError" in out.diagnostics

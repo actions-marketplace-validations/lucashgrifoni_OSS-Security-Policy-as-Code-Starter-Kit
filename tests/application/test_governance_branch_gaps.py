@@ -7,11 +7,10 @@ defensive branches that a schema-valid evidence file can never reach.
 from __future__ import annotations
 
 import json
-from datetime import date
 from pathlib import Path
 
 from oss_policy_kit.application.evaluators import governance as gov
-from oss_policy_kit.domain.models import ControlStatus, EvidenceCollectionMethod
+from oss_policy_kit.domain.models import ControlStatus, EvidenceCollectionMethod, utc_now
 from oss_policy_kit.infrastructure.aws_ci_parser import AwsCiAnalysis
 from oss_policy_kit.infrastructure.azure_pipeline_parser import AzurePipelineAnalysis
 from oss_policy_kit.infrastructure.workflow_parser import WorkflowAnalysis
@@ -83,7 +82,7 @@ def test_evidfresh_054_undated_when_json_is_list(tmp_path: Path) -> None:
 
 def test_evidfresh_054_zero_max_age_falls_back(tmp_path: Path) -> None:
     """Negative max_age resets to the default window, so a fresh file PASSes (line 351)."""
-    _evid(tmp_path, "fresh.json", {"collected_at": date.today().isoformat()})
+    _evid(tmp_path, "fresh.json", {"collected_at": utc_now().date().isoformat()})
     out = gov.eval_gov_evidfresh_054(_ctx(tmp_path, max_age=-1))
     assert out.status == ControlStatus.PASS
 
@@ -96,7 +95,7 @@ def test_evidfresh_054_zero_max_age_falls_back(tmp_path: Path) -> None:
 def test_classify_evidence_files_error_path(tmp_path: Path) -> None:
     bad = tmp_path / "bad.json"
     bad.write_text("{", encoding="utf-8")
-    stale, undated, warns, err = gov._classify_evidence_files([bad], date.today(), 90)
+    stale, undated, warns, err = gov._classify_evidence_files([bad], utc_now().date(), 90)
     assert err is not None
     assert err.status == ControlStatus.MANUAL_REVIEW_REQUIRED
 
@@ -108,12 +107,14 @@ def test_classify_evidence_files_error_path(tmp_path: Path) -> None:
 
 def test_mfa_failure_none_all_members(tmp_path: Path) -> None:
     out = gov._mfa_enforcement_failure(None, True, tmp_path / "x.json")
-    assert out is not None and out.status == ControlStatus.MANUAL_REVIEW_REQUIRED
+    assert out is not None
+    assert out.status == ControlStatus.MANUAL_REVIEW_REQUIRED
 
 
 def test_mfa_failure_admins_off_only(tmp_path: Path) -> None:
     out = gov._mfa_enforcement_failure(True, False, tmp_path / "x.json")
-    assert out is not None and out.status == ControlStatus.FAIL
+    assert out is not None
+    assert out.status == ControlStatus.FAIL
 
 
 def test_mfa_failure_clean_returns_none(tmp_path: Path) -> None:
@@ -160,7 +161,9 @@ def test_classify_sbom_file_unconfirmed(tmp_path: Path) -> None:
     p = tmp_path / "not-an-sbom.json"
     p.write_text("just some text, not an sbom", encoding="utf-8")
     label, note, unconfirmed = gov._classify_sbom_file(p)
-    assert label is None and note is None and unconfirmed == p.name
+    assert label is None
+    assert note is None
+    assert unconfirmed == p.name
 
 
 def test_classify_sbom_file_unreadable_returns_all_none(tmp_path: Path) -> None:

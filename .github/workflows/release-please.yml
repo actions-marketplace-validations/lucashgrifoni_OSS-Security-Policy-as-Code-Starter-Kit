@@ -51,6 +51,9 @@ concurrency:
   group: release-please-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  PYTHON_VERSION: "3.12"
+
 jobs:
   release-please:
     name: Open or update release PR
@@ -58,9 +61,12 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read # write scopes are supplied by the App token, not GITHUB_TOKEN
+    outputs:
+      # Empty when there is no open release PR, which is what gates the job below.
+      release_branch: ${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).headBranchName || '' }}
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -73,10 +79,110 @@ jobs:
         with:
           client-id: ${{ secrets.RELEASE_PLEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_PLEASE_APP_PRIVATE_KEY }}
+          # Without these the minted token inherits every permission the App
+          # installation holds. release-please needs exactly three: it writes the
+          # release commit and tag (contents), opens and updates the release PR
+          # (pull-requests), and labels it (issues).
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
 
       - name: Run release-please
+        id: release
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           config-file: .github/release-please-config.json
           manifest-file: .github/.release-please-manifest.json
           token: ${{ steps.app-token.outputs.token }}
+
+  # The version-stamp guard in tests/docs/test_sample_reports_match_the_shipped_contract.py
+  # requires the checked-in sample reports to carry the version of the tree they sit in.
+  # release-please bumps the tree and cannot regenerate the samples, so every release branch
+  # arrived with the guard failing and a human had to regenerate by hand -- twice in a row
+  # before this job existed. The dangerous shortcut it invites is editing the version string
+  # directly, which is exactly what the guard's own message forbids: that would claim a
+  # freshness the file does not have.
+  refresh-sample-reports:
+    name: Refresh the sample reports on the release PR
+    needs: release-please
+    if: needs.release-please.outputs.release_branch != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read # the push below uses the App token, not GITHUB_TOKEN
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            pypi.org:443
+            files.pythonhosted.org:443
+
+      - name: Mint GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.RELEASE_PLEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_PLEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+
+      - name: Check out the release branch
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.release-please.outputs.release_branch }}
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: true
+
+      - name: Setup Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install the bumped tree
+        # Dependencies come from the hashed lock; the tree itself is installed with
+        # --no-deps so the only unhashed artifact is the checkout being released.
+        run: |
+          python -m pip install --require-hashes -r .github/requirements/runtime-all.txt
+          python -m pip install --no-deps -e .
+
+      - name: Regenerate both sample labs
+        run: |
+          set -euo pipefail
+          # Read the pinned epoch from the document that defines it rather than repeating the
+          # number here. A second copy is a second thing to drift, and the whole point of the
+          # pin is that the output is byte-identical between runs.
+          epoch="$(grep -oE 'SOURCE_DATE_EPOCH=[0-9]+' docs/sample-reports/README.md | head -1 | cut -d= -f2)"
+          if [ -z "${epoch}" ]; then
+            echo "::error::No SOURCE_DATE_EPOCH found in docs/sample-reports/README.md. Regenerating without it would rewrite every timestamp." >&2
+            exit 1
+          fi
+          echo "Using SOURCE_DATE_EPOCH=${epoch} from docs/sample-reports/README.md"
+          export SOURCE_DATE_EPOCH="${epoch}"
+          python -m oss_policy_kit evaluate --target ./examples/hardened-repo             --profile github-level-1 --output-dir ./docs/sample-reports/hardened --summary-only
+          python -m oss_policy_kit evaluate --target ./examples/vulnerable-repo             --profile github-level-1 --output-dir ./docs/sample-reports/vulnerable --summary-only
+
+      - name: Commit only if something actually changed
+        env:
+          BRANCH: ${{ needs.release-please.outputs.release_branch }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- docs/sample-reports/; then
+            echo "Sample reports already match this tree; nothing to push."
+            exit 0
+          fi
+          # Guard the blast radius: this job exists to move a version stamp, so anything
+          # outside the sample reports means the regeneration did something unexpected and
+          # the run should stop rather than commit it.
+          if ! git diff --quiet -- . ':(exclude)docs/sample-reports/'; then
+            echo "::error::Regeneration touched files outside docs/sample-reports/:" >&2
+            git diff --name-only -- . ':(exclude)docs/sample-reports/' >&2
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/sample-reports/
+          git commit -m "chore(release): regenerate the sample reports for this version bump"
+          git push origin "HEAD:${BRANCH}"

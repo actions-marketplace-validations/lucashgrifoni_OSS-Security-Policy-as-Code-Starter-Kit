@@ -14,16 +14,18 @@ exactly.
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from oss_policy_kit.application._evidence_rules import (
+    absent_technology_outcome,
     files_scanned_list,
     rule_finding_count,
     sample_finding_files,
+    unread_sources_note,
 )
+from oss_policy_kit.application.evaluators_common import read_scanner_evidence
 from oss_policy_kit.domain.models import ControlStatus, EvalOutcome
 
 _EVIDENCE_FILENAME = "iac-cfn.json"
@@ -44,25 +46,11 @@ def _load_evidence(repo_root: Path) -> tuple[dict[str, Any] | None, EvalOutcome 
             evidence_sources=[],
             confidence="medium",
         )
-    try:
-        data = json.loads(evidence.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        return None, EvalOutcome(
-            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
-            reason=f"Could not parse CloudFormation IaC evidence file: {exc}",
-            remediation="Re-run `oss-policy-kit scan-cfn` to regenerate the evidence file.",
-            evidence_sources=[str(evidence.resolve())],
-            confidence="low",
-        )
-    schema = str(data.get("schema_version", ""))
-    if not schema.startswith(_SCHEMA_PREFIX):
-        return None, EvalOutcome(
-            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
-            reason=f"Unexpected schema_version in {evidence.name}: {schema!r}. Expected prefix {_SCHEMA_PREFIX!r}.",
-            remediation="Regenerate via `oss-policy-kit scan-cfn` to align with the current contract.",
-            evidence_sources=[str(evidence.resolve())],
-            confidence="low",
-        )
+    data = read_scanner_evidence(
+        evidence, label="CloudFormation IaC", regenerate_cmd="oss-policy-kit scan-cfn", schema_prefix=_SCHEMA_PREFIX
+    )
+    if isinstance(data, EvalOutcome):
+        return None, data
     status = str(data.get("status", "unknown")).lower()
     if status in {"timeout", "error"}:
         return None, EvalOutcome(
@@ -85,6 +73,9 @@ def _make_cfn_evaluator(rule_id: str, summary: str) -> Callable[[Any], EvalOutco
         sources = [str(evidence_path.resolve())]
         files_scanned = files_scanned_list(data)
         if not files_scanned:
+            blocked = absent_technology_outcome(data, technology="CloudFormation", sources=sources)
+            if blocked is not None:
+                return blocked
             return EvalOutcome(
                 status=ControlStatus.NOT_APPLICABLE,
                 reason="No CloudFormation templates detected in repository; control is not applicable.",
@@ -98,6 +89,7 @@ def _make_cfn_evaluator(rule_id: str, summary: str) -> Callable[[Any], EvalOutco
                 status=ControlStatus.PASS,
                 reason=(
                     f"No {rule_id} findings detected across {len(files_scanned)} scanned CloudFormation template(s)."
+                    f"{unread_sources_note(data)}"
                 ),
                 remediation="Re-scan after CFN changes to keep evidence fresh.",
                 evidence_sources=sources,
@@ -112,7 +104,7 @@ def _make_cfn_evaluator(rule_id: str, summary: str) -> Callable[[Any], EvalOutco
             ),
             remediation=(
                 "Review evaluation-report.md for details and remediate the listed resources, "
-                "or document an explicit waiver in waivers.yaml with owner, reason, and expires_on."
+                "or document an explicit waiver in waivers.yaml with owner, reason, and expires_at."
             ),
             evidence_sources=sources,
             confidence="high",

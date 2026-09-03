@@ -12,6 +12,7 @@ fuzzing dashboards or the Scorecard live API.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
@@ -55,15 +56,32 @@ def _scorecard_fuzzing_signal(ctx: Any) -> tuple[bool, str | None]:
 
 
 def _iter_candidate_paths(repo_root: Path) -> Iterable[Path]:
-    """Yield up to ``_SCAN_FILE_LIMIT`` candidate files under repo (skipping noisy dirs)."""
+    """Yield up to ``_SCAN_FILE_LIMIT`` candidate files under repo, in a fixed order.
+
+    The order is the point. This used to yield from ``rglob``, which is filesystem order:
+    sorted on NTFS, hash order on ext4. Because the walk stops at ``_SCAN_FILE_LIMIT``,
+    *which* files a repository larger than the limit gets scanned at all was decided by the
+    filesystem, so the same clone could report a different evidence path -- or reach a
+    different verdict -- on two machines. For a kit whose contract is reproducible evidence
+    that is a defect, not a detail. It surfaced as a coverage gap: the test for the
+    unreadable-file branch relied on `a_locked.py` being walked before `z_good.py`, which
+    held on Windows and stopped holding on Linux.
+
+    ``os.walk`` with both lists sorted in place is deterministic and streams, and pruning
+    ``dirnames`` skips a noisy directory instead of walking it and discarding each path --
+    which is what the previous version did, once per file inside `node_modules`.
+    """
 
     seen = 0
     try:
-        for path in repo_root.rglob("*"):
-            parts = path.relative_to(repo_root).parts
-            if any(p in _SKIP_DIRS for p in parts):
-                continue
-            if path.is_file():
+        for dirpath, dirnames, filenames in os.walk(repo_root):
+            dirnames[:] = sorted(d for d in dirnames if d not in _SKIP_DIRS)
+            filenames.sort()
+            here = Path(dirpath)
+            for name in filenames:
+                path = here / name
+                if not path.is_file():
+                    continue
                 yield path
                 seen += 1
                 if seen >= _SCAN_FILE_LIMIT:

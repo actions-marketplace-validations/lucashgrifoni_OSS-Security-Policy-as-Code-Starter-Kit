@@ -36,7 +36,7 @@ python -m oss_policy_kit init --target . --format json
 
 The command is idempotent: re-running without `--force` preserves any file you have edited and reports it as `skipped`. Pass `--force` only when you want to replace generated files with the latest defaults.
 
-> **Honesty contract.** `oss-policy-kit.yaml` is reserved for future kit versions to consume when `--profile` is omitted from `evaluate`. Today the file documents intent and powers reproducibility, but `evaluate` still reads its inputs from explicit flags. The file uses a stable `schema_version` (`oss-policy-kit/config/v1`) so the upcoming consumer can migrate safely.
+> **Config contract.** `oss-policy-kit.yaml` is consumed by `evaluate` as a fallback: when `--profile`, `--fail-on`, `--output-dir`, or `--report-json-contract` is omitted, the value recorded in the file is used; an explicit flag always wins. The file uses a stable `schema_version` (`oss-policy-kit/config/v1`) so it can evolve safely.
 
 The JSON output uses `schema_version: oss-policy-kit/init-result/v1` and is additive across releases.
 
@@ -51,7 +51,7 @@ python -m oss_policy_kit evaluate --target .      # uses the profile from the fi
 
 When the fallback is used, evaluate logs `Using profile from oss-policy-kit.yaml: <profile-id>` on stderr. Explicit `--profile <id>` always wins over the file. Missing both flag **and** config produces exit code 2 with a clear message.
 
-The config schema (`oss-policy-kit/config/v1`) records: `profile`, `profile_source`, `fail_on`, `output_dir`, `report_json_contract`, and detected metadata. `fail_on` and `output_dir` are still consumed via flags only in this release; future versions will expand the fallback surface.
+The config schema (`oss-policy-kit/config/v1`) records: `profile`, `profile_source`, `fail_on`, `output_dir`, `report_json_contract`, and detected metadata. `fail_on`, `output_dir`, and `report_json_contract` are also consumed from the config as fallbacks when the corresponding flag is omitted; an explicit flag always wins.
 
 ## SAST evidence
 
@@ -119,7 +119,7 @@ python -m oss_policy_kit recommend-profile --target . --format json
 `recommend-profile` is **heuristic guidance**, not a compliance verdict. It can be strongly influenced by local `.oss-policy-kit/evidence/*.json`, platform signals in CI files, and repository manifests/lockfiles. Treat the recommendation as a starting point, then confirm with an explicit `evaluate` run and review the resulting statuses.
 
 > **Caveat: evidence templates trigger release-hardening recommendations.**
-> `recommend-profile` may suggest `release-hardening-*` profiles when it detects evidence JSON files under `.oss-policy-kit/evidence/` — even if those files still contain placeholder values from `scaffold-evidence`. Running `evaluate` against an unfilled template will surface `manual-review-required` for evidence-backed controls (this is the tool being honest about missing evidence; not a bug). Recommended flow: run `scaffold-evidence`, fill the JSONs with real values, then re-run `recommend-profile`. See also [results-guide.md](results-guide.md#evidence-templates-vs-real-evidence).
+> `recommend-profile` may suggest `release-hardening-*` profiles when it detects evidence JSON files under `.oss-policy-kit/evidence/` — even if those files still contain placeholder values from `scaffold-evidence`. Running `evaluate` against an unfilled template surfaces `not-evaluated` for every evidence-backed control that reads it, and the control's message names the placeholder token it found (this is the tool declining to score a template; not a bug). Recommended flow: run `scaffold-evidence`, fill the JSONs with real values, then re-run `recommend-profile`. See also [results-guide.md](results-guide.md#evidence-templates-vs-real-evidence).
 
 ## Batch / Monorepo
 
@@ -221,20 +221,34 @@ runaway file in an adopter repository cannot exhaust evaluator/CI memory or time
 
 | Input | Default cap | On oversize |
 | ----- | ----------- | ----------- |
-| Evidence JSON (`.oss-policy-kit/evidence/*.json`), `--scorecard-json`, `--waivers` | **5 MiB** | evidence degrades to `manual-review-required`; CLI inputs (`--scorecard-json`, `--waivers`) fail with a clear validation error (exit 2) |
+| Evidence JSON/YAML (`.oss-policy-kit/evidence/*`), `--scorecard-json`, `--waivers` (including `correlate-findings --waivers`) | **5 MiB** | evidence degrades to `manual-review-required`; CLI inputs fail with a clear validation error (exit 2) |
 | SARIF (`--sarif-output` ingestion, `emit-vex --osv-sarif`, SAST evidence `*.sarif.json`) | **20 MiB** | SARIF-backed controls degrade to `manual-review-required`; `emit-vex` reports a clear error |
+| `oss-policy-kit.yaml` | **1 MiB** | fails with a clear validation error (exit 2) |
 
-The caps are conservative defaults (evidence files are small attestations; SARIF can be
-larger). There is no override flag yet — it will be added only if a concrete adopter use
-case appears. Files are refused *before* being read into memory.
+The caps are conservative defaults (config holds a handful of scalar fields, evidence
+files are small attestations, and SARIF can legitimately be large). There is no override
+flag yet — it will be added only if a concrete adopter use case appears. Files are
+refused *before* being read into memory.
+
+Size is not the only way a file can be hostile. Every user-controlled document is read
+through one defensive path, so a document nested deeper than the parser's stack, an
+integer literal longer than the 4300 digits Python will convert, a file in the wrong
+encoding, and a file the process has no permission to read all surface as usage errors
+(**exit 2**) with an actionable message. None of them reaches exit 3, which stays
+reserved for a defect in the kit itself.
 
 ### Third-party evaluator plugin visibility
 
 When a custom evaluator package registered under the `oss_policy_kit.evaluators`
 entry-point group fails to import/load, built-in evaluation is never affected — but the
 failure is no longer silent. Run `evaluate --verbose` to see each plugin load problem
-(`load`, `not-callable`, `builtin-precedence`, or `discovery`) on stderr, so you can tell
-whether a custom control is actually active.
+(`load`, `not-callable`, `builtin-precedence`, `plugin-collision`, or `discovery`) on
+stderr, so you can tell whether a custom control is actually active.
+
+`builtin-precedence` and `plugin-collision` are different problems and are reported
+separately: the first means a bundled control already owns the ID, the second means
+another one of *your* plugins claimed it first — the row names which entry point won, and
+entry points load in discovery order.
 
 ## Pipeline-Friendly Output
 
@@ -254,8 +268,38 @@ The **human** `--summary-only` mode prints a short, action-oriented recap (count
 
 ## Waivers: versioned in repo vs `--waivers`
 
-- **`--waivers`**: external YAML loaded for **this run only**; may set specific controls to `waived`. The report states the absolute path under `external_waiver_path`.
+- **`--waivers`**: external YAML loaded for **this run only**; may set specific controls to `waived`. The report states the waiver file's basename under `external_waiver_path` by default (privacy-by-default, M-002); pass `--include-absolute-path` to keep the full absolute path.
 - **`GOV-WAIV-014`**: checks for a **versioned** waiver policy file **inside the clone** (for example `waivers/waivers.yaml`). Using `--waivers` does **not** satisfy that control by design; the Markdown report explains both mechanisms side by side.
+
+### When the `--waivers` path cannot be read
+
+A path you typed that turns out to be missing (a typo) or to be a directory is handled
+**differently depending on what the command produces**. This is deliberate — see
+[ADR-044](decisions/adr-044-unreadable-waivers-gate-fails-document-warns.md).
+
+| Output | Command | Behaviour | Exit |
+|---|---|---|---:|
+| a verdict | `evaluate` | stops: `Waivers file not found: <path>` | `2` |
+| a verdict | `correlate-findings` | stops: `--waivers <path> is not a file.` | `2` |
+| a document | `emit-vex` | warns on stderr, still writes the document | `0` |
+
+The rule behind the split:
+
+> An unreadable `--waivers` path **fails** any command whose output asserts a verdict, and
+> **warns** any command whose output can state its own incompleteness.
+
+A gate that lost its waivers reports controls as failing that you legitimately dispensed —
+those verdicts are wrong, so the run must stop. A VEX emitted without waivers is not wrong:
+every finding carries CycloneDX `in_triage` / OpenVEX `under_investigation`, which says exactly
+what happened — these were not analysed. Withholding that document would remove accurate
+information rather than prevent inaccurate information.
+
+**In CI, do not rely on the `emit-vex` warning being read.** stderr is easy to bury in a job
+log. If a typo'd waiver path must fail your pipeline, assert on the emitted document instead —
+for example, fail when any `analysis.state` is `in_triage` and you expected `not_affected`.
+
+An **absent default** `waivers/waivers.yaml` is an ordinary repository state and stays silent
+in every command; only a path you passed explicitly produces the messages above.
 
 ## Exit Codes
 
@@ -281,24 +325,27 @@ After a successful evaluation:
 | --- | --- | --- | --- |
 | (root) | — | `--version/-V`, `--help/-h`, `--debug`, `--show-profiles/-sp` (**deprecated, use the `profiles` subcommand**) | Compatibility entry point; also accepts the same flags as `evaluate` for backward compat. `--debug` (place before any subcommand, e.g. `oss-policy-kit --debug evaluate ...`) emits per-control diagnostics to stderr; stdout output is unchanged. |
 | `profiles` | — | `--format/-f` (`compact` default, `table`, `detailed`, `json`), `--family` (`github`/`gitlab`/`azure`/`aws`/`multi`), `--only-extreme`, `--advisory-only` | Listing only. JSON returns the `oss-policy-kit/profile-list/v2` schema. |
-| `evaluate` | `--profile/-p` (or positional target) | `--target/-t`, `--output-dir/-o`, `--format/-f`, `--summary-only/-so`, `--fail-on/-fo` (`none`/`fail`/`degraded`), `--waivers/-w`, `--scorecard-json/-sj`, `--report-json-contract` (`2.0`/`1.0`/`0.3`/`0.2`), `--use-insights-evidence`, `--applicability-engine`, `--enable-attested`, `--sarif-output`, `--include-absolute-path` (opt-in; default is privacy-by-default basename), `--verbose/-v`, `--quiet/-q`, `--kit-root/-k` | Default contract is `2.0` (v7.0.0 flip, ADR-027); `1.0`/`0.3`/`0.2` remain selectable. `--use-insights-evidence` (default off) lets the disclosure allowlist consume a target's SECURITY-INSIGHTS.yml as self-attested evidence (ADR-033). `--applicability-engine` (default off, ADR-028) resolves controls with an unmet declared precondition to NOT_APPLICABLE consistently. `--enable-attested` (default off, ADR-028) resolves a control whose pass is anchored on a verified attestation record (transparency-log inclusion + fresh `verified_at`) to ATTESTED instead of PASS; never relaxes a FAIL. SARIF only emitted when `--sarif-output` is set. `target_path` in the JSON / Markdown report is the target's basename by default — pass `--include-absolute-path` to keep the full absolute path. |
-| `evaluate-many` | `--target-root`, `--profiles/-p` (comma-separated) | `--output-dir/-o`, `--include`, `--exclude` (fnmatch on child names), `--fail-on/-fo`, `--skip-non-repos`, `--quiet/-q`, `--kit-root/-k` | Iterates immediate children of `--target-root`. `--profiles` is plural. |
+| `evaluate` | `--profile/-p` (or positional target) | `--target/-t`, `--output-dir/-o`, `--format/-f`, `--summary-only/-so`, `--fail-on/-fo` (`none`/`fail`/`degraded`), `--waivers/-w`, `--scorecard-json/-sj`, `--report-json-contract` (`2.0` only), `--use-insights-evidence`, `--applicability-engine`, `--enable-attested`, `--with-findings-summary`, `--sarif-output`, `--include-absolute-path` (opt-in; default is privacy-by-default basename), `--verbose/-v`, `--quiet/-q`, `--kit-root/-k` | `reports/2.0` is the **only** report contract (v9.0.0, ADR-043); the legacy `1.0`/`0.3`/`0.2` were removed and now error with exit 2 (no silent fallback). `--use-insights-evidence` (default off) lets the disclosure allowlist consume a target's SECURITY-INSIGHTS.yml as self-attested evidence (ADR-033). `--applicability-engine` (default on since v8.0.0, ADR-041; opt out with `--no-applicability-engine`) resolves controls with an unmet declared precondition to NOT_APPLICABLE consistently. `--enable-attested` (default on since v8.0.0, ADR-041; opt out with `--no-enable-attested`) resolves a control whose pass is anchored on a verified attestation record (transparency-log inclusion + fresh `verified_at`) to ATTESTED instead of PASS; never relaxes a FAIL. `--with-findings-summary` (default off, ADR-030) embeds an additive `extensions.findings_summary` block computed in-process from the same clone; it changes no control state, `summary_by_status`, `results_digest`, or exit code (see [findings-correlation.md](findings-correlation.md) and [reports-contract-v2.0.md](reports-contract-v2.0.md)). SARIF only emitted when `--sarif-output` is set. `target_path` in the JSON / Markdown report is the target's basename by default — pass `--include-absolute-path` to keep the full absolute path. |
+| `evaluate-many` | `--target-root`, `--profiles/-p` (comma-separated) | `--output-dir/-o`, `--include`, `--exclude` (fnmatch on child names), `--fail-on/-fo`, `--skip-non-repos`, `--include-absolute-path` (opt-in; default is privacy-by-default basenames in the batch reports), `--quiet/-q`, `--kit-root/-k` | Iterates immediate children of `--target-root`. `--profiles` is plural. |
 | `recommend-profile` | `--target/-t` | `--format/-f` (`human` default, `json`) | Heuristic — never a compliance verdict. The `*-release-hardening-2` suggestions require BOTH a CI signal (workflow / pipeline / buildspec) AND release-shaped evidence to be present; a single workflow alone falls back to `*-level-1`. |
 | `init` | — (defaults `--target .`) | `--profile/-p`, `--platform`, `--fail-on`, `--output-dir/-o`, `--with-waivers`, `--with-evidence`, `--with-workflow`, `--force/-f`, `--dry-run`, `--format` (`human`/`json`) | Writes `oss-policy-kit.yaml` and optional artifacts. Idempotent without `--force`. |
 | `osps-coverage` | — | `--format` (`human` default / `json`) | Prints **advisory** coverage of the OpenSSF OSPS Baseline v2026.02.19: honest per-level (L1/L2/L3) counts of criteria with a clone-visible signal from an `osps-baseline-2026-1` control, plus the real gaps. Read-only; **not** a conformance certification and changes no `evaluate` verdict. Since v7.2.0. See [`osps-baseline-2026-coverage.md`](osps-baseline-2026-coverage.md) and ADR-037. |
+| `diff-catalogs` | `--from` | `--to` (default: bundled catalog), `--format` (`human` default / `json`) | Shows the control + profile delta between two kit catalogs. Each side is a kit data directory (with `controls/catalog.yaml` and `profiles/`) or a bare `catalog.yaml` (controls-only). Reports added / removed / changed controls (title, category, automation, lifecycle, assurance, weight) and added / removed profiles + per-profile membership changes. Read-only; changes no `evaluate` verdict. Since v8.1.0. |
 | `scan-sast` | — (defaults `--target .`) | `--rulesets` (csv, default `auto`), `--timeout`, `--format` (`human`/`json`) | Runs Semgrep when available and writes `.oss-policy-kit/evidence/sast-semgrep.json`. Status `not_available` is recorded honestly when Semgrep is missing. |
 | `scan-iac` | — (defaults `--target .`) | `--include` (csv glob, default `**/*.tf`), `--exclude` (csv glob), `--timeout`, `--format` (`human`/`json`) | Runs the bundled Terraform / OpenTofu rule pack and writes `.oss-policy-kit/evidence/iac-terraform.json` (schema `oss-policy-kit/evidence/iac-terraform/v1`). Status `not_available` is recorded honestly when `python-hcl2` is missing (`pip install 'oss-policy-kit[iac]'`). |
 | `scan-bicep` | — (defaults `--target .`) | `--include` (csv glob, default `**/*.bicep`), `--exclude` (csv glob), `--timeout`, `--format` (`human`/`json`) | Runs the bundled Bicep rule pack and writes `.oss-policy-kit/evidence/iac-bicep.json`. |
-| `scan-cfn` | — (defaults `--target .`) | `--include` (csv glob, default `**/*.yml`/`**/*.yaml`/`**/*.json`), `--exclude` (csv glob), `--timeout`, `--format` (`human`/`json`) | Runs the bundled CloudFormation rule pack and writes `.oss-policy-kit/evidence/iac-cfn.json`. |
+| `scan-cfn` | — (defaults `--target .`) | `--include` (csv glob, default `**/*.yaml`/`**/*.yml`/`**/*.json`/`**/*.template`), `--exclude` (csv glob), `--timeout`, `--format` (`human`/`json`) | Runs the bundled CloudFormation rule pack and writes `.oss-policy-kit/evidence/iac-cfn.json`. |
 | `scan-pulumi` | — (defaults `--target .`) | `--include` (csv glob), `--exclude` (csv glob), `--timeout`, `--format` (`human`/`json`) | Runs the bundled Pulumi rule pack and writes `.oss-policy-kit/evidence/iac-pulumi.json`. |
-| `scan-k8s` | — (defaults `--target .`) | `--include` (csv glob), `--exclude` (csv glob), `--helm-pre-pass`/`--no-helm-pre-pass`, `--timeout`, `--format` (`human`/`json`) | Runs the bundled Kubernetes rule pack (manifests + optional Helm pre-pass) and writes `.oss-policy-kit/evidence/k8s-baseline.json`. |
+| `scan-k8s` | — (defaults `--target .`) | `--include` (csv glob), `--exclude` (csv glob), `--helm-render`/`--no-helm-render`, `--timeout`, `--format` (`human`/`json`) | Runs the bundled Kubernetes rule pack (manifests + optional Helm pre-pass) and writes `.oss-policy-kit/evidence/k8s-baseline.json`. |
 | `scaffold-evidence` | `--target/-t`, `--platform` (`github`/`gitlab`/`azure`/`aws`) | `--force` | Creates `.oss-policy-kit/evidence/` and template JSON files. `--target` must already exist. |
 | `collect-evidence` | `--target/-t`, `--platform` (`github`/`gitlab`/`azure`/`aws`) | `--repo`, `--output-dir/-o`, `--dry-run` | `--dry-run` reports presence/absence of credential env vars without printing values, and does not require `--target` to exist on disk. GitLab uses `GITLAB_TOKEN` (+ optional `GITLAB_URL`) and `--repo group/project`. On `--platform github` it also collects release-immutability evidence (latest release `immutable` flag) and org Actions-policy evidence (`admin:org` scope; soft-skips without it) — see [`collector-parity.md`](collector-parity.md) and ADR-038. |
 | `diff-reports` | `--before`, `--after` | `--format/-f` (`table` default, `json`, `markdown`), `--fail-on-regression` / `--no-fail-on-regression` | Default is to exit `1` on regression; opt out with `--no-fail-on-regression`. |
 | `emit-vex` | — (defaults `--osv-sarif .oss-policy-kit/evidence/sast/osv-scanner.sarif.json`) | `--osv-sarif`, `--output/-o`, `--waivers`, `--validate`, `--include-references`, `--format` (`cyclonedx` default / `openvex`), `--product` (OpenVEX only) | Emits a VEX document from OSV-Scanner SARIF. Default `--format cyclonedx` (CycloneDX VEX 1.6); `--format openvex` emits OpenVEX v0.2.0. Findings without a matching per-CVE waiver get `in_triage` / `under_investigation`; waived findings get `not_affected`. See [`vex-emission.md`](vex-emission.md), ADR-002, and ADR-031. CycloneDX since v5.9.0; OpenVEX since v6.6.0. |
-| `emit-insights` | — (defaults `--target .`) | `--target/-t`, `--output/-o`, `--validate` | Emits an OpenSSF Security Insights 1.0 YAML document for the repository. See [`insights-emission.md`](insights-emission.md). |
-| `ingest-insights` | — (defaults `--target .`) | `--target/-t`, `--input`, `--format` (`human` default / `json`) | Reads + structurally validates a target's `SECURITY-INSIGHTS.yml` (or the kit's own `security-insights.yml`) and reports its **self-reported** signals. Read-only; the symmetric consumer for `emit-insights`. Does not change any `evaluate` gate. Exits `1` when a file is found but structurally invalid. Since v6.7.0. See [`insights-ingestion.md`](insights-ingestion.md) and ADR-032. |
+| `emit-insights` | — (defaults `--target .`) | `--target`, `--output`, `--validate` | Emits an OpenSSF Security Insights 1.0 YAML document for the repository. See [`insights-emission.md`](insights-emission.md). |
+| `ingest-insights` | — (defaults `--target .`) | `--target`, `--input`, `--format` (`human` default / `json`) | Reads + structurally validates a target's `SECURITY-INSIGHTS.yml` (or the kit's own `security-insights.yml`) and reports its **self-reported** signals. Read-only; the symmetric consumer for `emit-insights`. Does not change any `evaluate` gate. Exits `1` when a file is found but structurally invalid. Since v6.7.0. See [`insights-ingestion.md`](insights-ingestion.md) and ADR-032. |
+| `ingest-scorecard` | — (defaults `--target .`) | `--target`, `--input/-i`, `--format` (`human` default / `json`) | Ingests an OpenSSF Scorecard v5.x JSON result (`scorecard --format json`), maps each Scorecard check to the kit control it **corroborates**, and reports the mapping + result freshness (>90d → stale). The corroboration is **supplemental inferred-trust signal**: it never elevates a control's assurance grade. Records Scorecard's own scores **verbatim** (never recomputes a check — the kit is not a scanner engine) and changes no `evaluate` verdict. Exits `1` when a result file is found but unparseable. Since v8.1.0. See [`scorecard-mapping.md`](scorecard-mapping.md). |
+| `correlate-findings` | — (defaults `--target .`) | `--output/-o` (default `.oss-policy-kit/findings.json`), `--format` (`human` default / `json` / `sarif`), `--fail-on-severity` (`critical`/`high`/`medium`/`low`), `--fail-on-kev`, `--waivers`, `--enrichment-file`, `--include-absolute-path` | Correlates the scanner evidence already on disk (6 kit evidence JSONs + 4 external SARIFs) into ONE deduplicated, KEV/EPSS-ranked `findings/1.0` artifact (deterministic `opk-fk/v1` ids, conservative under-merge). Stateless single run; composes scanner verdicts, never re-scans/re-scores, and changes no `evaluate` verdict. Waived findings stay visible but skip the `--fail-on-*` gates. A relative `--waivers`, `--enrichment-file`, and `--output` path all resolve against `--target` (the whole chain reads and writes under `--target`); an absolute path is honored verbatim. `--format sarif` self-describes as an aggregator with per-result source attribution. Since v10.0.0. See [`findings-correlation.md`](findings-correlation.md) and ADR-030. |
 | `export-evidence` | — (defaults `--target .`) | `--target/-t`, `--report`, `--format`, `--output/-o`, `--validate` | Exports the latest evaluation report into an external format. The `chainloop` format is experimental. See [`evidence-export.md`](evidence-export.md) and ADR-012. |
-| `export-policy` | `--profile/-p` | `--format` (`rego` default / `cel`), `--output/-o`, `--kit-root/-k`, `--validate` | Renders a profile + catalog into a best-effort OPA/Rego or Kyverno/CEL policy **skeleton** (one rule per control) that gates a kit `evaluation-report.json` (reports/2.0). Integration shim, **not** a reimplementation of the evaluators — see the fidelity header in the generated file. Since v7.0.0. See [`policy-export.md`](policy-export.md) and ADR-035. |
+| `export-policy` | `--profile/-p` | `--format` (`rego` default / `cel`), `--output/-o`, `--kit-root`, `--validate` | Renders a profile + catalog into a best-effort OPA/Rego or Kyverno/CEL policy **skeleton** (one rule per control) that gates a kit `evaluation-report.json` (reports/2.0). Integration shim, **not** a reimplementation of the evaluators — see the fidelity header in the generated file. Since v7.0.0. See [`policy-export.md`](policy-export.md) and ADR-035. |
 
 Exit codes are uniform across subcommands: `0` success, `1` `--fail-on` / regression threshold violated, `2` invalid usage or missing input, `3` unexpected internal error.

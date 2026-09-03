@@ -10,13 +10,16 @@ from __future__ import annotations
 import contextlib
 import importlib.metadata
 import json
+import math
 import re
-from collections.abc import Callable, Iterator
+import tomllib
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
 
+import yaml
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
@@ -26,6 +29,10 @@ from oss_policy_kit.application.evaluators_common import (
 )
 from oss_policy_kit.application.evaluators_common import (
     INVALID_DIGEST_REASON as _INVALID_DIGEST_REASON,
+)
+from oss_policy_kit.application.evaluators_common import (
+    as_mapping,
+    strip_yaml_comments,
 )
 from oss_policy_kit.application.evaluators_common import (
     evidence_is_api_backed as _evidence_is_api_backed,
@@ -41,12 +48,24 @@ from oss_policy_kit.application.evaluators_common import (
 )
 from oss_policy_kit.application.evidence_loading import load_evidence_schema
 from oss_policy_kit.application.evidence_placeholders import has_placeholder_values, is_placeholder_digest
-from oss_policy_kit.application.input_limits import MAX_SARIF_BYTES, oversize_reason
+from oss_policy_kit.application.input_limits import (
+    BAD_INPUT_ERRORS,
+    MAX_JSON_DEPTH,
+    MAX_SARIF_BYTES,
+    bad_input_detail,
+    max_json_nesting_depth,
+    overexpanded_reason,
+    oversize_reason,
+)
+from oss_policy_kit.application.input_limits import (
+    _advance_json_string as _advance_json_string_impl,
+)
 from oss_policy_kit.application.insights_evidence import InsightsEvidence
-from oss_policy_kit.domain.models import ControlStatus, EvalOutcome, EvidenceCollectionMethod
+from oss_policy_kit.domain.models import ControlStatus, EvalOutcome, EvidenceCollectionMethod, utc_now
 from oss_policy_kit.infrastructure.aws_ci_parser import AwsCiAnalysis
 from oss_policy_kit.infrastructure.azure_pipeline_parser import AzurePipelineAnalysis
 from oss_policy_kit.infrastructure.gitlab_ci_parser import GitLabCiAnalysis
+from oss_policy_kit.infrastructure.source_text import decode_source
 from oss_policy_kit.infrastructure.workflow_parser import WorkflowAnalysis
 from oss_policy_kit.infrastructure.yaml_io import load_yaml_file
 
@@ -59,6 +78,7 @@ _PACKAGE_JSON = "package.json"
 _PYPROJECT_TOML = "pyproject.toml"
 _README_MD = "README.md"
 _REQUIREMENTS_TXT = "requirements.txt"
+_POETRY_LOCK = "poetry.lock"
 _SECURITY_AT = "security@"
 _SECURITY_MD = "SECURITY.md"
 
@@ -174,6 +194,10 @@ def _aws_provenance_artifact_schema() -> dict[str, Any]:
 
 def _github_provenance_artifact_schema() -> dict[str, Any]:
     return load_evidence_schema("evidence-github-provenance-artifact.schema.json")
+
+
+def _gitlab_mr_rules_schema() -> dict[str, Any]:
+    return load_evidence_schema("evidence-gitlab-mr-rules.schema.json")
 
 
 def _audit_log_streaming_schema() -> dict[str, Any]:
@@ -427,8 +451,15 @@ def _gov_disc_013_private_reporting_signals(lower: str) -> bool:
 
 
 def _github_workflow_raw_suggests_release_or_deploy(raw: str) -> bool:
-    lower = raw.lower()
-    if re.search(r"(^|\n)\s*release\s*:", raw) or re.search(r"\bon\s*:\s*release\b", lower):
+    """Whether a workflow looks like it releases or deploys, from its text.
+
+    Comments blanked: this decides applicability for BUILD-SBOM-QUAL-003, which the derived
+    sweep caught moving FAIL -> UNKNOWN on three platforms when a single comment was added.
+    """
+
+    stripped = strip_yaml_comments(raw)
+    lower = stripped.lower()
+    if re.search(r"(^|\n)\s*release\s*:", stripped) or re.search(r"\bon\s*:\s*release\b", lower):
         return True
     push_main = "push" in lower and ("branches:" in lower or "branches :" in lower)
     push_main = push_main and ("main" in lower or "master" in lower)
@@ -548,11 +579,17 @@ def _reusable_workflow_uses_from_strings(uses_values: list[str]) -> list[str]:
 def _parse_branch_protection_evidence(evidence: Path) -> EvalOutcome:
     """Validate and interpret a branch-protection evidence file."""
     try:
-        data = json.loads(evidence.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        data = json.loads(evidence.read_text(encoding="utf-8-sig"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         return EvalOutcome(
             status=ControlStatus.MANUAL_REVIEW_REQUIRED,
-            reason=f"Branch protection evidence file is unreadable or invalid JSON: {exc}",
+            # M-002: `str(OSError)` appends the filename it was handed, and by here that
+            # filename is the caller's fully resolved path -- so `{exc}` would print the
+            # adopter's home directory and OS account name in a reason the report renders
+            # verbatim. `bad_input_detail` is the project's path-free rendering of a read
+            # failure. This reader feeds PLAT-BRPROT-015 and all four SLSA-SRC-* controls,
+            # so the leak had five ways out.
+            reason=f"Branch protection evidence file is unreadable or invalid JSON: {bad_input_detail(exc)}.",
             remediation="Fix or regenerate .oss-policy-kit/evidence/branch-protection.json per the evidence schema.",
             evidence_sources=[str(evidence.resolve())],
             confidence="low",
@@ -571,8 +608,11 @@ def _parse_branch_protection_evidence(evidence: Path) -> EvalOutcome:
         Draft202012Validator(_branch_protection_schema()).validate(data)
     except ValidationError as exc:
         loc = "/".join(str(p) for p in exc.absolute_path) if exc.absolute_path else "root"
+        # ADR-045: the two branches above already answer `manual-review-required` for a file
+        # this reader cannot use; a schema violation is the same kind of fact and now agrees
+        # with them. `--fail-on degraded` is how an operator makes it block.
         return EvalOutcome(
-            status=ControlStatus.FAIL,
+            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
             reason=(
                 f"Branch protection evidence does not match evidence-branch-protection.schema.json: {exc.message} "
                 f"(at {loc})"
@@ -647,13 +687,31 @@ _GITIGNORE_SECRET_FRAGMENTS = (".env", "*.pem", "*.key", "secrets.", "credential
 _PIN_REQ_PIN = re.compile(r"==\s*[0-9A-Za-z._-]+")
 
 
+def _lockfile_has_content(path: Path) -> bool:
+    """True when a lockfile actually locks something.
+
+    ``is_file()`` was the whole test, so a zero-byte ``uv.lock`` -- what an interrupted
+    ``uv lock`` or a ``touch`` leaves behind -- satisfied SEC-PINLOCK-052 and reported
+    "Dependency lockfile or pinned requirements detected". An empty file pins nothing; the
+    control exists to establish that versions are fixed, and an empty file establishes the
+    opposite. Content is required, not just presence.
+    """
+
+    if not path.is_file():
+        return False
+    with contextlib.suppress(OSError):
+        return bool(path.read_text(encoding="utf-8", errors="replace").strip())
+    return False
+
+
 def _python_lock_or_pins(repo: Path) -> bool:
-    if (repo / "poetry.lock").is_file() or (repo / "Pipfile.lock").is_file() or (repo / "uv.lock").is_file():
+    if any(_lockfile_has_content(repo / n) for n in (_POETRY_LOCK, "Pipfile.lock", "uv.lock")):
         return True
-    if (repo / "requirements.lock").is_file() or (repo / "requirements-lock.txt").is_file():
+    if any(_lockfile_has_content(repo / n) for n in ("requirements.lock", "requirements-lock.txt")):
         return True
     req = repo / _REQUIREMENTS_TXT
     if req.is_file():
+        body = ""
         with contextlib.suppress(OSError):
             body = req.read_text(encoding="utf-8", errors="replace")
         return bool(_PIN_REQ_PIN.search(body))
@@ -678,6 +736,27 @@ def _digest_invalid_not_evaluated(evidence: Path) -> EvalOutcome:
         evidence_sources=[str(evidence.resolve())],
         confidence="low",
     )
+
+
+def _digest_gate_outcome(evidence: Path, digests: Iterable[str]) -> EvalOutcome | None:
+    """Refuse the first digest that is a template or is not a real SHA-256; ``None`` when all pass.
+
+    The two refusals stay apart on purpose. A placeholder digest is a scaffold nobody filled in,
+    so a human has to go and look (``manual-review-required``); a malformed one is evidence the
+    kit cannot interpret at all, and claiming anything about it would be a guess
+    (``not-evaluated``). Collapsing them would tell an adopter the same thing about two quite
+    different problems.
+
+    Four artifact-attestation controls -- SBOM and provenance, on AWS and on Azure -- ran
+    identical copies of this loop. One copy is one place to keep the distinction correct.
+    """
+
+    for digest in digests:
+        if is_placeholder_digest(digest):
+            return _digest_placeholder_manual_review(evidence)
+        if not _is_valid_sha256_digest(digest):
+            return _digest_invalid_not_evaluated(evidence)
+    return None
 
 
 def _sbom_artifact_digest_strings(data: dict[str, Any]) -> list[str]:
@@ -878,7 +957,7 @@ def _validate_bsi_tr_03183_v2_1(content: str, fmt: str | None, version: str | No
 def _find_sbom_files(repo: Path) -> list[Path]:
     candidates: list[Path] = []
     for pat in ("*.spdx", "*.spdx.json", "*.cdx.json", "sbom.json", "sbom.xml", "bom.json", "bom.xml"):
-        for p in repo.rglob(pat):
+        for p in sorted(repo.rglob(pat)):
             if p.is_file():
                 candidates.append(p)
     return candidates[:10]
@@ -981,7 +1060,7 @@ def _verification_freshness_status(verified_at: str, *, max_age_days: int) -> st
         return "unparseable"
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=UTC)
-    now = datetime.now(UTC)
+    now = utc_now()
     age = (now - dt).days
     if age < 0:
         return "future"
@@ -1001,8 +1080,15 @@ def _workflow_text(path: Path) -> str:
 
 
 def _classify_self_hosted_runner(text: str) -> tuple[bool, bool]:
-    """Return ``(is_self_hosted, is_ephemeral)`` from raw workflow text via the runner pattern."""
+    """Return ``(is_self_hosted, is_ephemeral)`` from workflow text via the runner pattern.
 
+    Comments are blanked first: GH-RUNNER-062 moved a repository off PASS because a
+    ``# runs-on: self-hosted`` line someone had commented out looked like a self-hosted
+    runner to it. Which runner a job uses is decided by the line that runs, not the one
+    beside it.
+    """
+
+    text = strip_yaml_comments(text)
     is_self = False
     is_ephemeral = False
     for match in _SELF_HOSTED_PATTERN.finditer(text):
@@ -1068,43 +1154,22 @@ def _release_archive_signal_match(repo: Path) -> Path | None:
 
 _SAST_SEMGREP_EVIDENCE_FILENAME = "sast-semgrep.json"
 _SAST_SEMGREP_SCHEMA_PREFIX = "oss-policy-kit/evidence/sast-semgrep/"
-_MAX_SARIF_JSON_DEPTH = 200
-
-
-def _advance_json_string(ch: str, escaped: bool) -> tuple[bool, bool]:
-    """Step the in-string scanner; return ``(still_in_string, escaped_next)``."""
-
-    if escaped:
-        return True, False
-    if ch == "\\":
-        return True, True
-    if ch == '"':
-        return False, False
-    return True, False
-
-
-def _max_json_nesting_depth(raw: str) -> int:
-    """Max bracket-nesting depth of a JSON text, ignoring brackets inside strings."""
-    depth = 0
-    max_depth = 0
-    in_string = False
-    escaped = False
-    for ch in raw:
-        if in_string:
-            in_string, escaped = _advance_json_string(ch, escaped)
-            continue
-        if ch == '"':
-            in_string = True
-        elif ch in "{[":
-            depth += 1
-            max_depth = max(max_depth, depth)
-        elif ch in "}]":
-            depth -= 1
-    return max_depth
+# Re-exported from the module that owns defensive reading, so SARIF and every other
+# user-controlled document are measured by one scanner against one budget. Two copies
+# of a depth guard is two things to keep in step, and the SARIF copy was the only one
+# any loader actually consulted.
+_MAX_SARIF_JSON_DEPTH = MAX_JSON_DEPTH
+_advance_json_string = _advance_json_string_impl
+_max_json_nesting_depth = max_json_nesting_depth
 
 
 def _load_sarif_runs(sarif_path: Path) -> tuple[list[Any] | None, str | None]:
-    """Read + validate a SARIF file, returning ``(runs_list, None)`` or ``(None, error)``."""
+    """Read + validate a SARIF file, returning ``(runs_list, None)`` or ``(None, error)``.
+
+    Every error string here becomes an evaluator ``reason``, so none of them may embed the
+    exception object: ``str(OSError)`` carries the filename it was handed (M-002).
+    ``bad_input_detail`` is the one place allowed to decide how a bad file is described.
+    """
 
     oversize = oversize_reason(sarif_path, MAX_SARIF_BYTES, label="SARIF")
     if oversize is not None:
@@ -1112,20 +1177,31 @@ def _load_sarif_runs(sarif_path: Path) -> tuple[list[Any] | None, str | None]:
     try:
         raw = sarif_path.read_text(encoding="utf-8")
     except OSError as exc:
-        return None, f"Could not read SARIF file: {exc}"
+        return None, f"Could not read SARIF file: {bad_input_detail(exc)}."
     except UnicodeDecodeError as exc:
-        return None, f"Could not decode SARIF file as UTF-8: {exc}"
+        return None, f"Could not decode SARIF file as UTF-8: {bad_input_detail(exc)}."
     if _max_json_nesting_depth(raw) > _MAX_SARIF_JSON_DEPTH:
         return None, "Could not parse SARIF JSON: document is too deeply nested."
     try:
         doc = json.loads(raw)
     except json.JSONDecodeError as exc:
-        return None, f"Could not parse SARIF JSON: {exc}"
-    except RecursionError as exc:
-        return None, f"Could not parse SARIF JSON: document is too deeply nested ({exc})"
-    if (
-        not isinstance(doc, dict) or doc.get("$schema", "").endswith("sarif-schema-2.1.0.json") is False
-    ) and "runs" not in doc:
+        return None, f"Could not parse SARIF JSON: {bad_input_detail(exc)}."
+    except RecursionError:
+        return None, "Could not parse SARIF JSON: document is too deeply nested."
+    # This condition used to be one expression, and it could not protect the test it guarded:
+    # when *doc* was not a mapping, `not isinstance(...)` short-circuited the `or` and thereby
+    # FORCED `"runs" not in doc` to run against the very non-mapping it had just detected --
+    # TypeError for a number or null, and for a string a silent substring test that fell
+    # through to `.get`. A non-string `$schema` raised on `.endswith` before the `and` was
+    # reached at all. Every one of those is exit 3 with no report, from files that third-party
+    # tools and adopter `jq` glue produce: `jq -s '.[0]' *.sarif` over an empty glob writes
+    # literally `null`. Four controls read this, across eight shipped profiles, and
+    # `evaluate-many` aborted the whole fleet on the first bad file.
+    if not isinstance(doc, dict):
+        return None, f"SARIF file root must be a JSON object, not a {type(doc).__name__}."
+    schema = doc.get("$schema")
+    declares_sarif_schema = isinstance(schema, str) and schema.endswith("sarif-schema-2.1.0.json")
+    if not declares_sarif_schema and "runs" not in doc:
         # Accept SARIF docs without an explicit $schema; just require the runs[] array.
         return None, "SARIF file missing top-level 'runs' array."
     runs = doc.get("runs") or []
@@ -1138,7 +1214,9 @@ def _sarif_rule_levels(run: dict[str, Any]) -> dict[str, str]:
     """Map ``ruleId -> defaultConfiguration.level`` for one SARIF run."""
 
     rule_levels: dict[str, str] = {}
-    rules = ((run.get("tool") or {}).get("driver") or {}).get("rules") or []
+    # `(x or {}).get(...)` reads like a null-safe walk and is not one: `or` substitutes only
+    # for a FALSY value, so `tool: "semgrep"` -- a truthy string -- reached `.get` and raised.
+    rules = as_mapping(as_mapping(as_mapping(run).get("tool")).get("driver")).get("rules") or []
     if not isinstance(rules, list):
         return rule_levels
     for rule in rules:
@@ -1147,7 +1225,7 @@ def _sarif_rule_levels(run: dict[str, Any]) -> dict[str, str]:
         rid = rule.get("id")
         if not isinstance(rid, str):
             continue
-        default_level = (rule.get("defaultConfiguration") or {}).get("level")
+        default_level = as_mapping(rule.get("defaultConfiguration")).get("level")
         if isinstance(default_level, str):
             rule_levels[rid] = default_level
     return rule_levels
@@ -1322,11 +1400,11 @@ def _parse_zizmor_severity_properties(
     try:
         raw = sarif_path.read_text(encoding="utf-8")
     except OSError as exc:
-        return None, f"Could not read SARIF file: {exc}"
+        return None, f"Could not read SARIF file: {bad_input_detail(exc)}."
     try:
         doc = json.loads(raw)
     except json.JSONDecodeError as exc:
-        return None, f"Could not parse SARIF JSON: {exc}"
+        return None, f"Could not parse SARIF JSON: {bad_input_detail(exc)}."
     if not isinstance(doc, dict):
         return None, "SARIF file is not a JSON object."
     runs = doc.get("runs") or []
@@ -1348,11 +1426,17 @@ def _parse_zizmor_severity_properties(
 
 
 def _scan_gitlab_pipelines(ctx: EvalContext, hints: tuple[str, ...]) -> list[Path]:
-    """Return GitLab pipeline files whose text contains any of ``hints`` (case-insensitive)."""
+    """Return GitLab pipeline files whose text contains any of ``hints`` (case-insensitive).
+
+    Comments are blanked first. GL-PIPE-012 granted a PASS -- "pipeline(s) document artifact
+    retention / signing posture" -- for a pipeline whose only mention of `cosign` was a note
+    saying it had not been set up yet. GL-PIPE-009 reads through the same scanner.
+    """
+
     matched: list[Path] = []
     for p in ctx.gitlab_ci.pipeline_paths:
         with contextlib.suppress(OSError):
-            text = p.read_text(encoding="utf-8", errors="replace").lower()
+            text = strip_yaml_comments(p.read_text(encoding="utf-8", errors="replace")).lower()
             if any(h in text for h in hints):
                 matched.append(p)
     return matched
@@ -1393,27 +1477,301 @@ _AI_SECURITY_HEADINGS: tuple[str, ...] = (
 )
 
 
-def _scan_readme_for_section(repo: Path, headings: tuple[str, ...]) -> Path | None:
-    for rel in (_SECURITY_MD, _README_MD, ".github/SECURITY.md", "docs/SECURITY.md"):
+def _strip_html_comments(text: str) -> str:
+    """Remove closed HTML comments, in one left-to-right pass.
+
+    This was ``re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)``. A non-greedy scan that never
+    finds its terminator restarts at the next ``<!--`` and runs to end-of-file again, so a
+    document that opens comments without closing them costs O(comments x length). An adopter's
+    ``SECURITY.md`` is attacker-controlled input to a CI gate: 128 KiB of unclosed ``<!--`` took
+    `evaluate` from 0.98s to 45.72s under `cra-eu-ai-act-art11-1`, and the cost is quadratic from
+    there.
+
+    The semantics are the regex's, deliberately unchanged. An UNTERMINATED ``<!--`` is ordinary
+    text, not a comment running to the end -- that is how the previous release read it, and
+    reading less is what this codebase is not allowed to do. A second opener inside a comment is
+    consumed with it, because the first ``-->`` closes both, exactly as a non-greedy match did.
+    """
+
+    out: list[str] = []
+    pos = 0
+    while (start := text.find("<!--", pos)) >= 0:
+        end = text.find("-->", start + 4)
+        if end < 0:
+            break
+        out.append(text[pos:start])
+        pos = end + 3
+    out.append(text[pos:])
+    return "".join(out)
+
+
+#: The title group is greedy and untrimmed on purpose: the previous `\s+(.*?)\s*$` made the
+#: lazy title and the trailing whitespace compete for the same spaces, which is quadratic in
+#: the length of the line -- and the line comes from the target's own README. Trimming
+#: happens where the title is consumed.
+#: `\S` opens the title so the whitespace run before it and the title cannot trade
+#: characters; an all-whitespace title leaves the group unmatched, which the consumer
+#: reads as an empty heading, the same answer as before.
+_ATX_HEADING_RE = re.compile(r"^[ \t]{0,3}(#{1,6})[ \t]+(\S.*)?$")
+_SETEXT_UNDERLINE_RE = re.compile(r"^\s{0,3}(?:=+|-{2,})\s*$")
+_FENCE_RE = re.compile(r"^\s*(?:```|~~~)")
+
+
+def _markdown_sections(text: str) -> list[tuple[str, str]]:
+    """``(heading, body)`` for every Markdown section, heading lowercased.
+
+    Three controls used to decide a section was documented by lowercasing the file and testing
+    whether the phrase appeared anywhere in it, so a heading someone commented out, a heading with
+    nothing under it, and the bare word "limitations" in a sentence all earned the same
+    conformance PASS as a published section.
+
+    Reading structure is what separates them. HTML comments come out first -- a commented-out
+    heading is a draft. Fenced code is skipped, because a template showing people what to write is
+    not the thing written. ATX (``## Title``, closing hashes optional) and setext (underlined)
+    headings both count.
+
+    A section's body runs to the next heading of the SAME OR SHALLOWER level, so a subsection is
+    part of its parent. Ending it at the next heading of any level made the parent of a nested
+    document empty, and "empty" is what disqualifies a section -- so three conformance controls
+    withdrew a true PASS from a SECURITY.md that publishes the section and organises it under
+    sub-headings, which is how anyone writes more than a paragraph. The counterpart still holds:
+    an outline whose subsections are also empty stays empty.
+
+    A heading with an empty body is returned with that empty body rather than dropped: callers
+    decide whether emptiness disqualifies it, which lets one parser answer both "is there a
+    heading" and "does it say anything".
+    """
+
+    # A UTF-8 BOM is not part of the first heading. The raw-text read this replaced was immune to
+    # it -- `"## title" in text` does not care what precedes the match -- so leaving it in would
+    # lose three conformance sections on any SECURITY.md an editor saved with a signature.
+    lines = _strip_html_comments(text.lstrip("﻿")).splitlines()
+    kept: list[str] = []
+    #: (level, index into ``kept`` where this heading's body starts, title)
+    heads: list[tuple[int, int, str]] = []
+    fenced = False
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        if _FENCE_RE.match(line):
+            fenced = not fenced
+            index += 1
+            continue
+        if fenced:
+            index += 1
+            continue
+        atx = _ATX_HEADING_RE.match(line)
+        setext = (
+            not atx
+            and line.strip()
+            and index + 1 < len(lines)
+            and _SETEXT_UNDERLINE_RE.match(lines[index + 1])
+            and not _ATX_HEADING_RE.match(lines[index + 1])
+        )
+        if atx:
+            title = (atx.group(2) or "").strip().rstrip("#").strip().lower()
+            heads.append((len(atx.group(1)), len(kept), title))
+            index += 1
+            continue
+        if setext:
+            heads.append((1 if lines[index + 1].lstrip().startswith("=") else 2, len(kept), line.strip().lower()))
+            index += 2
+            continue
+        kept.append(line)
+        index += 1
+
+    # Where each section ends: the start of the next heading at the same or a shallower level.
+    # A monotonic stack answers all of them in one pass.
+    #
+    # The first version searched forward with `heads[position + 1:]`, which copies the tail of the
+    # list for every heading -- O(headings^2), and it re-created inside this very function the
+    # denial of service `_strip_html_comments` above had just removed from it: a 1 MiB SECURITY.md
+    # of headings went from 0.049s to 14.255s. Deleting only the slice would not be enough either,
+    # because the forward scan itself stays quadratic on a document of deeply nested headings. The
+    # stack is linear on every shape.
+    ends = [len(kept)] * len(heads)
+    open_headings: list[int] = []
+    for position, (level, start, _title) in enumerate(heads):
+        while open_headings and heads[open_headings[-1]][0] >= level:
+            ends[open_headings.pop()] = start
+        open_headings.append(position)
+    return [(title, "\n".join(kept[start : ends[position]])) for position, (_level, start, title) in enumerate(heads)]
+
+
+def _documents_section(path: Path, headings: tuple[str, ...]) -> bool:
+    """True when ``path`` carries one of ``headings`` as a real heading with something under it."""
+
+    with contextlib.suppress(OSError):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        return any(any(hint in title for hint in headings) and body.strip() for title, body in _markdown_sections(text))
+    return False
+
+
+#: The four documents a section can be published in, in the order they are consulted.
+_SECTION_DOCUMENTS: tuple[str, ...] = (_SECURITY_MD, _README_MD, ".github/SECURITY.md", "docs/SECURITY.md")
+
+
+def _scan_readme_for_section(repo: Path, hints: tuple[str, ...]) -> Path | None:
+    """The document whose TEXT carries one of ``hints``.
+
+    Used by the CRA controls, whose hints are phrases that belong in prose: `## Configuration`
+    followed by "we ship a secure default posture" really does document secure defaults, and
+    demanding the phrase in a heading would lose it.
+    """
+
+    for rel in _SECTION_DOCUMENTS:
         p = repo / rel
         if not p.is_file():
             continue
         with contextlib.suppress(OSError):
             text = p.read_text(encoding="utf-8", errors="replace").lower()
-            if any(h in text for h in headings):
+            if any(h in text for h in hints):
                 return p
     return None
 
 
-def _scan_for_llm_sdks(repo: Path) -> Path | None:
-    for rel in (_REQUIREMENTS_TXT, _PYPROJECT_TOML, _PACKAGE_JSON, "Pipfile", "poetry.lock"):
+def _scan_readme_for_heading(repo: Path, headings: tuple[str, ...]) -> Path | None:
+    """The document that PUBLISHES one of ``headings`` as a section with a body.
+
+    Used by the controls whose hints are section titles. A heading someone commented out, one
+    with nothing under it, one inside a fenced template, and the words appearing in a sentence
+    are all rejected here -- each of them used to earn the same conformance PASS as a published
+    section.
+    """
+
+    for rel in _SECTION_DOCUMENTS:
+        p = repo / rel
+        if p.is_file() and _documents_section(p, headings):
+            return p
+    return None
+
+
+_DIGEST_SHAPE_RE = re.compile(r"^[0-9a-f]{32,}$", re.IGNORECASE)
+
+#: Values that name a gap rather than a version. `has_placeholder_values` does not cover these,
+#: and `is_placeholder_digest` cannot be used for `model_sha` at all: it rejects `"a" * 64`, which
+#: this control has to accept as a digest -- the question here is shape, not entropy.
+_VERSION_PLACEHOLDERS: frozenset[str] = frozenset({"tbd", "todo", "fixme", "x", "n/a", "na", "none", "unknown", "?"})
+
+
+def _is_digest_shaped(value: object) -> bool:
+    """True when ``value`` has the shape of a content digest rather than a stand-in for one."""
+
+    return isinstance(value, str) and bool(_DIGEST_SHAPE_RE.match(value.strip()))
+
+
+def _is_real_version(value: object) -> bool:
+    """True when ``value`` names a version rather than admitting there is not one yet."""
+
+    return isinstance(value, str) and bool(value.strip()) and value.strip().lower() not in _VERSION_PLACEHOLDERS
+
+
+def _parts_within_repo(path: Path, repo_root: Path) -> tuple[str, ...]:
+    """``path``'s parts relative to the repository, or its own parts when it lies outside.
+
+    A skip-list names directories INSIDE the repository -- vendored code, caches, version control.
+    Tested against the absolute path it also matches an ANCESTOR the adopter happened to name
+    `.venv` or `node_modules`, and then the repository's own files are skipped because of where it
+    was cloned. `PATH-02` was the severe form of this in the Terraform walker, where twelve
+    controls went on to assert positively that no Terraform existed.
+
+    A path outside the repository keeps its absolute parts on purpose: for the vendoring checks
+    that is the honest answer, since a file under someone else's `site-packages` is not the
+    adopter's work regardless of where the repository sits.
+    """
+
+    with contextlib.suppress(ValueError):
+        return path.resolve().relative_to(repo_root.resolve()).parts
+    return path.parts
+
+
+def _is_vendored(path: Path, repo_root: Path) -> bool:
+    """True when ``path`` sits in a dependency tree rather than in the adopter's own source.
+
+    A file named ``test_adversarial.py`` inside ``site-packages`` is somebody else's test, and
+    crediting it answers a question about this repository with evidence from another one.
+    """
+
+    return any(
+        part == "site-packages" or part.startswith(".venv") or part in _AI_AGENT_SKIP_DIRS
+        for part in _parts_within_repo(path, repo_root)
+    )
+
+
+def _llm_sdk_scan(repo: Path) -> tuple[Path | None, bool]:
+    """``(manifest declaring an SDK, every manifest present was readable)``.
+
+    The second value is what separates "this repository declares no LLM SDK" from "the kit could
+    not tell". `not-applicable` is a claim about the repository and no summary counts it, which
+    makes it the quietest place for a false statement -- so it is only available once at least one
+    manifest existed and every one of them parsed.
+    """
+
+    # An AND across the manifests, not an OR. The flag used to be set by any file that could be
+    # read, so one readable `pyproject.toml` spoke for a malformed `package.json` beside it and the
+    # control announced that every manifest had been read. "Did I read ANY of them" is not the
+    # question the claim rests on.
+    seen_any = False
+    read_all = True
+    for rel in (_REQUIREMENTS_TXT, _PYPROJECT_TOML, _PACKAGE_JSON, "Pipfile", _POETRY_LOCK):
         p = repo / rel
         if not p.is_file():
             continue
-        with contextlib.suppress(OSError):
-            text = p.read_text(encoding="utf-8", errors="replace").lower()
-            if any(sdk in text for sdk in _LLM_SDK_HINTS):
-                return p
+        seen_any = True
+        names = _declared_dependency_names(p)
+        unread_surface = _dependency_surface_was_not_read(p)
+        if names is None:
+            # A file that did not PARSE keeps the old raw-text read, because absence of a parse is
+            # not absence of a dependency. A file that parsed and declares under a table this
+            # reader does not know gets no such guess: grepping it is what let a comment saying a
+            # package was REJECTED read as proof that it is used.
+            if not unread_surface and _raw_text_mentions(p, _LLM_SDK_HINTS):
+                return p, True
+            read_all = False
+            continue
+        if _names_mention_any(names, _LLM_SDK_HINTS):
+            return p, True
+        # Read some of it is not read all of it. Only a manifest whose every dependency surface was
+        # recognised may be used to claim the repository declares no SDK.
+        read_all = read_all and not unread_surface
+    conclusive = seen_any and read_all
+    return None, conclusive
+
+
+def _raw_text_mentions(path: Path, hints: tuple[str, ...]) -> bool:
+    """The pre-parser read, kept for the one case that still needs it: an unreadable manifest.
+
+    A parser can refuse where a text search could not, and a refusal must not become a dependency
+    the kit stops finding. So when the reader answers ``None`` the caller falls back here rather
+    than to a verdict.
+    """
+
+    with contextlib.suppress(OSError):
+        text = path.read_text(encoding="utf-8", errors="replace").lower()
+        return any(hint in text for hint in hints)
+    return False
+
+
+def _manifest_declares(path: Path, hints: tuple[str, ...]) -> bool:
+    """True when ``path`` DECLARES a package matching ``hints``.
+
+    A comment saying the team evaluated a package and rejected it used to satisfy this -- the
+    strongest available statement that something is not used, read as proof that it is. The
+    declaration is what carries the meaning, so that is what gets read; an unparseable manifest
+    falls back to the old text search because absence of a parse is not absence of a dependency.
+    """
+
+    names = _declared_dependency_names(path)
+    if names is None:
+        return _raw_text_mentions(path, hints)
+    return _names_mention_any(names, hints)
+
+
+def _scan_for_llm_sdks(repo: Path) -> Path | None:
+    for rel in (_REQUIREMENTS_TXT, _PYPROJECT_TOML, _PACKAGE_JSON, "Pipfile", _POETRY_LOCK):
+        p = repo / rel
+        if p.is_file() and _manifest_declares(p, _LLM_SDK_HINTS):
+            return p
     return None
 
 
@@ -1583,18 +1941,18 @@ _AI_AGENT_PINNED_MODEL_RE = re.compile(
 )
 
 
-def _is_ai_agent_text_file(p: Path) -> bool:
+def _is_ai_agent_text_file(p: Path, repo_root: Path) -> bool:
     """True for a regular file not inside a skipped directory."""
 
-    return p.is_file() and not any(part in _AI_AGENT_SKIP_DIRS for part in p.parts)
+    return p.is_file() and not any(part in _AI_AGENT_SKIP_DIRS for part in _parts_within_repo(p, repo_root))
 
 
 def _iter_ai_agent_text_files(repo: Path) -> list[Path]:
     found: list[Path] = []
     for pat in _AI_AGENT_TEXT_PATTERNS:
         with contextlib.suppress(OSError):
-            for p in repo.rglob(pat):
-                if _is_ai_agent_text_file(p):
+            for p in sorted(repo.rglob(pat)):
+                if _is_ai_agent_text_file(p, repo):
                     found.append(p)
                     if len(found) >= 200:
                         return found
@@ -1605,6 +1963,597 @@ def _read_lower(path: Path) -> str:
     with contextlib.suppress(OSError):
         return path.read_text(encoding="utf-8", errors="replace").lower()
     return ""
+
+
+#: Provider aliases that name a model family without dating it.
+_AI_MODEL_ALIASES: tuple[str, ...] = ("gpt-", "claude", "gemini", "mistral", "llama")
+
+#: A line carrying one of these does not claim the thing exists -- it says the opposite.
+_NOT_DONE_MARKER_RE = re.compile(r"\b(?:todo|fixme|wip|xxx|tbd)\b", re.IGNORECASE)
+_NOT_DONE_PHRASES: tuple[str, ...] = (
+    "not implemented",
+    "not yet implemented",
+    "unimplemented",
+    "not wired",
+    "planned",
+    "coming soon",
+)
+
+#: Trailing characters a value picks up from JSON, YAML and Python literals.
+_VALUE_TRIM = " \t\r\n,;}])"
+
+#: Every ``key: value`` / ``key = value`` on one line whose value is BARE, so `model: gpt-4o` and
+#: `model: [gpt-4o]` are read. Every separator is scanned, not the first: an assignment in front
+#: of a call used to hide the call, because in
+#: ``resp = client.chat.completions.create(model="gpt-4o")`` the value of the FIRST binding is the
+#: whole call expression.
+#:
+#: Quoted values are deliberately not matched here -- `_QUOTED_VALUE_RE` already reads them
+#: wherever they sit, so handling them twice left a branch no input could reach.
+_BINDING_VALUE_RE = re.compile(r"[:=]\s*([^\s,;)}\]'\"]+)")
+
+#: Every quoted string on a line, wherever it sits. A model configured as a call default lives
+#: here and nowhere a separator would find it: ``os.getenv("AGENT_MODEL", "claude-3-opus")``.
+_QUOTED_VALUE_RE = re.compile(r"\"([^\"]*)\"|'([^']*)'")
+
+#: What must follow an alias for it to be a model rather than a word. `claude` is a first name,
+#: `claude-3-opus` is a model; `gpt-` is a prefix this module lists as a hint, `gpt-4o` is a model.
+#:
+#: A bare `-` counts, and it has to: `gemini-pro`, `mistral-large` and `claude-instant` are real
+#: floating aliases with no number anywhere in them, and they are precisely what this control is
+#: for. Requiring a digit here to keep `Claude-Bernard` out was tried and it deleted `gemini-pro`
+#: from a `{"model": ...}` binding -- a true finding traded away for a false one. What separates
+#: the surname from the model is not the value, it is the KEY. See `_MODEL_KEY`.
+_MODEL_VERSION_START = "0123456789-."
+
+#: What the line has to be ABOUT before any alias on it is read as configuration.
+#:
+#: HEAD required this word somewhere in the file, and dropping the requirement is what let prose
+#: through: `Author: Claude-Bernard`, `topic: claude-related tooling` and a `- gpt-4o was released
+#: last year` bullet each failed a repository with no AI in it at all. Scoped to the line here
+#: rather than the file, which is strictly narrower than what HEAD accepted -- a `CHANGELOG.md`
+#: that mentions a model somewhere no longer lends its anchor to every other line in the file.
+#:
+#: Substring, not equality: `models`, `MODEL_NAME`, `AGENT_MODEL` and `--model` all name one.
+_MODEL_KEY = "model"
+
+#: Punctuation that separates one value from the next inside a collection literal or a call, so
+#: `[gpt-4o]` and `["gpt-4o"]` yield the identifier they contain.
+_VALUE_SPLIT_RE = re.compile(r"[\s,;:=()\[\]{}'\"]+")
+
+
+def _configured_value_mentions(text: str, aliases: Sequence[str]) -> bool:
+    """True when ``text`` configures a model, as opposed to mentioning a vendor.
+
+    This control has been wrong FOUR ways, each the correction of the last overshooting. The
+    fourth was the repair for the third: requiring a "version" after the alias, while accepting a
+    bare `-` as one, made every hyphenated word beginning with a vendor name a configured model.
+
+    It first searched the whole file, so a changelog line saying the team REJECTED a model failed
+    the repository under `--fail-on fail`. Requiring the name on the value side of a binding fixed
+    that and demanded the alias be the ENTIRE value -- which lost `create(model="gpt-4o", ...)`,
+    the commonest way anyone configures a model. Reading every binding on the line recovered it
+    and tested CONTAINMENT, which failed four ordinary repositories: a French locale file saying
+    `Bonjour Claude`, an npm `description` reading `Gemini-style CLI`, an `Author: Claude Bernard`
+    line, and a changelog mentioning `llama`.
+
+    So the question is neither "does the name appear" nor "is it the whole value". A model
+    IDENTIFIER is an alias followed by a version, and it is one token: `claude` is a first name,
+    `claude-3-opus` is a model. That distinction also retired a collection-opener special case
+    invented for the previous round, which existed only to stop this module's own
+    ``("gpt-", "claude")`` hint tuples reading as configuration -- bare aliases carry no version,
+    so they are not identifiers either, wherever they sit.
+
+    Quoted strings are read anywhere on the line, not only after a separator, because that is
+    where a default lives: ``os.getenv("AGENT_MODEL", "claude-3-opus")`` configures the model that
+    actually runs when the variable is unset.
+
+    LIMITATION: prose that quotes an exact model identifier -- ``the "gpt-4o" model was rejected``
+    -- still reads as configuration. Narrower than the original defect, which needed no quotes at
+    all, and left standing rather than traded for another rule that loses a real binding.
+    """
+
+    lowered = [a.lower() for a in aliases]
+    enclosing = ""
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or line.startswith("//"):
+            continue
+        tokens = line.split()
+        # A YAML sequence entry is the one shape whose key is not on its own line, so it borrows
+        # the anchor from the mapping that opened it. Everything else -- including a bullet that
+        # turned out to be a sentence -- becomes the anchor for whatever follows it.
+        entry = _is_a_lone_list_item(tokens)
+        if not entry:
+            enclosing = line
+        if _MODEL_KEY not in (enclosing if entry else line).lower():
+            continue
+        for quoted in _QUOTED_VALUE_RE.finditer(line):
+            candidate = quoted.group(1) if quoted.group(1) is not None else quoted.group(2)
+            if _names_a_model(candidate or "", lowered):
+                return True
+        for match in _BINDING_VALUE_RE.finditer(line):
+            if _names_a_model(match.group(1).strip(_VALUE_TRIM), lowered):
+                return True
+        # A flag separates its value with a SPACE, so `cmd: app --model gpt-4o` reaches neither
+        # rule above -- the only separator on that line belongs to `cmd:`.
+        #
+        # `strict=False` deliberately: the two sequences differ in length by one by construction,
+        # which is what pairs each token with the one before it.
+        for preceding, candidate in zip(tokens, tokens[1:], strict=False):
+            if preceding.startswith("-") and _names_a_model(candidate, lowered):
+                return True
+    return False
+
+
+def _is_a_lone_list_item(tokens: Sequence[str]) -> bool:
+    """True when *tokens* are a YAML sequence entry holding one value and nothing else.
+
+    A trailing comment is part of the shape rather than an exception to it -- `- gpt-4o  # pinned`
+    is one entry, and dropping it would leave the commonest annotated form of the very thing this
+    rule exists to find reading as prose.
+    """
+
+    if len(tokens) < 2 or tokens[0] != "-":
+        return False
+    return len(tokens) == 2 or tokens[2].startswith("#")
+
+
+def _names_a_model(value: str, aliases: Sequence[str]) -> bool:
+    """True when *value* carries a model identifier: an alias with a version after it.
+
+    Whitespace disqualifies the whole value before anything else is asked. A value with a space
+    in it is a sentence, a description or a person's name, and every false FAIL this rule exists
+    to prevent had one.
+    """
+
+    if not value or any(character.isspace() for character in value):
+        return False
+    for token in _VALUE_SPLIT_RE.split(value):
+        lowered = token.lower()
+        for alias in aliases:
+            if lowered.startswith(alias) and (rest := lowered[len(alias) :]) and rest[0] in _MODEL_VERSION_START:
+                return True
+    return False
+
+
+def _hint_on_a_line_that_claims_it_exists(text: str, hints: Sequence[str]) -> bool:
+    """True when some line names a hint and does not, on that same line, say it is missing.
+
+    The marker is read rather than the syntax, which is what keeps a docstring usable as
+    evidence: a line describing behaviour that exists is not a `TODO`, and a `TODO` is not a
+    conformance claim wherever it sits. One honest line is enough -- a pending note beside it
+    does not retract it.
+    """
+
+    lowered_hints = [h.lower() for h in hints]
+    for raw in text.splitlines():
+        line = raw.lower()
+        if not any(h in line for h in lowered_hints):
+            continue
+        if _NOT_DONE_MARKER_RE.search(line) or any(ph in line for ph in _NOT_DONE_PHRASES):
+            continue
+        return True
+    return False
+
+
+#: Keys a Dependabot or Renovate config uses to SELECT a package. Everything else in those files
+#: -- descriptions, comments, ecosystem names -- is prose about packages, not a selector.
+_UPDATE_SELECTOR_KEYS: frozenset[str] = frozenset(
+    {
+        "dependency-name",
+        "dependency-names",
+        "patterns",
+        "matchPackageNames",
+        "matchPackagePatterns",
+        "matchDepNames",
+        "matchDepPatterns",
+        "matchSourceUrls",
+    }
+)
+
+_REQUIREMENT_NAME_RE = re.compile(r"[A-Za-z0-9._-]+")
+
+#: The package name pip reads out of a VCS or archive URL, checked before the option-line skip
+#: because `-e git+...#egg=name` is an option line that names a package.
+#:
+#: Both separators, matching pip's own `[#&]egg=`: a URL may carry `#subdirectory=src&egg=name`,
+#: which is the order pip's documentation uses, and matching only `#egg=` dropped the SDK from a
+#: line that really installs it. The caller strips trailing comments first -- `#` opens a fragment
+#: only where no whitespace precedes it.
+_EGG_FRAGMENT_RE = re.compile(r"[#&]egg=([A-Za-z0-9._-]+)")
+
+
+def _requirement_name(spec: str) -> str:
+    """The package name a requirement specifier reduces to, lowercased.
+
+    Extras, version operators and environment markers are all noise for the question the callers
+    ask -- is this package declared -- so ``openai[datalib]>=1.2 ; python_version<'3.13'`` and
+    ``openai`` have to answer the same.
+    """
+
+    match = _REQUIREMENT_NAME_RE.match(spec.strip())
+    return match.group(0).lower() if match else ""
+
+
+def _flatten_strings(value: object) -> set[str]:
+    """Every string nested anywhere inside ``value``, lowercased.
+
+    Dependabot nests a package name under ``allow[].dependency-name`` and Renovate under
+    ``packageRules[].matchPackageNames[]``; neither nests it predictably enough to index. Only
+    dict VALUES are walked -- a key named ``dependency-name`` is the selector, not the package.
+    """
+
+    if isinstance(value, str):
+        return {value.strip().lower()} if value.strip() else set()
+    if isinstance(value, dict):
+        return {s for v in value.values() for s in _flatten_strings(v)}
+    if isinstance(value, (list, tuple, set)):
+        return {s for v in value for s in _flatten_strings(v)}
+    return set()
+
+
+def _has_content(path: Path) -> bool:
+    """True when ``path`` is a file the kit can read and it carries something.
+
+    Existing is not the same as being there: a zero-byte or whitespace-only artifact is the shape
+    of a file someone created and never filled in. A file that cannot be read answers False --
+    the kit has not seen content, so it must not claim any.
+    """
+
+    with contextlib.suppress(OSError):
+        return path.is_file() and bool(path.read_text(encoding="utf-8", errors="replace").strip())
+    return False
+
+
+def _holds_a_non_empty_file(directory: Path) -> bool:
+    """True when ``directory`` holds at least one readable file with content in it.
+
+    A directory that cannot even be listed answers False for the same reason as ``_has_content``,
+    and it fails one step earlier -- which is what a permission-denied mount actually does.
+    """
+
+    with contextlib.suppress(OSError):
+        for candidate in directory.rglob("*"):
+            if _has_content(candidate):
+                return True
+    return False
+
+
+def _toml_document(path: Path) -> dict[str, Any] | None:
+    """The parsed TOML mapping, or ``None`` when the file cannot be read or parsed."""
+
+    with contextlib.suppress(OSError, tomllib.TOMLDecodeError):
+        return tomllib.loads(decode_source(path.read_bytes()))
+    return None
+
+
+def _poetry_dependency_names(poetry: dict[str, Any]) -> set[str]:
+    """Package names from Poetry's own tables, including every ``group.<name>.dependencies``."""
+
+    names: set[str] = set()
+    for key in ("dependencies", "dev-dependencies"):
+        table = poetry.get(key)
+        if isinstance(table, dict):
+            names.update(str(k).lower() for k in table)
+    groups = poetry.get("group")
+    if isinstance(groups, dict):
+        for group in groups.values():
+            # Poetry would reject a group that is not a table, but this reader is handed whatever
+            # is on disk: raising here would be exit 3 on a manifest the adopter merely typo'd.
+            if not isinstance(group, dict):
+                continue
+            table = group.get("dependencies")
+            if isinstance(table, dict):
+                names.update(str(k).lower() for k in table)
+    return names
+
+
+def _pyproject_dependency_names(path: Path) -> set[str] | None:
+    """Declared names, or ``None`` when no dependency table in this file was recognised.
+
+    ``None`` separates "this project declares nothing" from "its dependencies live somewhere this
+    reader does not know". Both are valid TOML, and reading the second as the first is how a
+    repository declaring ``openai`` under ``[tool.pdm.dev-dependencies]`` came to be announced as
+    one the LLM controls do not apply to -- the positive claim, in the state no summary counts.
+
+    The caller already knows what to do with ``None``: it falls back to the raw-text read, exactly
+    as it does for a file that would not parse, and it declines to call the repository conclusive.
+    That covers the layout nobody has written yet as well as the two added below.
+    """
+
+    data = _toml_document(path)
+    if data is None:
+        return None
+    names, recognised = _pyproject_reading(data)
+    return names if recognised else None
+
+
+def _pyproject_reading(data: dict[str, Any]) -> tuple[set[str], bool]:
+    """Names declared by a parsed ``pyproject.toml``, and whether any surface was recognised."""
+
+    names: set[str] = set()
+    recognised = False
+    project = data.get("project")
+    if isinstance(project, dict):
+        # PEP 621 makes `dependencies` optional and its absence means none, so the table being
+        # here is itself the answer -- this branch must set the flag even when it adds no names.
+        recognised = True
+        names.update(_flatten_specs(project.get("dependencies")))
+        optional = project.get("optional-dependencies")
+        if isinstance(optional, dict):
+            for extra in optional.values():
+                names.update(_flatten_specs(extra))
+    groups = data.get("dependency-groups")
+    if isinstance(groups, dict):
+        recognised = True
+        for group in groups.values():
+            names.update(_flatten_specs(group))
+    tool = data.get("tool")
+    if isinstance(tool, dict):
+        tool_names, tool_recognised = _tool_table_dependency_names(tool)
+        names.update(tool_names)
+        recognised = recognised or tool_recognised
+    return names, recognised
+
+
+def _tool_table_dependency_names(tool: dict[str, Any]) -> tuple[set[str], bool]:
+    """Dependencies under ``[tool.*]``, and whether any table there was recognised.
+
+    Poetry, PDM and Hatch each put them somewhere different, and a file carrying only
+    ``[tool.ruff]`` has said nothing about dependencies at all. The flag is what carries that
+    difference back to the caller.
+    """
+
+    names: set[str] = set()
+    recognised = False
+    poetry = tool.get("poetry")
+    if isinstance(poetry, dict):
+        recognised = True
+        names.update(_poetry_dependency_names(poetry))
+    pdm = tool.get("pdm")
+    if isinstance(pdm, dict) and isinstance(dev := pdm.get("dev-dependencies"), dict):
+        recognised = True
+        for group in dev.values():
+            names.update(_flatten_specs(group))
+    hatch = tool.get("hatch")
+    if isinstance(hatch, dict) and isinstance(envs := hatch.get("envs"), dict):
+        for env in envs.values():
+            if isinstance(env, dict):
+                recognised = True
+                names.update(_flatten_specs(env.get("dependencies")))
+                names.update(_flatten_specs(env.get("extra-dependencies")))
+    for spec_list_tool in ("uv", "rye"):
+        table = tool.get(spec_list_tool)
+        if isinstance(table, dict):
+            recognised = True
+            names.update(_flatten_specs(table.get("dev-dependencies")))
+            names.update(_flatten_specs(table.get("dependencies")))
+    pixi = tool.get("pixi")
+    if isinstance(pixi, dict):
+        recognised = True
+        # pixi names each package as a KEY mapped to a version constraint, the way Poetry and
+        # Pipfile do, rather than as a list of specifiers.
+        for key in ("dependencies", "pypi-dependencies"):
+            table = pixi.get(key)
+            if isinstance(table, dict):
+                names.update(str(package).lower() for package in table)
+    return names, recognised
+
+
+#: The `[tool.*]` tables whose dependency layout ``_tool_table_dependency_names`` actually reads.
+_KNOWN_PACKAGING_TOOLS: frozenset[str] = frozenset({"poetry", "pdm", "hatch", "uv", "rye", "pixi"})
+
+#: What makes a `[tool.*]` subtree look like it declares dependencies. Only this word: setuptools
+#: writes ``packages`` for what to SHIP, and treating that as a dependency table would make every
+#: setuptools project permanently unsure of itself.
+_DEPENDENCY_KEY_MARKER = "dependencies"
+
+
+def _dependency_surface_was_not_read(path: Path) -> bool:
+    """True when a manifest PARSED and the reader still did not find where it declares anything.
+
+    The completeness question, asked per TABLE rather than per file. Per file was wrong twice
+    over: `[project]` with an empty list marked the whole manifest conclusive, so
+    ``[tool.uv].dev-dependencies = ["openai"]`` beside it vanished; and a manifest that recognised
+    nothing fell through to a raw-text read, where ``# we evaluated openai and rejected it``
+    became a PASS -- the comment-decides-the-verdict class, reopened by its own repair.
+
+    Two shapes answer True. A manifest whose dependency surface is recognised nowhere: valid TOML
+    that never says where its packages come from. And a manifest carrying a `[tool.*]` table with
+    a ``dependencies`` key under a name whose layout is not read above -- a packaging tool nobody
+    has taught this reader yet.
+
+    A file that did not parse answers False on purpose. There the raw-text read is still the
+    honest fallback, because absence of a parse is not absence of a dependency.
+    """
+
+    if path.name.lower() != _PYPROJECT_TOML:
+        return False
+    data = _toml_document(path)
+    if not isinstance(data, dict):
+        return False
+    _names, recognised = _pyproject_reading(data)
+    if not recognised:
+        return True
+    tool = data.get("tool")
+    if not isinstance(tool, dict):
+        return False
+    return any(
+        str(name).lower() not in _KNOWN_PACKAGING_TOOLS and _mentions_a_dependency_table(subtree)
+        for name, subtree in tool.items()
+    )
+
+
+def _mentions_a_dependency_table(node: object, depth: int = 0) -> bool:
+    """Whether *node* carries a ``dependencies`` key anywhere in the few levels a tool nests it."""
+
+    if depth > 3 or not isinstance(node, dict):
+        return False
+    return any(
+        _DEPENDENCY_KEY_MARKER in str(key).lower() or _mentions_a_dependency_table(value, depth + 1)
+        for key, value in node.items()
+    )
+
+
+def _flatten_specs(value: object) -> set[str]:
+    """Requirement specifiers reduced to package names, from a list of strings."""
+
+    return {name for spec in _flatten_strings(value) if (name := _requirement_name(spec))}
+
+
+def _pipfile_names(path: Path) -> set[str] | None:
+    """Package names from a ``Pipfile``'s two dependency tables."""
+
+    data = _toml_document(path)
+    if data is None:
+        return None
+    names: set[str] = set()
+    for key in ("packages", "dev-packages"):
+        table = data.get(key)
+        if isinstance(table, dict):
+            names.update(str(k).lower() for k in table)
+    return names
+
+
+def _poetry_lock_names(path: Path) -> set[str] | None:
+    """Package names from the ``[[package]]`` array of a ``poetry.lock``."""
+
+    data = _toml_document(path)
+    if data is None:
+        return None
+    packages = data.get("package")
+    if not isinstance(packages, list):
+        return set()
+    return {str(p["name"]).lower() for p in packages if isinstance(p, dict) and isinstance(p.get("name"), str)}
+
+
+def _requirements_names(path: Path) -> set[str] | None:
+    """Package names from a ``requirements.txt``, skipping comments and option lines."""
+
+    with contextlib.suppress(OSError):
+        declared: set[str] = set()
+        for raw in decode_source(path.read_bytes()).splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            # `#` opens a comment when whitespace precedes it and a URL fragment when it does not
+            # -- pip draws the line the same way. Searching the raw line for an egg fragment let
+            # `httpx==0.27  # we do not use #egg=openai here` declare openai: the
+            # comment-decides-the-verdict class, walking back in through its own repair.
+            # No emptiness check after the split: a line that strips to nothing here began with
+            # `#` and was skipped above, so the guard could not fire. The coverage floor found it.
+            line = line.split(" #", 1)[0].split("\t#", 1)[0].strip()
+            # A VCS checkout carries its package name in the URL's egg fragment and nowhere else,
+            # so `-e git+https://...#egg=openai` declares `openai` as plainly as a pinned line
+            # does. Skipping every option line lost it. The other option lines still go: `-r`,
+            # `-c`, `--hash` and `--index-url` name a file or a value, never a package, and
+            # reading them would make `-r base.txt` declare a package called "base".
+            if egg := _EGG_FRAGMENT_RE.search(line):
+                declared.add(egg.group(1).lower())
+                continue
+            if line.startswith("-"):
+                continue
+            if name := _requirement_name(line):
+                declared.add(name)
+        return declared
+    return None
+
+
+def _package_json_names(path: Path) -> set[str] | None:
+    """Package names from every dependency map of a ``package.json``.
+
+    A root that is not an object is a refusal rather than an empty answer: the file is a
+    ``package.json`` by name and the reader could not find the shape it needs in it.
+    """
+
+    with contextlib.suppress(OSError, UnicodeDecodeError, json.JSONDecodeError):
+        data = json.loads(decode_source(path.read_bytes()))
+        if not isinstance(data, dict):
+            return None
+        names: set[str] = set()
+        for key in ("dependencies", "devDependencies", "peerDependencies", "optionalDependencies"):
+            table = data.get(key)
+            if isinstance(table, dict):
+                names.update(str(k).lower() for k in table)
+        return names
+    return None
+
+
+#: filename -> the reader that understands it. A name absent here is a refusal, not an empty set.
+_MANIFEST_READERS: dict[str, Callable[[Path], set[str] | None]] = {
+    _PYPROJECT_TOML: _pyproject_dependency_names,
+    "pipfile": _pipfile_names,
+    _POETRY_LOCK: _poetry_lock_names,
+    _REQUIREMENTS_TXT: _requirements_names,
+    _PACKAGE_JSON: _package_json_names,
+}
+
+
+def _declared_dependency_names(path: Path) -> set[str] | None:
+    """Package names a manifest DECLARES, or ``None`` when the file could not be read.
+
+    The three answers matter and only two of them are claims. A name set says what is declared;
+    an empty set says the manifest declares nothing; ``None`` says the reader could not tell. If
+    a refusal came back as the empty set, a broken ``pyproject.toml`` would read as "this
+    repository declares no LLM SDK" -- a statement about the repository nobody established.
+    """
+
+    reader = _MANIFEST_READERS.get(path.name.lower())
+    return reader(path) if reader is not None else None
+
+
+def _update_config_names(path: Path) -> set[str] | None:
+    """Package selectors a Dependabot/Renovate config names, or ``None`` when unreadable.
+
+    There is no filename allow-list here: callers only ever hand this a Dependabot or Renovate
+    path, so a shape it does not recognise parses and simply carries no selector keys. ``set()``
+    is the honest answer for that -- read, and it names nothing.
+    """
+
+    with contextlib.suppress(OSError, UnicodeDecodeError, json.JSONDecodeError, yaml.YAMLError):
+        # ``utf-8-sig`` rather than ``utf-8``: it strips a byte-order mark and is identical when
+        # there is none. ``json.loads`` rejects a leading U+FEFF outright, and this reader's
+        # ``None`` then reaches a caller that -- correctly, for a file it truly cannot read --
+        # falls back to scanning raw text. A BOM'd ``renovate.json`` naming an SDK only in prose
+        # therefore PASSED, which is the comment-decides-the-verdict behaviour a fix removed.
+        # PyYAML tolerates the mark, so only the JSON half was ever affected.
+        text = path.read_text(encoding="utf-8-sig")
+        data = json.loads(text) if path.suffix.lower() == ".json" else yaml.safe_load(text)
+        # This reader does not go through ``load_yaml_file``, so it carries the expansion guard
+        # itself. Measured before the guard existed: a 360-byte Dependabot file whose aliases
+        # expand to 16.8M nodes cost ``_selectors_in`` 7.4 seconds. ``None`` is the reader's
+        # existing "could not read this" answer, which is the honest one here.
+        if overexpanded_reason(data, label=f"update config '{path.name}'") is not None:
+            return None
+        return _selectors_in(data)
+    return None
+
+
+def _selectors_in(value: object) -> set[str]:
+    """Walk a parsed config and collect the values of every package-selecting key."""
+
+    names: set[str] = set()
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            if str(key) in _UPDATE_SELECTOR_KEYS:
+                names.update(_flatten_strings(nested))
+            else:
+                names.update(_selectors_in(nested))
+    elif isinstance(value, (list, tuple)):
+        for nested in value:
+            names.update(_selectors_in(nested))
+    return names
+
+
+def _names_mention_any(names: set[str], hints: tuple[str, ...]) -> bool:
+    """True when a declared name or selector carries one of ``hints``.
+
+    Substring rather than equality because a selector is often a pattern (``langchain*``) and a
+    package is often a family member (``langchain-openai``).
+    """
+
+    return any(hint in name for name in names for hint in hints)
 
 
 def _find_any_text_hint(repo: Path, hints: tuple[str, ...]) -> list[Path]:
@@ -1747,8 +2696,8 @@ def _load_ai_system_doc(ctx: EvalContext) -> tuple[dict[str, Any] | None, Path]:
     p = ctx.repo_root / _KIT_DIR / "evidence" / "ai-system-technical-doc.json"
     if not p.is_file():
         return None, p
-    with contextlib.suppress(OSError, json.JSONDecodeError):
-        data = json.loads(p.read_text(encoding="utf-8"))
+    with contextlib.suppress(OSError, UnicodeDecodeError, json.JSONDecodeError):
+        data = json.loads(p.read_text(encoding="utf-8-sig"))
         if isinstance(data, dict):
             return cast(dict[str, Any], data), p
     return None, p
@@ -1792,14 +2741,21 @@ _OSV_SARIF_RELPATH = ".oss-policy-kit/evidence/sast/osv-scanner.sarif.json"
 
 
 def _safe_float(raw: Any) -> float | None:
-    """Coerce a value to float, returning None for None / non-numeric input."""
+    """Coerce a value to float, returning None for None / non-numeric / non-finite input.
+
+    A non-finite value (``inf``/``nan``, e.g. from a SARIF ``epss_score: 1e400`` or
+    ``"NaN"``) must not survive: ``inf`` would always clear an EPSS/CVSS threshold and
+    ``nan`` compares false to every threshold, silently warping the KEV/high-EPSS
+    classification. Mirrors ``finding_sarif._safe_float``.
+    """
 
     if raw is None:
         return None
     try:
-        return float(raw)
+        value = float(raw)
     except (TypeError, ValueError):
         return None
+    return value if math.isfinite(value) else None
 
 
 def _classify_epss_kev_result(
@@ -1824,35 +2780,69 @@ def _classify_epss_kev_result(
     return (ident if is_kev else None), (ident if is_high_epss else None)
 
 
+class SarifEpssKevScan(NamedTuple):
+    """What one pass over an OSV SARIF could establish about KEV / EPSS.
+
+    ``saw_kev_property`` and ``saw_epss_property`` exist because an empty ``kev`` list
+    has two completely different meanings, and the caller was reading both as the
+    reassuring one: "enrichment ran and flagged nothing" versus "this SARIF carries no
+    enrichment at all". Plain ``osv-scanner --format sarif`` emits no ``properties.kev``,
+    so the second case is the common one -- and the kit was answering it with
+    PASS / confidence=high / assurance=evidence-backed on a file containing Log4Shell.
+
+    Errors keep index 2 so ``scan(...)[2]`` still reads the error.
+    """
+
+    kev: list[str]
+    high_epss: list[str]
+    error: str | None
+    saw_kev_property: bool = False
+    saw_epss_property: bool = False
+
+
+def _result_carries_enrichment(result: Any) -> tuple[bool, bool]:
+    """Whether one SARIF result carries a KEV / an EPSS property at all, any value."""
+
+    if not isinstance(result, dict):
+        return False, False
+    props = result.get("properties")
+    if not isinstance(props, dict):
+        return False, False
+    return "kev" in props, ("epss_score" in props or "epss" in props)
+
+
 def _scan_sarif_epss_kev(
     sarif_path: Path, *, epss_threshold: float = 0.5, cvss_threshold: float = 7.0
-) -> tuple[list[str], list[str], str | None]:
-    """Return ``(kev_ids, high_epss_ids, error)`` from SARIF result.properties."""
+) -> SarifEpssKevScan:
+    """Scan SARIF ``result.properties`` for KEV flags and high-EPSS findings."""
     try:
-        doc = json.loads(sarif_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError) as exc:
-        return [], [], f"Could not read SARIF: {exc}"
-    except json.JSONDecodeError as exc:
-        return [], [], f"Could not parse SARIF JSON: {exc}"
+        doc = json.loads(sarif_path.read_text(encoding="utf-8-sig"))
+    except BAD_INPUT_ERRORS as exc:
+        return SarifEpssKevScan([], [], f"Could not read SARIF: {bad_input_detail(exc)}")
     if not isinstance(doc, dict):
-        return [], [], "SARIF top-level is not an object."
+        return SarifEpssKevScan([], [], "SARIF top-level is not an object.")
     kev: list[str] = []
     high_epss: list[str] = []
+    saw_kev = False
+    saw_epss = False
     for result in _iter_sarif_results(doc):
+        has_kev, has_epss = _result_carries_enrichment(result)
+        saw_kev = saw_kev or has_kev
+        saw_epss = saw_epss or has_epss
         kev_id, high_id = _classify_epss_kev_result(result, epss_threshold, cvss_threshold)
         if kev_id is not None:
             kev.append(kev_id)
         if high_id is not None:
             high_epss.append(high_id)
-    return kev, high_epss, None
+    return SarifEpssKevScan(kev, high_epss, None, saw_kev, saw_epss)
 
 
 def _branch_protection_evidence(ctx: EvalContext) -> tuple[dict[str, Any] | None, Path]:
     p = ctx.repo_root / _KIT_DIR / "evidence" / "branch-protection.json"
     if not p.is_file():
         return None, p
-    with contextlib.suppress(OSError, json.JSONDecodeError):
-        data = json.loads(p.read_text(encoding="utf-8"))
+    with contextlib.suppress(OSError, UnicodeDecodeError, json.JSONDecodeError):
+        data = json.loads(p.read_text(encoding="utf-8-sig"))
         if isinstance(data, dict):
             return cast(dict[str, Any], data), p
     return None, p
@@ -1933,11 +2923,10 @@ def _agentic_applicable(repo: Path) -> tuple[bool, list[Path]]:
     found: list[Path] = []
     for rel in (_PYPROJECT_TOML, _PACKAGE_JSON, _REQUIREMENTS_TXT):
         p = repo / rel
-        if p.is_file():
-            with contextlib.suppress(OSError):
-                text = p.read_text(encoding="utf-8", errors="replace").lower()
-                if any(h in text for h in _AGENT_DEP_HINTS):
-                    found.append(p)
+        # A comment must not switch the twelve agentic controls on -- but a manifest the parser
+        # cannot read must not switch them off either, so the refusal keeps the old raw read.
+        if p.is_file() and _manifest_declares(p, _AGENT_DEP_HINTS):
+            found.append(p)
     for rel in _AGENT_PATH_HINTS:
         p = repo / rel
         if p.exists():
@@ -2123,6 +3112,7 @@ __all__ = [
     "_codeowners_text",
     "_detect_sbom_format",
     "_detect_sbom_format_and_version",
+    "_digest_gate_outcome",
     "_digest_invalid_not_evaluated",
     "_digest_placeholder_manual_review",
     "_disclosure_policy_schema",
@@ -2164,7 +3154,26 @@ __all__ = [
     "_publish_workflows",
     "_python_lock_or_pins",
     "_read_first_existing",
+    "_AI_MODEL_ALIASES",
+    "_configured_value_mentions",
+    "_hint_on_a_line_that_claims_it_exists",
+    "_declared_dependency_names",
+    "_flatten_strings",
+    "_has_content",
+    "_holds_a_non_empty_file",
+    "_names_mention_any",
+    "_manifest_declares",
+    "_raw_text_mentions",
+    "_documents_section",
+    "_markdown_sections",
+    "_is_digest_shaped",
+    "_is_real_version",
+    "_is_vendored",
+    "_llm_sdk_scan",
+    "_parts_within_repo",
     "_read_lower",
+    "_requirement_name",
+    "_update_config_names",
     "_read_security",
     "_release_archival_policy_schema",
     "_release_archive_signal_match",
@@ -2175,6 +3184,7 @@ __all__ = [
     "_sbom_artifact_digest_strings",
     "_scan_for_llm_sdks",
     "_scan_gitlab_pipelines",
+    "_scan_readme_for_heading",
     "_scan_readme_for_section",
     "_scan_sarif_epss_kev",
     "_secret_scanning_schema",

@@ -22,8 +22,9 @@ runner = CliRunner()
 def test_resolve_target_rejects_file(tmp_path: Path) -> None:
     f = tmp_path / "afile.txt"
     f.write_text("x", encoding="utf-8")
+    str_2 = str(f)
     with pytest.raises(InvalidInputError):
-        init_mod._resolve_target(str(f))
+        init_mod._resolve_target(str_2)
 
 
 def test_init_cmd_target_is_file_exit2(tmp_path: Path) -> None:

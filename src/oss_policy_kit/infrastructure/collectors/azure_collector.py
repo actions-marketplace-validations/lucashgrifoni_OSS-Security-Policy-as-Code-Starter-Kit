@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, NoReturn, cast
 
+from oss_policy_kit.application.evaluators_common import as_mapping
 from oss_policy_kit.domain.errors import CollectionNetworkError, CollectionPermissionError, RateLimitError
 from oss_policy_kit.infrastructure.collectors.base import CollectionResult, EvidenceCollector
 
@@ -106,7 +107,9 @@ def _infer_branch_posture(configs: list[dict[str, Any]], repo_id: str) -> dict[s
             continue
         if not _policy_applies_to_repository(cfg, repo_id):
             continue
-        tid = str((cfg.get("type") or {}).get("id", "")).lower()
+        # `(cfg.get("type") or {})` substitutes only for a falsy value, so a policy whose
+        # `type` came back as a string reached `.get` and raised.
+        tid = str(as_mapping(cfg.get("type")).get("id", "")).lower()
         settings = cast(dict[str, Any], cfg.get("settings") or {})
         if tid == _POLICY_MINIMUM_REVIEWERS.lower():
             posture["minimum_reviewers_enabled"] = int(settings.get("minimumApproverCount", 0) or 0) >= 1
@@ -167,6 +170,10 @@ def _environment_has_approval_check(client: Any, project: str, environment_id: s
         )
         r = client.get(url)
         _enforce_rate_limit(r)
+        # Behaviourally redundant with the `!= 200` catch-all below, and kept deliberately:
+        # it pins what a refusal means here independently of it, so a later change to the
+        # generic branch cannot silently reclassify 401/403. Mutation-testing this line
+        # produces an equivalent mutant, which is expected rather than a missing test.
         if r.status_code in {401, 403}:
             return None
         if r.status_code == 404:

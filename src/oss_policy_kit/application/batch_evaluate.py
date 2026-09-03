@@ -15,8 +15,14 @@ from oss_policy_kit.adapters.local_paths import resolve_existing_dir
 from oss_policy_kit.application.cli_output import FailOnPolicy, fail_on_violated
 from oss_policy_kit.application.clock import report_generated_at
 from oss_policy_kit.application.engine import evaluate_repository
+from oss_policy_kit.application.evaluators_common import as_mapping
 from oss_policy_kit.application.loader import load_catalog, load_profile_by_id, merge_kit_root
-from oss_policy_kit.application.reporting import compute_priority_insights, report_to_dict, write_markdown_report
+from oss_policy_kit.application.reporting import (
+    _sanitize_target_path_for_payload,
+    compute_priority_insights,
+    report_to_dict,
+    write_markdown_report,
+)
 from oss_policy_kit.domain.errors import InvalidInputError
 
 _REPO_PRIMARY_SIGNALS: tuple[str, ...] = (
@@ -94,6 +100,58 @@ _META_DIR_PREFIXES: tuple[str, ...] = (
 )
 
 
+def _ensure_batch_dir(directory: Path) -> None:
+    """Create *directory* (parents ok, idempotent), mapping a bad path to a usage error.
+
+    ``evaluate-many`` writes under a user-supplied ``--output-dir``. When that path (or a
+    per-target subfolder created mid-batch) already exists as a FILE, is under a file, or
+    is otherwise not creatable, ``mkdir`` raises ``OSError``. Left unguarded it reaches the
+    CLI's last-resort handler as exit 3 and leaks the absolute path / username. Raising
+    ``InvalidInputError`` routes it to exit 2 with an ``exc.strerror``-only message (M-002),
+    matching single ``evaluate``'s ``--output-dir`` handling.
+    """
+
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise InvalidInputError(f"Cannot write to --output-dir: {exc.strerror or 'filesystem error'}") from exc
+
+
+def _write_batch_artifact(path: Path, content: str) -> None:
+    """Write one consolidated artifact, reporting a write failure AS a write failure.
+
+    These two were the last unguarded writes in the batch. An ``OSError`` from either
+    reached the CLI's last-resort handler, which classifies every ``OSError`` as
+    unreadable INPUT, so a blocked ``--output-dir`` was answered with
+
+        Error: input could not be read: it could not be read (Permission denied)
+
+    -- which sends the operator to check permissions on the repositories being audited,
+    and those were fine. ``_ensure_batch_dir`` a few lines above already says the right
+    thing for the ``mkdir``, and single ``evaluate`` for its own reports; this is the same
+    sentence for the step in between.
+
+    The message names the file that could not be written and warns that the pair no longer
+    agrees, because the two are written in sequence and either can be the one that fails.
+    It says "different runs" rather than "left over from an earlier run": that wording was
+    only true when the FIRST write failed, and read as false when the second did -- there
+    the other file is this run's, freshly written. The advice is the same either way, but
+    the reason given for it has to hold in both directions.
+
+    Only ``strerror`` and the artifact's own name are reported -- ``str(OSError)`` embeds
+    the absolute filename (M-002).
+    """
+
+    try:
+        path.write_text(content, encoding="utf-8")
+    except OSError as exc:
+        raise InvalidInputError(
+            f"Cannot write {path.name} to --output-dir: {exc.strerror or 'filesystem error'}. "
+            "The two consolidated files there now describe different runs; delete both "
+            "before reading either."
+        ) from exc
+
+
 def _is_meta_directory(name: str) -> bool:
     """Return True when *name* looks like an output / build / cache directory
     that should never be evaluated as a project, even via --skip-non-repos."""
@@ -101,6 +159,30 @@ def _is_meta_directory(name: str) -> bool:
     if low in _META_DIR_NAMES:
         return True
     return any(low.startswith(p) for p in _META_DIR_PREFIXES)
+
+
+def _quiet_probe(probe: Callable[[], bool]) -> bool:
+    """Run a filesystem existence/type check, reading permission-denied as ``False``.
+
+    ``Path.exists`` and ``Path.is_dir`` re-raise ``PermissionError`` (EACCES /
+    WinError 5 is not in pathlib's ignored-error set), so probing a child directory
+    the auditor cannot read used to abort the whole ``evaluate-many`` discovery with
+    exit 3. A directory we cannot inspect simply shows us no repository signal.
+    """
+
+    try:
+        return probe()
+    except OSError:
+        return False
+
+
+def _glob_has_match(path: Path, pattern: str) -> bool:
+    """True if ``path.glob(pattern)`` yields at least one entry (OSError treated as no match)."""
+
+    try:
+        return next(iter(path.glob(pattern)), None) is not None
+    except OSError:
+        return False
 
 
 def is_likely_repository(path: Path) -> tuple[bool, str]:
@@ -111,13 +193,16 @@ def is_likely_repository(path: Path) -> tuple[bool, str]:
     in monorepos. As a fallback for monorepo-style layouts where signals live one or two
     directories deep (e.g. ``infra/k8s-manifests/*.yaml``, ``targets/*/Dockerfile``),
     also accept signals at depth 1 or 2 from the candidate root.
+
+    Every probe is permission-tolerant: this runs over directories the auditor may
+    not be allowed to read, and an unreadable candidate must not abort discovery.
     """
 
     for signal in _REPO_PRIMARY_SIGNALS:
-        if (path / signal).exists():
+        if _quiet_probe((path / signal).exists):
             return True, signal
     for pattern in _REPO_GLOB_PRIMARY:
-        if list(path.glob(pattern)):
+        if _glob_has_match(path, pattern):
             return True, pattern
     deep = _repo_signal_at_depth(path)
     if deep is not None:
@@ -126,15 +211,6 @@ def is_likely_repository(path: Path) -> tuple[bool, str]:
     if k8s is not None:
         return True, k8s
     return False, ""
-
-
-def _glob_has_match(path: Path, pattern: str) -> bool:
-    """True if ``path.glob(pattern)`` yields at least one entry (OSError treated as no match)."""
-
-    try:
-        return next(iter(path.glob(pattern)), None) is not None
-    except OSError:
-        return False
 
 
 def _repo_signal_at_depth(path: Path) -> str | None:
@@ -199,6 +275,12 @@ class BatchResult:
     batch_json: Path
     batch_md: Path
     gate_violated: bool
+    #: Targets that ARE repositories and could not be evaluated. Distinct from a skipped
+    #: directory, which is a child the batch was never asked to evaluate. A batch that
+    #: could not evaluate what it queued is incomplete, and reporting a gate result over
+    #: the remainder as though it covered everything is the silent-success this field
+    #: exists to prevent.
+    failed_count: int = 0
 
 
 def discover_batch_targets(
@@ -209,9 +291,17 @@ def discover_batch_targets(
 ) -> list[Path]:
     """Return immediate child directories of *target_root* suitable as repo roots."""
 
+    try:
+        children = sorted(target_root.iterdir(), key=lambda p: p.name.lower())
+    except OSError as exc:
+        # An unlistable --target-root is an operational condition, not an internal
+        # defect: exit 2 with the OS error only, never the resolved path (M-002).
+        raise InvalidInputError(
+            f"Cannot list --target-root '{target_root.name}': {exc.strerror or 'unreadable'}"
+        ) from exc
     out: list[Path] = []
-    for child in sorted(target_root.iterdir(), key=lambda p: p.name.lower()):
-        if not child.is_dir():
+    for child in children:
+        if not _quiet_probe(child.is_dir):
             continue
         if child.name.startswith("."):
             continue
@@ -224,20 +314,26 @@ def discover_batch_targets(
 
 
 def _build_eval_queue(
-    targets: list[Path], *, skip_non_repos: bool
+    targets: list[Path], *, skip_non_repos: bool, include_absolute_path: bool = False
 ) -> tuple[list[tuple[Path, bool]], list[dict[str, str]]]:
-    """Filter discovered child dirs into ``(eval_queue, skipped_dirs)`` honoring ``--skip-non-repos``."""
+    """Filter discovered child dirs into ``(eval_queue, skipped_dirs)`` honoring ``--skip-non-repos``.
+
+    ``skipped_directories[].path`` is sanitized to the child basename by default
+    (M-002) so the shareable batch JSON never leaks the auditor's home directory
+    or username; ``include_absolute_path=True`` restores the full resolved path.
+    """
 
     skipped_dirs: list[dict[str, str]] = []
     eval_queue: list[tuple[Path, bool]] = []
     for child in targets:
+        skipped_path = _sanitize_target_path_for_payload(str(child.resolve()), include_absolute=include_absolute_path)
         # Even without --skip-non-repos, output / build directories should not be treated as
         # evaluable projects. Adopters can still target them explicitly via `evaluate --target`.
         if skip_non_repos and _is_meta_directory(child.name):
             skipped_dirs.append(
                 {
                     "name": child.name,
-                    "path": str(child.resolve()),
+                    "path": skipped_path,
                     "reason": "Looks like an output / build / cache directory (matches meta-directory name pattern).",
                 }
             )
@@ -247,13 +343,42 @@ def _build_eval_queue(
             skipped_dirs.append(
                 {
                     "name": child.name,
-                    "path": str(child.resolve()),
+                    "path": skipped_path,
                     "reason": "No repository root signals (.git, manifest, CI file, Dockerfile, etc.).",
                 }
             )
             continue
         eval_queue.append((child, likely))
     return eval_queue, skipped_dirs
+
+
+def _safe_component(value: str) -> str:
+    """Reduce *value* to a single directory name that cannot steer where a report lands.
+
+    Both halves of the per-run destination -- the target name and the profile reference --
+    are joined onto ``--output-dir``. The target name was reduced here; the profile
+    reference was not, and ``pathlib`` resolves whatever it is given.
+
+    Measured, with three targets and a profile passed by relative path:
+
+    - ``-p ../profile.yaml`` made the destination ``output_dir / <target> / ../profile.yaml``,
+      which collapses to ``output_dir/profile.yaml``. The target component disappears, so all
+      three targets wrote the SAME file. `evaluation-batch.json` still declared three runs
+      with three report links; one file existed, holding the last target's verdict. Exit 0.
+    - ``-p ../../profile.yaml`` walked out of ``--output-dir`` entirely: zero reports where
+      the operator asked, one written beside it, exit 0, and the path recorded in the batch
+      artifact is basename-sanitized so it does not even say where they went.
+    - When the escaped destination collided with an existing file, the run aborted with
+      "Cannot write to --output-dir" -- blaming a directory that was perfectly fine.
+
+    So separators are flattened and a component that is only dots is refused. `.` and `..`
+    carry no separator and still traverse, which is why stripping slashes alone is not
+    enough. An empty or all-dot value becomes ``_`` rather than vanishing, because a
+    disappearing component is exactly the failure being fixed.
+    """
+
+    flattened = value.replace("/", "_").replace("\\", "_")
+    return "_" if not flattened.strip(". ") else flattened
 
 
 def _execute_one_run(
@@ -267,36 +392,84 @@ def _execute_one_run(
     catalog: Any,
     output_dir: Path,
     skip_non_repos: bool,
+    include_absolute_path: bool = False,
 ) -> tuple[BatchRunRow, dict[str, Any], dict[str, int]]:
-    """Evaluate one target against one profile; write reports and return (row, payload, summary)."""
+    """Evaluate one target against one profile; write reports and return (row, payload, summary).
+
+    Serialized paths (``runs[].target_path`` and ``runs[].reports.{json,markdown}``)
+    are sanitized to basenames by default (M-002) so the shareable batch JSON never
+    leaks the auditor's home directory or username. Per-run reports themselves inherit
+    the same ``include_absolute_path`` privacy default via ``report_to_dict`` /
+    ``write_markdown_report``.
+    """
 
     profile = load_profile_by_id(root, pid)
     report = evaluate_repository(repo_root=repo, profile=profile, catalog=catalog, waiver_outcome=None, scorecard=None)
-    dest = output_dir / safe_name / pid
-    dest.mkdir(parents=True, exist_ok=True)
+    dest = output_dir / safe_name / _safe_component(pid)
+    _ensure_batch_dir(dest)
     json_path = dest / "evaluation-report.json"
     md_path = dest / "evaluation-report.md"
-    json_path.write_text(json.dumps(report_to_dict(report), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    write_markdown_report(report, md_path)
+    # Output failures are converted before they can reach the caller's `except OSError`,
+    # which exists to skip targets that cannot be READ. A full disk or a revoked
+    # --output-dir is not a property of this target: left as an OSError it would be
+    # recorded as "skipped directory" and the batch would exit 0 having written
+    # nothing, which is the silent-success failure this project refuses to ship.
+    try:
+        json_path.write_text(
+            json.dumps(
+                report_to_dict(report, include_absolute_path=include_absolute_path), indent=2, ensure_ascii=False
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        write_markdown_report(report, md_path, include_absolute_path=include_absolute_path)
+    except OSError as exc:
+        raise InvalidInputError(
+            f"Cannot write the report for '{target.name}': {exc.strerror or 'filesystem error'}"
+        ) from exc
+    target_path_display = _sanitize_target_path_for_payload(str(repo.resolve()), include_absolute=include_absolute_path)
+    json_report_display = _sanitize_target_path_for_payload(
+        str(json_path.resolve()), include_absolute=include_absolute_path
+    )
+    md_report_display = _sanitize_target_path_for_payload(
+        str(md_path.resolve()), include_absolute=include_absolute_path
+    )
     row = BatchRunRow(
         target_name=target.name,
-        target_path=str(repo.resolve()),
+        target_path=target_path_display,
         profile_id=pid,
         summary_by_status=dict(report.summary_by_status),
+        # Kept as the real resolved path: consumed internally by the batch Markdown
+        # artifact-lines renderer to compute a path relative to the output directory.
         report_path_json=str(json_path.resolve()),
         report_path_md=str(md_path.resolve()),
     )
     payload: dict[str, Any] = {
         "target_name": target.name,
-        "target_path": str(repo.resolve()),
+        "target_path": target_path_display,
         "profile_id": pid,
         "summary_by_status": report.summary_by_status,
         "action_insights": compute_priority_insights(report),
-        "reports": {"json": str(json_path.resolve()), "markdown": str(md_path.resolve())},
+        "reports": {"json": json_report_display, "markdown": md_report_display},
     }
     if not skip_non_repos and not likely_repo:
         payload["likely_not_a_repository"] = True
     return row, payload, dict(report.summary_by_status)
+
+
+@dataclass(slots=True)
+class _BatchRunOutcome:
+    """Everything one pass over the evaluation queue produced."""
+
+    rows: list[BatchRunRow]
+    consolidated_reports: list[dict[str, Any]]
+    summaries_for_gate: list[dict[str, int]]
+    skipped: list[dict[str, str]]
+    #: Queued targets that raised during evaluation. Kept apart from ``skipped``: one
+    #: means "not a repository", the other means "a repository we failed on", and
+    #: merging them let a batch where EVERY repository failed report the gate as PASSED
+    #: over zero runs.
+    failed: list[dict[str, str]]
 
 
 def _execute_batch_runs(
@@ -308,36 +481,66 @@ def _execute_batch_runs(
     output_dir: Path,
     skip_non_repos: bool,
     progress_callback: Callable[[str, int, int], None] | None,
-) -> tuple[list[BatchRunRow], list[dict[str, Any]], list[dict[str, int]]]:
-    """Run every (target × profile) evaluation and return (rows, consolidated_reports, summaries)."""
+    include_absolute_path: bool = False,
+) -> _BatchRunOutcome:
+    """Run every (target × profile) evaluation, degrading past targets we cannot read.
 
-    rows: list[BatchRunRow] = []
-    consolidated_reports: list[dict[str, Any]] = []
-    summaries_for_gate: list[dict[str, int]] = []
+    A repository the process has no permission to read is an ordinary operational
+    condition in a monorepo scan, not a defect: it is recorded in ``skipped`` and the
+    batch continues. Before this guard a single unreadable file anywhere under one
+    child aborted the whole run with exit 3 and discarded every result already
+    computed. Usage errors (an unknown profile id, an unwritable ``--output-dir``)
+    still abort, because they are wrong for every target alike.
+
+    The guard covers the INPUT side only. ``_execute_one_run`` converts its own write
+    failures to ``InvalidInputError`` before they get here, so a full disk mid-batch
+    aborts with exit 2 instead of being filed as a per-target skip.
+    """
+
+    outcome = _BatchRunOutcome(rows=[], consolidated_reports=[], summaries_for_gate=[], skipped=[], failed=[])
     total_runs = len(eval_queue) * len(profile_ids)
     run_index = 0
     for target, likely_repo in eval_queue:
-        repo = resolve_existing_dir(str(target))
-        safe_name = target.name.replace("/", "_").replace("\\", "_")
+        safe_name = _safe_component(target.name)
         for pid in profile_ids:
             run_index += 1
             if progress_callback is not None:
                 progress_callback(target.name, run_index, total_runs)
-            row, payload, summary = _execute_one_run(
-                target,
-                likely_repo,
-                pid,
-                repo=repo,
-                safe_name=safe_name,
-                root=root,
-                catalog=catalog,
-                output_dir=output_dir,
-                skip_non_repos=skip_non_repos,
-            )
-            rows.append(row)
-            consolidated_reports.append(payload)
-            summaries_for_gate.append(summary)
-    return rows, consolidated_reports, summaries_for_gate
+            try:
+                row, payload, summary = _execute_one_run(
+                    target,
+                    likely_repo,
+                    pid,
+                    repo=resolve_existing_dir(str(target)),
+                    safe_name=safe_name,
+                    root=root,
+                    catalog=catalog,
+                    output_dir=output_dir,
+                    skip_non_repos=skip_non_repos,
+                    include_absolute_path=include_absolute_path,
+                )
+            except OSError as exc:
+                outcome.failed.append(_unreadable_target_record(target, pid, exc, include_absolute_path))
+                continue
+            outcome.rows.append(row)
+            outcome.consolidated_reports.append(payload)
+            outcome.summaries_for_gate.append(summary)
+    return outcome
+
+
+def _unreadable_target_record(target: Path, pid: str, exc: OSError, include_absolute_path: bool) -> dict[str, str]:
+    """Describe a target the batch had to skip, without leaking where it lives.
+
+    ``str(exc)`` and the ``OSError`` repr both embed the absolute filename, so only
+    ``strerror`` is reported and the path goes through the same basename sanitizer
+    as every other emitted path (M-002).
+    """
+
+    return {
+        "name": target.name,
+        "path": _sanitize_target_path_for_payload(str(target.resolve()), include_absolute=include_absolute_path),
+        "reason": f"Could not be evaluated against profile '{pid}': {exc.strerror or 'filesystem error'}.",
+    }
 
 
 def run_batch_evaluation(  # noqa: C901
@@ -351,12 +554,19 @@ def run_batch_evaluation(  # noqa: C901
     fail_on: str = "none",
     skip_non_repos: bool = False,
     progress_callback: Callable[[str, int, int], None] | None = None,
+    include_absolute_path: bool = False,
 ) -> BatchResult:
     """Evaluate each discovered child of *target_root* against every *profile_id*.
 
     Writes per-run ``evaluation-report.{json,md}`` under
     ``output_dir / <sanitized_target_name> / <profile_id> /`` plus consolidated
     ``evaluation-batch.json`` and ``evaluation-batch.md`` at *output_dir*.
+
+    ``include_absolute_path`` mirrors single ``evaluate`` (M-002): by default every
+    emitted path (``target_root``, ``runs[].target_path``, report artifact paths,
+    ``skipped_directories[].path``) is sanitized to a basename so the shareable batch
+    artifacts never leak the auditor's home directory or username. Pass ``True`` to
+    restore full absolute paths for downstream tooling.
     """
 
     policy = cast(FailOnPolicy, fail_on.lower())
@@ -366,14 +576,16 @@ def run_batch_evaluation(  # noqa: C901
     if not targets:
         raise InvalidInputError(f"No subdirectories to evaluate under {target_root}")
 
-    eval_queue, skipped_dirs = _build_eval_queue(targets, skip_non_repos=skip_non_repos)
+    eval_queue, skipped_dirs = _build_eval_queue(
+        targets, skip_non_repos=skip_non_repos, include_absolute_path=include_absolute_path
+    )
     if not eval_queue:
         raise InvalidInputError(
             "No repositories to evaluate after filtering. Remove --skip-non-repos or add include/exclude patterns."
         )
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    rows, consolidated_reports, summaries_for_gate = _execute_batch_runs(
+    _ensure_batch_dir(output_dir)
+    outcome = _execute_batch_runs(
         eval_queue,
         profile_ids,
         root=root,
@@ -381,17 +593,24 @@ def run_batch_evaluation(  # noqa: C901
         output_dir=output_dir,
         skip_non_repos=skip_non_repos,
         progress_callback=progress_callback,
+        include_absolute_path=include_absolute_path,
     )
+    rows = outcome.rows
+    consolidated_reports = outcome.consolidated_reports
+    skipped_dirs.extend(outcome.skipped)
+    failed_dirs = outcome.failed
 
     generated_at = report_generated_at()
-    gate_violated = _gate_violated_for_batch(policy, summaries_for_gate)
+    gate_violated = _gate_violated_for_batch(policy, outcome.summaries_for_gate)
     stats = _compute_batch_stats(rows, consolidated_reports)
 
     batch_payload: dict[str, Any] = {
         "schema_version": "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/batch/0.1",
         "generated_at": generated_at,
         "kit_version": oss_policy_kit.__version__,
-        "target_root": str(target_root.resolve()),
+        "target_root": _sanitize_target_path_for_payload(
+            str(target_root.resolve()), include_absolute=include_absolute_path
+        ),
         "profile_ids": profile_ids,
         "gate_violated": gate_violated,
         "fail_on": policy,
@@ -402,12 +621,18 @@ def run_batch_evaluation(  # noqa: C901
     }
     if skipped_dirs:
         batch_payload["skipped_directories"] = skipped_dirs
+    if failed_dirs:
+        # Deliberately a separate key from ``skipped_directories``. A consumer reading
+        # only ``gate_violated`` would otherwise conclude the batch covered everything.
+        batch_payload["failed_directories"] = failed_dirs
+        batch_payload["batch_complete"] = False
 
     batch_json = output_dir / "evaluation-batch.json"
-    batch_json.write_text(json.dumps(batch_payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    _write_batch_artifact(batch_json, json.dumps(batch_payload, indent=2, ensure_ascii=False) + "\n")
 
     batch_md = output_dir / "evaluation-batch.md"
-    batch_md.write_text(
+    _write_batch_artifact(
+        batch_md,
         _render_batch_markdown(
             rows,
             generated_at=generated_at,
@@ -418,11 +643,17 @@ def run_batch_evaluation(  # noqa: C901
             policy=policy,
             stats=stats,
             skipped_dirs=skipped_dirs,
+            failed_dirs=failed_dirs,
             output_dir=output_dir,
+            include_absolute_path=include_absolute_path,
         ),
-        encoding="utf-8",
     )
-    return BatchResult(batch_json=batch_json, batch_md=batch_md, gate_violated=gate_violated)
+    return BatchResult(
+        batch_json=batch_json,
+        batch_md=batch_md,
+        gate_violated=gate_violated,
+        failed_count=len(failed_dirs),
+    )
 
 
 @dataclass(slots=True)
@@ -473,8 +704,8 @@ def _compute_batch_stats(rows: list[BatchRunRow], consolidated_reports: list[dic
     common_fail_count: int | None = fc_values[0] if all_tied else None
     gap_hits: Counter[str] = Counter()
     for cr in consolidated_reports:
-        ac = cr.get("action_insights") or {}
-        for ids in (ac.get("failing_controls_by_category") or {}).values():
+        ac = as_mapping(cr.get("action_insights"))
+        for ids in as_mapping(ac.get("failing_controls_by_category")).values():
             for cid in ids:
                 gap_hits[str(cid)] += 1
     return _BatchStats(
@@ -507,8 +738,16 @@ def _batch_md_matrix_lines(rows: list[BatchRunRow]) -> list[str]:
     return out
 
 
-def _batch_md_artifact_lines(rows: list[BatchRunRow], output_dir: Path) -> list[str]:
-    """Markdown list of per-run report artifact paths (relative to the batch output dir)."""
+def _batch_md_artifact_lines(
+    rows: list[BatchRunRow], output_dir: Path, *, include_absolute_path: bool = False
+) -> list[str]:
+    """Markdown list of per-run report artifact paths (relative to the batch output dir).
+
+    Paths render relative to *output_dir* in the normal flow. The rare
+    ``ValueError`` fallback (a report outside the output directory) is sanitized to
+    a basename by default (M-002) so the shareable batch Markdown never leaks an
+    absolute path / username; ``include_absolute_path=True`` restores the full path.
+    """
 
     out = ["## Report artifacts (paths relative to batch output directory)", ""]
     out_abs = output_dir.resolve()
@@ -518,7 +757,8 @@ def _batch_md_artifact_lines(rows: list[BatchRunRow], output_dir: Path) -> list[
         try:
             j_show, m_show = jp.relative_to(out_abs).as_posix(), mp.relative_to(out_abs).as_posix()
         except ValueError:
-            j_show, m_show = str(jp), str(mp)
+            j_show = _sanitize_target_path_for_payload(str(jp), include_absolute=include_absolute_path)
+            m_show = _sanitize_target_path_for_payload(str(mp), include_absolute=include_absolute_path)
         out.append(f"- `{row.target_name}` x `{row.profile_id}` -> `{j_show}` , `{m_show}`")
     return out
 
@@ -534,16 +774,32 @@ def _render_batch_markdown(
     policy: FailOnPolicy,
     stats: _BatchStats,
     skipped_dirs: list[dict[str, str]],
+    failed_dirs: list[dict[str, str]],
     output_dir: Path,
+    include_absolute_path: bool = False,
 ) -> str:
-    """Render the consolidated batch Markdown report."""
+    """Render the consolidated batch Markdown report.
 
+    ``failed_dirs`` is separate from ``skipped_dirs`` for the same reason the JSON keeps
+    two keys: a skip means "not a repository", a failure means "a repository we could not
+    evaluate", and only the second makes the batch incomplete.
+
+    It used not to be passed here at all. The JSON payload recorded ``failed_directories``
+    and ``batch_complete: false``, while the Markdown beside it named no failure, used the
+    word nowhere, and printed **CI gate: PASSED** -- over a batch that had evaluated two of
+    three repositories. The run does exit 2, but the exit code is gone by the time someone
+    reads the report attached to a pull request.
+    """
+
+    target_root_display = _sanitize_target_path_for_payload(
+        str(target_root.resolve()), include_absolute=include_absolute_path
+    )
     md_lines = [
         "# OSS Policy Kit - batch evaluation",
         "",
         f"- **Generated (UTC)**: `{generated_at}`",
         f"- **Kit version**: `{oss_policy_kit.__version__}`",
-        f"- **Target root**: `{target_root.resolve()}`",
+        f"- **Target root**: `{target_root_display}`",
         f"- **Profiles**: {', '.join(f'`{p}`' for p in profile_ids)}",
         (
             f"- **Targets evaluated**: {eval_queue_len} child folder(s) x {len(profile_ids)} "
@@ -555,6 +811,14 @@ def _render_batch_markdown(
     ]
     md_lines.extend(f"- `{status}`: **{stats.totals[status]}**" for status in sorted(stats.totals))
     gate_state = "**VIOLATED**" if gate_violated else "**PASSED**"
+    if failed_dirs:
+        # The caveat rides on the gate line itself. A reader who takes one thing from this
+        # report takes that line, and "PASSED" beside totals that cover part of the target
+        # root is the claim being corrected -- in both directions, because a VIOLATED gate
+        # over an incomplete batch is equally partial.
+        gate_state += (
+            f" over an **INCOMPLETE** batch: {len(failed_dirs)} of {eval_queue_len} repositories could not be evaluated"
+        )
     md_lines.extend(["", f"- **CI gate (`--fail-on: {policy}`)**: {gate_state}", ""])
 
     dist = stats.dist
@@ -577,6 +841,20 @@ def _render_batch_markdown(
         md_lines.extend(f"- {ln}" if ln.startswith("All **") else ln for ln in stats.comparison_lines)
         md_lines.append("")
 
+    if failed_dirs:
+        md_lines.extend(
+            [
+                "## Repositories that could not be evaluated",
+                "",
+                "These are **not** skips. Each one is a repository the batch tried to evaluate and "
+                "could not, so every total and the gate above describe less than this target root "
+                "holds.",
+                "",
+            ]
+        )
+        md_lines.extend(f"- `{f['name']}` — {f['reason']}" for f in failed_dirs)
+        md_lines.append("")
+
     if skipped_dirs:
         md_lines.extend(["## Skipped directories", ""])
         md_lines.extend(f"- `{s['name']}` — {s['reason']}" for s in skipped_dirs)
@@ -589,5 +867,5 @@ def _render_batch_markdown(
         )
         md_lines.extend(f"| `{cid}` | {n} |" for cid, n in stats.gap_hits.most_common(15))
         md_lines.append("")
-    md_lines.extend(_batch_md_artifact_lines(rows, output_dir))
+    md_lines.extend(_batch_md_artifact_lines(rows, output_dir, include_absolute_path=include_absolute_path))
     return "\n".join(md_lines)

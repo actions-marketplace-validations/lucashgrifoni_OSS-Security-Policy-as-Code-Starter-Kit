@@ -6,12 +6,14 @@ import importlib.resources as ir
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, cast
 
+import yaml
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
+from oss_policy_kit.application.input_limits import BAD_INPUT_ERRORS, bad_input_detail, too_deep_reason
 from oss_policy_kit.domain.errors import LoadError, ProfileLoadError
-from oss_policy_kit.infrastructure.yaml_io import load_yaml_file
 
 REMOVED_CONTROL_IDS: frozenset[str] = frozenset({"SEC-AUDIT-016", "CI-SBOM-017"})
 
@@ -25,6 +27,50 @@ def _raise_if_removed_controls_referenced(control_ids: tuple[str, ...], context:
         f"Control(s) removed in v4.0.0: {listed}. {context} "
         "See docs/v4.0.0-migration-guide.md for replacement controls."
     )
+
+
+def _load_kit_yaml(path: Path, *, label: str) -> Any:
+    """Read and parse a catalog/profile YAML under the SHARED nesting budget.
+
+    Reading through :func:`oss_policy_kit.infrastructure.yaml_io.load_yaml_file` left the
+    depth budget to ``RecursionError``, which flow-style YAML simply never reaches: a
+    ``profile.yaml`` nested 250 levels parsed happily here, so ``evaluate`` exited 0 and
+    evaluated the profile while ``diff-catalogs`` — which reads the very same file through
+    ``load_capped_document`` — refused it with exit 2. Two commands disagreeing about the
+    same bytes is the defect.
+
+    The guard, the 200-level budget and the wording all come from
+    :mod:`oss_policy_kit.application.input_limits`; this is deliberately not a second
+    depth scanner or a second error vocabulary. ``yaml.safe_load`` mirrors
+    ``load_yaml_file`` exactly (safe loader only) — the text is only needed here because
+    the budget is checked before the parser sees it.
+
+    *label* is the capitalised noun (``"Catalog"`` / ``"Profile"``); every message names
+    the file by its bare name only, because ``merge_kit_root`` and ``load_profile_by_id``
+    both hand this function a RESOLVED path whose directories would leak the cwd, home
+    directory and OS account name (M-002).
+    """
+
+    try:
+        text = path.read_text(encoding="utf-8")
+        too_deep = too_deep_reason(text, label=f"{label} '{path.name}'")
+        if too_deep is not None:
+            # Complete and path-free in the shared wording already; wrapping it in
+            # "Failed to load ..." would only name the file twice.
+            raise LoadError(too_deep)
+        return cast(Any, yaml.safe_load(text))
+    except LoadError:
+        raise
+    except OSError as exc:
+        raise LoadError(f"Failed to load {label.lower()} '{path.name}': {exc.strerror or 'unreadable'}") from exc
+    except BAD_INPUT_ERRORS as exc:
+        # Shared taxonomy: malformed YAML, nesting past the parser stack, an integer
+        # literal past CPython's conversion limit. Already exit 2 before this change;
+        # bad_input_detail replaces the raw interpreter text with actionable wording.
+        raise LoadError(f"Failed to load {label.lower()} '{path.name}': {bad_input_detail(exc)}") from exc
+    except Exception as exc:  # noqa: BLE001
+        # Parse errors (YAML) reference the in-memory buffer, not the path on disk.
+        raise LoadError(f"Failed to load {label.lower()} '{path.name}': {exc}") from exc
 
 
 def _profile_spec_validator() -> Draft202012Validator:
@@ -114,10 +160,7 @@ def _parse_applicability(cid: str, raw: object) -> ApplicabilitySpec | None:
 def load_catalog(controls_yaml: Path) -> dict[str, ControlSpec]:
     """Load control catalog."""
 
-    try:
-        raw = load_yaml_file(controls_yaml)
-    except Exception as exc:  # noqa: BLE001
-        raise LoadError(f"Failed to load catalog {controls_yaml}: {exc}") from exc
+    raw = _load_kit_yaml(controls_yaml, label="Catalog")
     if not isinstance(raw, dict):
         raise LoadError("Catalog root must be a mapping")
     items = raw.get("controls")
@@ -165,10 +208,11 @@ def load_profile(path: Path, *, validate_external_schema: bool = False) -> Profi
     ``profile-spec.schema.json`` (used for ``--profile`` filesystem paths).
     """
 
-    try:
-        raw = load_yaml_file(path)
-    except Exception as exc:  # noqa: BLE001
-        raise LoadError(f"Failed to load profile {path}: {exc}") from exc
+    # M-002: ``path`` may be a resolved absolute path (an external ``--profile`` file is
+    # resolved by ``load_profile_by_id``), so every user-facing message below echoes only
+    # the basename — never the full path, which would leak cwd/home/OS username.
+    display = path.name
+    raw = _load_kit_yaml(path, label="Profile")
     if not isinstance(raw, dict):
         raise LoadError("Profile root must be a mapping")
     if validate_external_schema:
@@ -188,15 +232,21 @@ def load_profile(path: Path, *, validate_external_schema: bool = False) -> Profi
                 )
             else:
                 hint = ""
-            raise ProfileLoadError(f"External profile failed schema validation ({path}): {raw_msg}.{hint}") from exc
+            raise ProfileLoadError(
+                f"External profile failed schema validation ('{display}'): {raw_msg}.{hint}"
+            ) from exc
     pid = str(raw.get("id", "")).strip()
     if not pid:
-        raise LoadError(f"Profile missing id: {path}")
+        raise LoadError(f"Profile missing id: '{display}'")
     ctrls = raw.get("controls")
     if not isinstance(ctrls, list) or not ctrls:
-        raise LoadError(f"Profile has no controls: {path}")
-    ids = tuple(str(x).strip() for x in ctrls if str(x).strip())
-    _raise_if_removed_controls_referenced(ids, f"Invalid profile {path}:")
+        raise LoadError(f"Profile has no controls: '{display}'")
+    # De-duplicate control ids preserving first-seen order (#17): an external profile that
+    # lists the same control id more than once must not inflate controls_total, the
+    # summary-by-status counts, or the weighted score. ``dict.fromkeys`` keeps insertion
+    # order; bundled profiles carry no duplicates, so they are unaffected.
+    ids = tuple(dict.fromkeys(str(x).strip() for x in ctrls if str(x).strip()))
+    _raise_if_removed_controls_referenced(ids, f"Invalid profile '{display}':")
     return ProfileSpec(
         id=pid,
         title=str(raw.get("title", pid)),
@@ -206,16 +256,23 @@ def load_profile(path: Path, *, validate_external_schema: bool = False) -> Profi
     )
 
 
-# Bundled profile id -> directory name under ``profiles/`` (same id except legacy aliases).
-# In v5.0.0 the legacy alias `github-release-hardening` was removed; the mapping is empty
-# and kept only as a public symbol for downstream tooling that imports it.
+# Bundled profile id -> canonical directory name under ``profiles/`` for DEPRECATED aliases.
+# EMPTY since v10.0.0: the last alias (`cra-eu-ready-2-1`, ADR-029) completed its one-major
+# deprecation cycle and moved to REMOVED_PROFILE_IDS. The machinery stays so a future rename
+# can reuse the same one-cycle pattern.
 PROFILE_DIRECTORY_ALIASES: dict[str, str] = {}
 BUNDLED_PROFILE_LEGACY_IDS: frozenset[str] = frozenset(PROFILE_DIRECTORY_ALIASES.keys())
 
-# Profile ids that were removed in v5.0.0. Resolving these raises a hard error with
-# explicit migration guidance instead of silently mapping to the canonical id.
+# Profile ids that were removed. Resolving these raises a hard error with explicit
+# migration guidance instead of silently mapping to the canonical id.
 REMOVED_PROFILE_IDS: dict[str, str] = {
     "github-release-hardening": "github-release-hardening-1",
+    # ADR-029: renamed in v9.0.0 (deprecated alias for one major), removed in v10.0.0.
+    "cra-eu-ready-2-1": "cra-eu-conformance-evidence-1",
+}
+_REMOVED_PROFILE_VERSIONS: dict[str, str] = {
+    "github-release-hardening": "v5.0.0",
+    "cra-eu-ready-2-1": "v10.0.0",
 }
 
 
@@ -227,15 +284,40 @@ def resolve_profile_file(kit_root: Path, profile_id: str) -> Path:
 
     if profile_id in REMOVED_PROFILE_IDS:
         canonical = REMOVED_PROFILE_IDS[profile_id]
+        removed_in = _REMOVED_PROFILE_VERSIONS.get(profile_id, "an earlier major")
         raise LoadError(
-            f"Profile id '{profile_id}' was removed in v5.0.0. "
-            f"The canonical profile is '{canonical}' (same control set). "
-            f"Update your scripts and CI workflows. See docs/v5.0.0-migration-guide.md."
+            f"Profile id '{profile_id}' was removed in {removed_in}. "
+            f"The canonical profile is '{canonical}'. "
+            f"Update your scripts and CI workflows. See docs/{removed_in}-migration-guide.md."
         )
     dirname = PROFILE_DIRECTORY_ALIASES.get(profile_id, profile_id)
     candidate = kit_root / "profiles" / dirname / "profile.yaml"
     if not candidate.is_file():
-        raise LoadError(f"Unknown profile '{profile_id}' (missing {candidate})")
+        # Sanitize the location: report a repo-relative path, never the absolute
+        # install/site-packages path (which would leak the OS username). A value that
+        # looks like an external YAML path gets a clearer "file not found" message
+        # instead of the confusing "<id>.yaml/profile.yaml" double-suffix.
+        if profile_id.strip().lower().endswith((".yaml", ".yml")):
+            # An ABSOLUTE value is named by its basename only, which is the same line
+            # `cli.common.display_path` holds: a relative value is echoed as the operator
+            # wrote it, and anything absolute loses its parent directories on purpose.
+            #
+            # Not hypothetical hardening. Anchoring a config-supplied profile to the target
+            # made the CLI hand this message a CONSTRUCTED absolute path, so `--target .`
+            # answered with the operator's full host path -- account name included -- in a
+            # message written to be pasted into an issue. It was defended at the time with
+            # "display_path already anonymises that message". It does not: it is never
+            # applied here. Fixed at the message so every caller benefits, and without the
+            # application layer importing the CLI layer.
+            shown = Path(profile_id).name if Path(profile_id).is_absolute() else profile_id
+            raise LoadError(
+                f"Profile file not found: '{shown}'. Pass the path to an existing YAML profile, "
+                "or a bundled profile id (run 'oss-policy-kit profiles' to list bundled ids)."
+            )
+        raise LoadError(
+            f"Unknown profile '{profile_id}' (no bundled profile at data/profiles/{dirname}/profile.yaml). "
+            "Run 'oss-policy-kit profiles' to list available ids."
+        )
     return candidate
 
 
@@ -261,6 +343,9 @@ def merge_kit_root(cli_kit_root: Path | None) -> Path:
     if cli_kit_root is not None:
         root = cli_kit_root.resolve()
         if not root.is_dir():
-            raise LoadError(f"--kit-root is not a directory: {root}")
+            # Echo the user-supplied string, never root.resolve() — the resolved path
+            # leaks the cwd / home directory / OS username (M-002). Mirrors the
+            # missing-catalog / bad-profile messages hardened in the same release.
+            raise LoadError(f"--kit-root is not a directory: {cli_kit_root}")
         return root
     return bundled_kit_root()

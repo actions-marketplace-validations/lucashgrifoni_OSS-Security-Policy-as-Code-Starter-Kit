@@ -33,7 +33,8 @@ def test_asi_coverage_table_present() -> None:
 def test_cisa_sbd_section_present_and_honest() -> None:
     text = _doc()
     assert "CISA Secure by Design Pledge" in text
-    assert "ISO/IEC 29147" in text and "ISO/IEC 30111" in text
+    assert "ISO/IEC 29147" in text
+    assert "ISO/IEC 30111" in text
     assert "no certification or " in text  # honesty caveat ("...pledge fulfilled... claim")
 
 

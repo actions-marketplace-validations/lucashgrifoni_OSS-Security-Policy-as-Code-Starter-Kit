@@ -21,7 +21,8 @@ def test_parse_waiver_expiry_variants() -> None:
     assert ev._parse_waiver_expiry(1, {}, _TODAY, w) == (None, True)
     # expired
     exp, ok = ev._parse_waiver_expiry(2, {"expires_at": "2000-01-01"}, _TODAY, w)
-    assert exp is None and ok is False
+    assert exp is None
+    assert ok is False
     # unparseable
     exp, ok = ev._parse_waiver_expiry(3, {"expires_at": "not-a-date"}, _TODAY, w)
     assert ok is False
@@ -51,7 +52,8 @@ def test_parse_vuln_waiver_entry() -> None:
     assert parsed is not None
     ids, rec = parsed
     assert ids == ["CVE-1"]
-    assert rec.owner == "secteam" and rec.cdx_justification == "code_not_reachable"
+    assert rec.owner == "secteam"
+    assert rec.cdx_justification == "code_not_reachable"
     # skips
     assert ev._parse_vuln_waiver_entry(1, "notdict", _TODAY, w) is None
     assert ev._parse_vuln_waiver_entry(2, {"vulnerability_ids": []}, _TODAY, w) is None
@@ -69,7 +71,8 @@ def test_load_vuln_waivers(tmp_path: Path) -> None:
     p = tmp_path / "w.yaml"
     p.write_text("- a\n- b\n", encoding="utf-8")
     out, warns = ev._load_vuln_waivers(p)
-    assert out == {} and any("not a YAML mapping" in m for m in warns)
+    assert out == {}
+    assert any("not a YAML mapping" in m for m in warns)
     # valid entries
     p.write_text(
         "waivers:\n  - vulnerability_ids: [CVE-9]\n    justification: reviewed, not exploitable\n    owner: appsec\n",
@@ -98,7 +101,8 @@ def test_build_vex_document_waived_and_unwaived() -> None:
         waivers={"CVE-A": waiver},
         references={"CVE-B": ["https://osv.dev/CVE-B"]},
     )
-    assert doc["bomFormat"] == "CycloneDX" and doc["specVersion"] == "1.6"
+    assert doc["bomFormat"] == "CycloneDX"
+    assert doc["specVersion"] == "1.6"
     by_id = {v["id"]: v for v in doc["vulnerabilities"]}
     assert by_id["CVE-A"]["analysis"]["state"] == "not_affected"
     assert by_id["CVE-A"]["analysis"]["justification"] == "code_not_reachable"

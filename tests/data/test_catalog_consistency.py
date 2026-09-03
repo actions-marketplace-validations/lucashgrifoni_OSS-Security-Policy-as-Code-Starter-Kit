@@ -73,7 +73,8 @@ def _load_controls() -> list[dict[str, Any]]:
     raw = yaml.safe_load(CATALOG_PATH.read_text(encoding="utf-8"))
     assert isinstance(raw, dict), "catalog.yaml root must be a mapping"
     controls = raw.get("controls", [])
-    assert isinstance(controls, list) and controls, "catalog.yaml: 'controls:' must be a non-empty list"
+    assert isinstance(controls, list), "catalog.yaml: 'controls:' must be a non-empty list"
+    assert controls, "catalog.yaml: 'controls:' must be a non-empty list"
     for c in controls:
         assert isinstance(c, dict), f"catalog.yaml: each control must be a mapping; got {type(c).__name__}"
     return controls
@@ -95,7 +96,8 @@ def test_control_has_required_fields(control: dict[str, Any]) -> None:
 def test_control_title_is_non_empty_string(control: dict[str, Any]) -> None:
     cid = control["id"]
     title = control.get("title")
-    assert isinstance(title, str) and title.strip(), f"{cid}: 'title' must be a non-empty string"
+    assert isinstance(title, str), f"{cid}: 'title' must be a non-empty string"
+    assert title.strip(), f"{cid}: 'title' must be a non-empty string"
 
 
 @pytest.mark.parametrize("control", CONTROLS, ids=lambda c: str(c.get("id", "<no-id>")))

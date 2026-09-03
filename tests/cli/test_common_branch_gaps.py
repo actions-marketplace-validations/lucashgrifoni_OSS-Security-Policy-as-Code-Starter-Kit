@@ -111,6 +111,7 @@ def test_execute_evaluate_unexpected_error(tmp_path: Path, monkeypatch) -> None:
         raise RuntimeError("kaboom")
 
     monkeypatch.setattr(common, "_run_evaluate", _boom)
+    req_2 = _req(tmp_path)
     with pytest.raises(typer.Exit) as exc:
-        common.execute_evaluate(_req(tmp_path))
+        common.execute_evaluate(req_2)
     assert exc.value.exit_code == 3

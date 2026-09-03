@@ -106,4 +106,5 @@ def test_iter_iam_policy_docs_skips_non_dict_section() -> None:
 def test_iter_iam_policy_docs_yields_docs() -> None:
     idx = _index({Path("a.tf"): {"data": [{"aws_iam_policy_document": {"d": {"statement": []}}}]}})
     out = list(tf._iter_iam_policy_docs(idx))
-    assert out and out[0][1] == "d"
+    assert out
+    assert out[0][1] == "d"

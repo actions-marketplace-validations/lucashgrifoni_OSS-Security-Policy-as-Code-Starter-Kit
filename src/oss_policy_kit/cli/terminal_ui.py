@@ -18,6 +18,12 @@ from typing import TYPE_CHECKING, Any, TextIO
 from rich import box
 from rich.align import Align
 from rich.console import Console
+
+# ``cli.common.markup_safe`` is the package-wide name for this escape, but ``cli.common``
+# imports this module, so importing it back would be a cycle. This is the same Rich
+# primitive it wraps. Apply it once and only once: a value escaped twice renders the
+# backslash the operator never typed.
+from rich.markup import escape as _markup_escape
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -144,14 +150,36 @@ def _get_terminal_size(*, fallback: tuple[int, int]) -> os.terminal_size:
     return shutil.get_terminal_size(fallback=fallback)
 
 
+def _columns_env_override() -> int | None:
+    """Return a valid positive ``COLUMNS`` env override, or ``None`` when unset/invalid.
+
+    Honoring ``COLUMNS`` for non-TTY streams (pipes, redirected error output) lets an
+    explicit terminal width flow through so wrapped error messages and echoed paths use
+    the caller's real width instead of the hardwired 120 fallback (X2-F2).
+    """
+
+    raw = os.environ.get("COLUMNS")
+    if not raw:
+        return None
+    try:
+        cols = int(raw.strip())
+    except ValueError:
+        return None
+    if cols < 1:
+        return None
+    return max(TTY_MIN_COLUMNS, min(cols, MAX_COLUMNS))
+
+
 def terminal_width(stream: Any, *, fallback: int = DEFAULT_FALLBACK_COLUMNS) -> int:
     """Effective column width for layout when rendering to ``stream``.
 
-    Uses the OS terminal size when ``stream`` is a TTY; otherwise returns ``fallback``.
+    Uses the OS terminal size when ``stream`` is a TTY; otherwise consults the ``COLUMNS``
+    environment variable (when set and valid) before returning ``fallback``.
     """
 
     if not is_interactive_stream(stream):
-        return fallback
+        env_cols = _columns_env_override()
+        return env_cols if env_cols is not None else fallback
     try:
         cols = _get_terminal_size(fallback=(fallback, 24)).columns
     except OSError:
@@ -203,13 +231,93 @@ def build_console(
         if k not in merged_env:
             merged_env[k] = v
     force_color = is_tty and not no_color
-    return Console(
+    return _HomeRedactingConsole(
         file=target,
         width=w,
         force_terminal=force_color,
         no_color=no_color or not is_tty,
         _environ=merged_env,
     )
+
+
+#: Set to True by the CLI when ``--include-absolute-path`` is passed, which is the
+#: documented opt-out from privacy-by-default path handling.
+_ABSOLUTE_PATHS_ALLOWED = False
+
+
+def allow_absolute_paths(allowed: bool) -> None:
+    """Opt this process out of home-directory redaction on the console."""
+
+    global _ABSOLUTE_PATHS_ALLOWED
+    _ABSOLUTE_PATHS_ALLOWED = allowed
+
+
+def redact_home(text: str) -> str:
+    """Replace the real home-directory prefix with ``~`` wherever it appears.
+
+    The last line of defence for M-002, and deliberately the narrowest one that works.
+
+    Per-site fixes do not converge on this class: an AST sweep finds 398 places where a
+    resolved path heads for a message or an artifact, and three rounds of patching the
+    commands a validation happened to name still left 97 of 280 swept cases printing the
+    account name, across 20 of the 23 commands. So the guarantee moves to the boundary,
+    the same way the exit-3 class was finally closed.
+
+    It substitutes the literal ``Path.home()`` string rather than trying to recognise
+    "an absolute path". That distinction matters: pattern-matching paths would mangle
+    URLs, regexes and quoted user input, while this can only ever fire on the one string
+    whose disclosure is the actual harm -- the account name and the layout above the
+    repository. Absolute paths outside the home directory still print in full; they are
+    less useful to an attacker and less embarrassing in a pasted log, and reducing them
+    is the per-command work that continues elsewhere.
+
+    Comparison is case-insensitive because Windows paths reach here in either case, and
+    both separator forms are covered because a path can arrive POSIX-shaped from config.
+    """
+
+    if _ABSOLUTE_PATHS_ALLOWED or not text:
+        return text
+    # `_home_forms()` already drops empty forms, so every entry here is usable.
+    for home in _home_forms():
+        lowered = text.lower()
+        needle = home.lower()
+        if needle not in lowered:
+            continue
+        out: list[str] = []
+        i = 0
+        while True:
+            j = lowered.find(needle, i)
+            if j < 0:
+                out.append(text[i:])
+                break
+            out.append(text[i:j])
+            out.append("~")
+            i = j + len(needle)
+        text = "".join(out)
+    return text
+
+
+def _home_forms() -> tuple[str, ...]:
+    """The home directory as it can appear in text: native and POSIX separators."""
+
+    try:
+        home = str(Path.home())
+    except (OSError, RuntimeError):  # pragma: no cover - only when HOME is unresolvable
+        return ()
+    forms = {home, home.replace("\\", "/")}
+    return tuple(sorted((f for f in forms if f), key=len, reverse=True))
+
+
+class _HomeRedactingConsole(Console):
+    """A Rich console that cannot print the operator's home directory.
+
+    Subclassing rather than wrapping ``print``: Rich renders tables, panels and markup
+    through the same segment pipeline, and the leaks found in validation came through
+    table cells and progress lines as much as through ``print`` calls.
+    """
+
+    def render_str(self, text: str, **kwargs: Any) -> Any:
+        return super().render_str(redact_home(text), **kwargs)
 
 
 def build_stdout_console(*, width: int | None = None) -> Console:
@@ -236,6 +344,11 @@ def render_eval_results_table(report: ExecutionReport, *, unicode_icons: bool = 
 
     One row per evaluated control, colored by status (pass / self-attested green, fail red,
     not-applicable dim, manual-review-required yellow, waived cyan, others neutral).
+
+    Every cell and both title values are escaped. Rich renders a ``str`` cell as markup, so
+    a control whose reason names a workflow called ``[bold]unsafe.yml`` printed
+    ``pull_request_target detected in: unsafe.yml`` — the operator went looking for a file
+    that does not exist, while ``evaluation-report.json`` held the real name all along.
     """
 
     status_colors: dict[str, str] = {
@@ -274,9 +387,10 @@ def render_eval_results_table(report: ExecutionReport, *, unicode_icons: bool = 
             "manual-review-required": "!",
             "waived": "W",
         }
-    target_name = Path(report.target_path).name
+    target_name = _markup_escape(Path(report.target_path).name)
+    profile_id = _markup_escape(report.profile_id)
     table = Table(
-        title=f"[bold cyan]Profile: {report.profile_id}[/bold cyan]  [dim]|[/dim]  Target: [dim]{target_name}[/dim]",
+        title=f"[bold cyan]Profile: {profile_id}[/bold cyan]  [dim]|[/dim]  Target: [dim]{target_name}[/dim]",
         show_lines=False,
         expand=False,
         box=box.ROUNDED,
@@ -295,11 +409,13 @@ def render_eval_results_table(report: ExecutionReport, *, unicode_icons: bool = 
         reason = result.reason or ""
         if len(reason) > 90:
             reason = reason[:87] + "..."
+        # Truncate first, escape second: escaping first could cut a ``\[`` in half, and the
+        # 90-character budget is about the operator's text, not about our escape bytes.
         table.add_row(
-            result.control_id,
-            f"[{color}]{icon} {status}[/{color}]",
-            result.confidence or "",
-            reason,
+            _markup_escape(result.control_id),
+            f"[{color}]{icon} {_markup_escape(status)}[/{color}]",
+            _markup_escape(result.confidence or ""),
+            _markup_escape(reason),
         )
     return table
 
@@ -401,29 +517,31 @@ def profile_table_layout_for_width(
     title_w = max(_PROFILE_COL_MIN_TITLE, (flex * title_pct) // denom)
     aud_w = max(_PROFILE_COL_MIN_AUDIENCE, (flex * aud_pct) // denom)
     desc_w = flex - title_w - aud_w
+    # Each shave below is written unconditionally: when the column ahead already absorbed
+    # the whole deficit the remaining amount is 0, and `max(MIN, w - 0)` leaves `w` alone
+    # (every width here was floored at its minimum on the way in). Guarding them with
+    # `if amount > 0:` only adds branches that the arithmetic can never take.
     if desc_w < _PROFILE_COL_MIN_DESCRIPTION:
         deficit = _PROFILE_COL_MIN_DESCRIPTION - desc_w
         shave = min(deficit, max(0, aud_w - _PROFILE_COL_MIN_AUDIENCE))
         aud_w -= shave
         deficit -= shave
-        if deficit > 0:
-            title_w = max(_PROFILE_COL_MIN_TITLE, title_w - deficit)
+        title_w = max(_PROFILE_COL_MIN_TITLE, title_w - deficit)
         desc_w = flex - title_w - aud_w
 
     remainder = usable - (profile_w + title_w + platform_w + level_w + gate_w + aud_w + desc_w)
-    if remainder > 0:
-        desc_w += remainder
-    elif remainder < 0:
+    if remainder < 0:
         need = -remainder
         take = min(need, max(0, desc_w - _PROFILE_COL_MIN_DESCRIPTION))
         desc_w -= take
         need -= take
-        if need > 0:
-            take_a = min(need, max(0, aud_w - _PROFILE_COL_MIN_AUDIENCE))
-            aud_w -= take_a
-            need -= take_a
-        if need > 0:
-            title_w = max(_PROFILE_COL_MIN_TITLE, title_w - need)
+        take_a = min(need, max(0, aud_w - _PROFILE_COL_MIN_AUDIENCE))
+        aud_w -= take_a
+        need -= take_a
+        title_w = max(_PROFILE_COL_MIN_TITLE, title_w - need)
+    else:
+        # Slack left over by the integer division goes to the description column.
+        desc_w += remainder
 
     return ProfileTableLayout(
         profile=profile_w,
@@ -1090,12 +1208,12 @@ def _build_recommend_decision(suggestions: list[dict[str, Any]], ctx_line: str) 
     if ctx_line:
         decision.append("Recommendation path\n", style=f"bold {STYLE_EMPHASIS}")
         decision.append(f"{ctx_line}\n\n", style=STYLE_MUTED)
-    if journey_ids:
-        decision.append("Suggested journey\n", style=f"bold {STYLE_EMPHASIS}")
-        labels = ("Now", "Next", "Later")
-        for i, jid in enumerate(journey_ids[:3]):
-            decision.append(f"  [{labels[i]}]  {jid}\n", style="default")
-        decision.append("\n", style="default")
+    # `now_id` is in `cand_ids` by construction, so the journey always has at least itself.
+    decision.append("Suggested journey\n", style=f"bold {STYLE_EMPHASIS}")
+    labels = ("Now", "Next", "Later")
+    for i, jid in enumerate(journey_ids[:3]):
+        decision.append(f"  [{labels[i]}]  {jid}\n", style="default")
+    decision.append("\n", style="default")
     if raw_second and (journey_next is None or raw_second != journey_next):
         decision.append("Also consider\n", style=f"bold {STYLE_WARN}")
         decision.append(Text.from_markup(f"  {raw_second}  [dim](parallel heuristic pick)[/dim]\n\n"))

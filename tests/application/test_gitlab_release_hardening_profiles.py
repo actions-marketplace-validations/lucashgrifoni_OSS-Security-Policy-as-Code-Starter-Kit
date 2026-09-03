@@ -59,7 +59,7 @@ def test_release_hardening_listed_in_profiles_json_as_gitlab(pid: str) -> None:
         text=True,
         encoding="utf-8",
     )
-    assert proc.returncode == 0
+    assert proc.returncode == 0, proc.stderr + proc.stdout
     data = json.loads(proc.stdout)
     row = next((p for p in data["profiles"] if p["profile_id"] == pid), None)
     assert row is not None
@@ -75,7 +75,7 @@ def test_gitlab_family_has_full_ladder_and_release_track() -> None:
         text=True,
         encoding="utf-8",
     )
-    assert proc.returncode == 0
+    assert proc.returncode == 0, proc.stderr + proc.stdout
     ids = {p["profile_id"] for p in json.loads(proc.stdout)["profiles"]}
     assert ids == {
         "gitlab-level-1",

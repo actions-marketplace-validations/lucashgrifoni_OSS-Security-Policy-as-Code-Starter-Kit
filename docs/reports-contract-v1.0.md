@@ -1,6 +1,6 @@
 # Evaluation report contract `reports/1.0`
 
-> **No longer the default since v7.0.0.** `reports/1.0` was the default contract from **v5.0.0** through the v6.x line. In **v7.0.0** the default flipped to [`reports/2.0`](reports-contract-v2.0.md) (ADR-027); `reports/1.0` remains explicitly selectable via `--report-json-contract=1.0` for one minor cycle, then deprecates. See the [v7.0.0 migration guide](v7.0.0-migration-guide.md).
+> **Removed in v9.0.0 (ADR-043).** `reports/1.0` was the default contract from **v5.0.0** through the v6.x line, then became non-default in **v7.0.0** when the default flipped to [`reports/2.0`](reports-contract-v2.0.md) (ADR-027). In **v9.0.0** `reports/2.0` became the only evaluation-report contract: `reports/1.0` is no longer selectable, and `--report-json-contract=1.0` now exits 2. This page is kept as a historical reference for the contract that v5.x integrations consumed. See [`reports/2.0`](reports-contract-v2.0.md) and the [v9.0.0 migration guide](v9.0.0-migration-guide.md).
 
 `reports/1.0` was the default JSON contract for `evaluation-report.json` from **v5.0.0** through v6.x.
 
@@ -21,7 +21,7 @@ python -m oss_policy_kit evaluate --target . --profile github-level-1 \
   --output-dir ./out --report-json-contract 1.0
 ```
 
-Since v7.0.0 the default is `2.0`, so this flag is now **required** to select `1.0` explicitly (omitting it yields `reports/2.0`).
+Selecting `1.0` was removed in v9.0.0 (ADR-043): `--report-json-contract` now accepts only `2.0`, and passing `1.0` exits 2. The command above is retained only to show the historical invocation. See [`reports/2.0`](reports-contract-v2.0.md).
 
 ## Compatibility with `0.3` and `0.2`
 
@@ -121,7 +121,7 @@ Each result carries a structured `evidence` object:
 
 ## JSON Schema
 
-Bundled schema file: `src/oss_policy_kit/data/schema/evaluation-report-v1.schema.json` (UTF-8, strict).
+Bundled schema file, while this contract shipped: `src/oss_policy_kit/data/schema/evaluation-report-v1.schema.json` (UTF-8, strict). It was **deleted in v10.0.0** along with the other legacy schema files, so it is not in the current wheel; `git show v9.0.3:src/oss_policy_kit/data/schema/evaluation-report-v1.schema.json` recovers it if an old report still needs validating.
 
 ## Migration from `reports/0.3`
 

@@ -44,7 +44,7 @@ $ oss-policy-kit export-policy --profile github-level-1 --format cel --output po
 | `--profile/-p` | *(required)* | Bundled profile id, or a path to a profile YAML. |
 | `--format` | `rego` | `rego` (OPA/Conftest) or `cel` (Kyverno/cel-go). |
 | `--output/-o` | `policy.<format>` | Where to write the rendered policy. |
-| `--kit-root/-k` | bundled data | Override the kit data root (`controls/` + `profiles/`). |
+| `--kit-root` | bundled data | Override the kit data root (`controls/` + `profiles/`). No short alias. |
 | `--validate` | off | Lightweight syntactic check before writing (exit 1 on failure). |
 
 Output is **deterministic and byte-stable**: controls are sorted by id, there is

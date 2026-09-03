@@ -7,7 +7,7 @@
   "prerelease": false,
   "changelog-sections": [
     { "type": "feat",     "section": "Highlights",   "hidden": false },
-    { "type": "fix",      "section": "Improvements", "hidden": false },
+    { "type": "fix",      "section": "Fixes",        "hidden": false },
     { "type": "perf",     "section": "Improvements", "hidden": false },
     { "type": "refactor", "section": "Improvements", "hidden": false },
     { "type": "docs",     "section": "Notes",        "hidden": false },
@@ -22,7 +22,9 @@
       "extra-files": [
         "src/oss_policy_kit/__init__.py",
         "README.md",
-        "docs/at-a-glance.md"
+        "docs/at-a-glance.md",
+        "docs/github-action.md",
+        "docs/quickstart-15-min.md"
       ]
     }
   }

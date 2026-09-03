@@ -56,8 +56,10 @@ def test_profiles_compact_narrow_vs_wide_outputs_differ_and_narrow_wraps_more(
 
     assert narrow != wide
     assert narrow.count("\n") > wide.count("\n") + 25
-    assert "Bundled profiles" in narrow and "Bundled profiles" in wide
-    assert "github-level-1" in narrow and "github-level-1" in wide
+    assert "Bundled profiles" in narrow
+    assert "Bundled profiles" in wide
+    assert "github-level-1" in narrow
+    assert "github-level-1" in wide
     # Compact table should keep audience/description short (no full YAML audience phrase).
     assert _FULL_GITHUB_L1_AUDIENCE_SNIPPET not in _strip_box_drawing(narrow)
     assert _FULL_GITHUB_L1_AUDIENCE_SNIPPET not in _strip_box_drawing(wide)
@@ -80,11 +82,14 @@ def test_show_profiles_detailed_narrow_vs_wide_outputs_differ_and_narrow_wraps_m
 
     letter_run = "".join(re.findall(r"[A-Za-z]+", narrow))
     # Narrow tables wrap aggressively; bundled YAML tokens may not stay contiguous once borders are stripped.
-    assert "minimal" in letter_run and "adopting" in letter_run and "honest" in letter_run
+    assert "minimal" in letter_run
+    assert "adopting" in letter_run
+    assert "honest" in letter_run
     # github-level-1 row: long audience text fits on fewer physical lines when the table is wide.
     narrow_l1 = [ln for ln in narrow.splitlines() if "github-level-1" in ln]
     wide_l1 = [ln for ln in wide.splitlines() if "github-level-1" in ln]
-    assert narrow_l1 and wide_l1
+    assert narrow_l1
+    assert wide_l1
     assert max(len(ln) for ln in wide_l1) > max(len(ln) for ln in narrow_l1)
 
 

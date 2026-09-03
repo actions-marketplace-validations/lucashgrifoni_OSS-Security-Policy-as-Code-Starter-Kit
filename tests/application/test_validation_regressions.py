@@ -109,7 +109,9 @@ def test_external_waiver_path_serialized_in_report(tmp_path: Path) -> None:
         external_waiver_path=str(waiver_path.resolve()),
     )
     payload = report_to_dict(report)
-    assert payload["external_waiver_path"] == str(waiver_path.resolve())
+    # Privacy-by-default (v9.0.2): the report sanitizes the external-waiver path to its basename
+    # unless --include-absolute-path is set, exactly like target_path. The field stays serialized.
+    assert payload["external_waiver_path"] == waiver_path.name
 
 
 def test_batch_evaluate_runs_multiple_children(tmp_path: Path) -> None:

@@ -85,7 +85,7 @@ jobs:
       security-events: write
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -96,24 +96,37 @@ jobs:
             semgrep.dev:443
 
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
       - name: Setup Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install Semgrep
-        run: python -m pip install --upgrade "semgrep>=1.100.0,<2"
+        # Hash-pinned (Scorecard Pinned-Dependencies): the scanner that decides whether
+        # this repository ships is itself a supply-chain dependency, and a range like
+        # ">=1.100.0,<2" let any release inside it -- and every transitive package --
+        # enter the job unverified. Regenerate with:
+        #   uv pip compile .github/requirements/semgrep.in --generate-hashes \
+        #     --python-version 3.12 --python-platform linux \
+        #     -o .github/requirements/semgrep.txt
+        run: python -m pip install --require-hashes -r .github/requirements/semgrep.txt
 
       - name: Scan application and workflow code
+        # `examples/vulnerable-repo/` is a deliberately insecure fixture: the kit ships it so
+        # `evaluate` has something that legitimately fails, and the test suite asserts on its
+        # contents. Its findings are true positives about the fixture, not about the product,
+        # so it is excluded here. Prefer --exclude over a repo-level `.semgrepignore`, which
+        # would REPLACE semgrep's built-in ignore defaults rather than add to them.
         run: |
           semgrep scan \
             --config p/security-audit \
             --config p/github-actions \
             --severity WARNING \
+            --exclude examples/vulnerable-repo \
             --sarif --output=semgrep.sarif \
             --error \
             --metrics=off \
@@ -121,7 +134,7 @@ jobs:
 
       - name: Upload Semgrep SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: semgrep.sarif
           category: semgrep
@@ -135,7 +148,7 @@ jobs:
       security-events: write
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -148,17 +161,21 @@ jobs:
             release-assets.githubusercontent.com:443
 
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Install Snyk CLI
-        run: npm install -g snyk
+        # Pinned: this job holds SNYK_TOKEN, so a floating `latest` would let any
+        # future npm publish run with that secret in the environment. Nothing
+        # watches this pin automatically -- Dependabot does not read
+        # `npm install -g` lines.
+        run: npm install -g snyk@1.1306.3
 
       - name: Authenticate Snyk
         env:
@@ -175,7 +192,7 @@ jobs:
 
       - name: Upload Snyk Code SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: snyk-code.sarif
           category: snyk-code
@@ -202,7 +219,7 @@ jobs:
         # cache the bundle is fetched as a GitHub release asset
         # (objects / release-assets.githubusercontent.com, fronted by Fastly/AWS)
         # and the job fails closed with ECONNREFUSED without them.
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -214,20 +231,20 @@ jobs:
             codeload.github.com:443
 
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           languages: ${{ matrix.language }}
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        uses: github/codeql-action/autobuild@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           category: "/language:${{ matrix.language }}"
 
@@ -240,7 +257,7 @@ jobs:
       security-events: write
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -254,17 +271,21 @@ jobs:
             files.pythonhosted.org:443
 
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Install Snyk CLI
-        run: npm install -g snyk
+        # Pinned: this job holds SNYK_TOKEN, so a floating `latest` would let any
+        # future npm publish run with that secret in the environment. Nothing
+        # watches this pin automatically -- Dependabot does not read
+        # `npm install -g` lines.
+        run: npm install -g snyk@1.1306.3
 
       - name: Authenticate Snyk
         env:
@@ -282,7 +303,7 @@ jobs:
 
       - name: Upload Snyk Open Source SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: snyk-oss.sarif
           category: snyk-oss
@@ -296,7 +317,7 @@ jobs:
       security-events: write
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -308,7 +329,7 @@ jobs:
             release-assets.githubusercontent.com:443
 
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
@@ -327,10 +348,85 @@ jobs:
 
       - name: Upload Trivy dependency SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: trivy-deps.sarif
           category: trivy-deps
+
+  base-image-trivy:
+    name: Base image - Trivy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          # `audit`, not `block`, and for the reason publish-container.yml already records:
+          # Docker Hub serves blobs from dynamic CloudFront hosts and allowed-endpoints has
+          # no wildcard support, so an exact list cannot be written. My first attempt tried
+          # and the run failed on `production.cloudfront.docker.com` -- a host I had guessed
+          # as Cloudflare. Harden-Runner's global C2/exfiltration blocklist still applies.
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      # The three Trivy jobs around this one are all `scan-type: fs`. Nothing scanned the
+      # container base, so the digest pinned in the Dockerfile went unexamined from the day
+      # it was pinned -- and Dependabot cannot refresh it either, because its docker updater
+      # fires on a newer TAG and `3.12-slim-bookworm` is a rolling tag whose name never
+      # changes. Two layers of apparent coverage, neither of which looked at this image.
+      #
+      # The digest is read out of the Dockerfile rather than repeated here: a second copy is
+      # a second thing to drift.
+      - name: Resolve the pinned base image
+        id: base
+        run: |
+          set -euo pipefail
+          ref="$(grep -m1 -oE 'python:[0-9.]+-slim-bookworm@sha256:[0-9a-f]{64}' Dockerfile)"
+          if [ -z "${ref}" ]; then
+            echo "::error::Could not read the pinned base image from Dockerfile." >&2
+            exit 1
+          fi
+          echo "ref=${ref}" >> "${GITHUB_OUTPUT}"
+          echo "Scanning ${ref}"
+
+      # Reported, not gated, and the distinction is deliberate. A fix for anything found
+      # here arrives only when the base image is rebuilt, which this repository does not
+      # control. Failing the build would break CI on a repository with no changes and train
+      # everyone to ignore it, so the findings land in code scanning where they are tracked
+      # and dated.
+      #
+      # `ignore-unfixed` does NOT make everything reported here actionable by bumping the
+      # digest, and the previous version of this comment claimed it did. Measured 2026-09-02:
+      # what this job reports is six CVEs in the `pip 25.0.1` the Debian Python image ships,
+      # the current upstream `python:3.12-slim-bookworm` ships that same pip and the same six,
+      # and with `ignore-unfixed` the OS-package layer of both digests is empty. Bumping the
+      # digest today changes nothing. The runtime stage uninstalls pip from both interpreters,
+      # so none of it reaches the published image; SECURITY.md records why they stay open.
+      - name: Scan the base image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ steps.base.outputs.ref }}
+          scanners: vuln
+          severity: ${{ env.TRIVY_SEVERITY }}
+          ignore-unfixed: true
+          exit-code: "0"
+          format: sarif
+          output: trivy-base-image.sarif
+
+      - name: Upload Trivy base-image SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        with:
+          sarif_file: trivy-base-image.sarif
+          category: trivy-base-image
 
   iac-and-pipeline-trivy:
     name: IaC and Pipeline - Trivy
@@ -341,7 +437,7 @@ jobs:
       security-events: write
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -352,7 +448,7 @@ jobs:
             release-assets.githubusercontent.com:443
 
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
@@ -370,7 +466,7 @@ jobs:
 
       - name: Upload Trivy IaC SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: trivy-iac.sarif
           category: trivy-iac
@@ -389,7 +485,7 @@ jobs:
         # a Cloudflare R2 bucket whose name is opaque/may rotate, so it is
         # allowed via the scoped wildcard *.r2.cloudflarestorage.com rather than a
         # brittle exact bucket hash (Harden-Runner insights run 26298261213).
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -401,7 +497,7 @@ jobs:
             *.r2.cloudflarestorage.com:443
 
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
@@ -425,7 +521,7 @@ jobs:
 
       - name: Upload KICS SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: kics-results/results.sarif
           category: kics
@@ -439,7 +535,7 @@ jobs:
       security-events: write
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -450,7 +546,7 @@ jobs:
             release-assets.githubusercontent.com:443
 
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
@@ -468,7 +564,7 @@ jobs:
 
       - name: Upload Trivy secrets SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: trivy-secrets.sarif
           category: trivy-secrets
@@ -481,7 +577,7 @@ jobs:
       contents: read
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -489,7 +585,7 @@ jobs:
             api.github.com:443
 
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -519,24 +615,39 @@ jobs:
       pull-requests: write
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
             github.com:443
             api.github.com:443
             api.securityscorecards.dev:443
+            api.deps.dev:443
 
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
+      # `api.deps.dev` is required above: dependency-review-action queries deps.dev for
+      # package metadata, and only does so when the pull request actually introduces
+      # dependencies. Every earlier PR had an empty dependency delta, so the call was
+      # never made and the missing endpoint stayed invisible — the job passed by having
+      # nothing to look up. The first PR to add dependencies (the hash-pinned lockfiles
+      # in .github/requirements/) hit the block and surfaced as a bare `fetch failed`,
+      # with the cause only visible in the Harden-Runner log line `domain not allowed:
+      # api.deps.dev.`.
       - name: Review new dependencies introduced by the pull request
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: moderate
           comment-summary-in-pr: on-failure
+          # No advisory exceptions. This job carried three (GHSA-hvrp-rf83-w775,
+          # GHSA-jpw9-pfvf-9f58, GHSA-vj7q-gjh5-988w against mcp 1.23.3, which semgrep pinned
+          # exactly) under a stated removal condition: semgrep depending on mcp >= 1.28.1.
+          # semgrep 1.173.0 pins mcp==1.29.0, so the condition was met and the allowance is
+          # gone rather than inherited. An exception with a removal condition nobody rechecks
+          # is a permanent exception wearing a note.
 
   workflow-lint:
     name: Workflow Lint - actionlint
@@ -546,7 +657,7 @@ jobs:
       contents: read
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -557,12 +668,12 @@ jobs:
             production.cloudfront.docker.com:443
 
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
       - name: Lint GitHub Actions workflows
-        uses: devops-actions/actionlint@9fb9c192862f19e684586ca84b500461bcd8a541 # pinned
+        uses: devops-actions/actionlint@ec02b36684b2f574f1d219ad0a43b082e46bf3e4 # pinned
 
   sca-pip-audit:
     name: SCA - pip-audit (Python deps)
@@ -572,7 +683,7 @@ jobs:
       contents: read
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -581,12 +692,12 @@ jobs:
             files.pythonhosted.org:443
 
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
       - name: Setup Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -595,11 +706,21 @@ jobs:
         # (oss-policy-kit) via --skip-editable. Auditing our own freshly
         # built version is meaningless and races PyPI on release commits,
         # while runtime dependencies are still installed and audited.
-        # Upgrade pip first: the runner ships pip 26.1.1 (PYSEC-2026-196,
-        # fixed in 26.1.2). pip is a build tool, not a project dependency,
-        # so we patch it at the source rather than --ignore-vuln the finding.
+        #
+        # pip itself comes from the hashed lock, as in every other job. The runner
+        # ships a pip old enough to carry its own advisory (PYSEC-2026-196 against
+        # 26.1.1), and the previous `--upgrade "pip>=26.1.2"` patched that by
+        # resolving whatever was newest at the time: an unpinned download performing
+        # every install below it. The lock carries the same fix and a hash.
+        #
+        # The second install is deliberately NOT hash-pinned, and Scorecard reports
+        # it. This job exists to audit the runtime closure that `pyproject.toml`'s
+        # ranges actually resolve to. Installing a frozen lock here would audit the
+        # lock instead, and report clean on precisely the day a newly published
+        # range-satisfying version became vulnerable. Pinning it would not harden
+        # this job, it would blind it.
         run: |
-          python -m pip install --upgrade "pip>=26.1.2"
+          python -m pip install --require-hashes -r .github/requirements/pip.txt
           python -m pip install -e .
 
       - name: Audit Python dependencies
@@ -612,7 +733,7 @@ jobs:
         # [dev] dependency with no fix must be recorded as a documented
         # exception, never silenced with a blind --ignore-vuln.
         run: |
-          python -m pip install pip-audit
+          python -m pip install --require-hashes -r .github/requirements/pip-audit.txt
           python -m pip_audit --desc --skip-editable
 
   sast-bandit:
@@ -623,7 +744,7 @@ jobs:
       contents: read
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -632,12 +753,12 @@ jobs:
             files.pythonhosted.org:443
 
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
       - name: Setup Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -645,5 +766,98 @@ jobs:
         # Gate: fail on medium+ severity AND medium+ confidence findings
         # (-ll -ii). Lower-signal findings are reported but non-blocking.
         run: |
-          python -m pip install bandit
+          python -m pip install --require-hashes -r .github/requirements/bandit.txt
           python -m bandit -q -r src/oss_policy_kit -ll -ii
+
+  findings-correlation:
+    name: Findings Correlation (dogfooding)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            pypi.org:443
+            files.pythonhosted.org:443
+
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install the kit from source
+        # From source, not from PyPI: this job has to exercise the commit under
+        # test, not the last release. Unlike the pip-audit job above, nothing here
+        # depends on resolving ranges live -- this job only needs the CLI to run --
+        # so the dependencies come from the hashed lock and `--no-deps` stops the
+        # editable install reaching for anything beyond the checkout. Same shape as
+        # the install in release-please.yml.
+        run: |
+          python -m pip install --require-hashes -r .github/requirements/runtime-all.txt
+          python -m pip install --no-deps -e .
+
+      - name: Produce zizmor SARIF into the evidence directory
+        # `correlate-findings` reads external SARIF from
+        # .oss-policy-kit/evidence/sast/<tool>.sarif.json. Until this job existed,
+        # nothing in CI wrote there, so the command ran on kit-internal evidence
+        # only and the external half of its pipeline was never exercised.
+        # --no-online-audits keeps the run inside the egress allowlist.
+        run: |
+          python -m pip install --require-hashes -r .github/requirements/zizmor.txt
+          mkdir -p .oss-policy-kit/evidence/sast
+          zizmor --format sarif --no-online-audits .github/workflows/ \
+            > .oss-policy-kit/evidence/sast/zizmor.sarif.json
+
+      - name: Produce the kit's own scanner evidence
+        # The five internal sources. Each writes .oss-policy-kit/evidence/*.json
+        # and exits 0 even with nothing to report, which is what a repo with no
+        # IaC looks like.
+        run: |
+          python -m oss_policy_kit scan-iac --target . || true
+          python -m oss_policy_kit scan-k8s --target . || true
+          python -m oss_policy_kit scan-cfn --target . || true
+          python -m oss_policy_kit scan-pulumi --target . || true
+          python -m oss_policy_kit scan-bicep --target . || true
+
+      - name: Correlate findings
+        # Not a gate. --fail-on-severity is deliberately unset: this job exists to
+        # prove the command runs end-to-end on real evidence and to publish the
+        # artifact, not to block a merge on a scanner's opinion of a workflow file.
+        # Turning it into a gate is a separate decision with its own threshold.
+        run: |
+          python -m oss_policy_kit correlate-findings \
+            --target . \
+            --output .oss-policy-kit/findings.json \
+            --format human
+
+      - name: Show which sources were actually read
+        # The honest part: a source that is `missing` must be visible, otherwise
+        # this job looks like coverage it does not have.
+        run: |
+          python - <<'EOF'
+          import json
+          d = json.load(open(".oss-policy-kit/findings.json", encoding="utf-8"))
+          print(f"findings: {d['findings_total']}  by severity: {d['findings_by_severity']}")
+          for s in d["sources_read"]:
+              print(f"  {s['status']:14} {s['kind']:14} {s['tool']}")
+          EOF
+
+      - name: Upload the findings artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v6.0.0
+        if: always()
+        with:
+          name: findings-correlation
+          path: |
+            .oss-policy-kit/findings.json
+            .oss-policy-kit/evidence/sast/zizmor.sarif.json
+          retention-days: 14

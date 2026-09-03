@@ -39,7 +39,7 @@ def test_gitlab_level_3_listed_in_profiles_json() -> None:
         text=True,
         encoding="utf-8",
     )
-    assert proc.returncode == 0
+    assert proc.returncode == 0, proc.stderr + proc.stdout
     data = json.loads(proc.stdout)
     row = next((p for p in data["profiles"] if p["profile_id"] == "gitlab-level-3"), None)
     assert row is not None

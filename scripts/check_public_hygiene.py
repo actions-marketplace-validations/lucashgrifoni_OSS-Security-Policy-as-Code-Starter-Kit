@@ -69,6 +69,28 @@ DEFAULT_FORBIDDEN_TOKENS: tuple[tuple[str, str, bool], ...] = (
     ("azure-pat-like", r"\b[a-z0-9]{52}\b", True),
 )
 
+# Filenames that must never be tracked, matched on basename regardless of directory.
+#
+# Content scanning alone does not catch these: an assistant instruction file holds
+# ordinary prose, so every token regex above passes it. CLAUDE.md was tracked for a
+# month and this scanner reported OK the whole time, because it was asking the wrong
+# question — "does this file contain a forbidden string?" instead of "should this file
+# be here at all?".
+#
+# These files carry standing authorizations, private remote names, and local workflow
+# notes. They are operating context for whoever runs the assistant, never project surface.
+FORBIDDEN_TRACKED_FILENAMES: frozenset[str] = frozenset(
+    {
+        "CLAUDE.md",
+        "AGENTS.md",
+        "GEMINI.md",
+        ".cursorrules",
+        ".aider.conf.yml",
+        "copilot-instructions.md",
+    }
+)
+
+
 # Files whose content is allowed to contain high-signal synthetic credentials.
 ALLOWLISTED_PATHS: frozenset[str] = frozenset(
     {
@@ -103,6 +125,24 @@ ALLOWLISTED_PATHS: frozenset[str] = frozenset(
         # generic container pattern, not a real auditor or maintainer
         # home directory.
         "Dockerfile",
+        # The four below are the same case as the entries above — a leak detector
+        # needs leak-shaped fixtures — and they went red on master because this
+        # script runs nowhere in CI. It does now (github-ci-cd.yml, Quality job),
+        # so an entry added here is a decision on the record rather than a drift
+        # nobody sees.
+        #
+        # Synthetic POSIX home-shaped fixtures proving the reporting layer redacts
+        # such a path out of SARIF and report output.
+        "tests/application/test_findings_sarif_and_reporting_edges.py",
+        # Same, for the CLI's own path-display helpers: the fixtures have to be
+        # home-shaped or the redaction under test is never exercised.
+        "tests/cli/test_common_output_and_paths.py",
+        # Third AWS CI parser test embedding AWS's own published example access
+        # key to drive the plaintext-credential detector. Not a real credential.
+        "tests/infrastructure/test_aws_ci_parser_and_init_planner_edges.py",
+        # Docstring quotes the verbatim Windows error this test exists to stop
+        # reaching the operator; the account segment in it is already `<name>`.
+        "tests/cli/test_scan_error_sanitisation.py",
     }
 )
 
@@ -168,6 +208,48 @@ def _scan_file(
     return violations
 
 
+#: Generated dependency locks. `uv pip compile` writes the command it was invoked with into
+#: the header and names its input beside every requirement, so whatever path the maintainer
+#: typed is recorded verbatim.
+_LOCK_DIRECTORY = ".github/requirements"
+
+#: A drive-letter or POSIX absolute path. Only ever applied to the files above.
+_ABSOLUTE_PATH = re.compile(r"(?<![A-Za-z0-9_])(?:[A-Za-z]:[\\/]|/(?:home|Users|srv|opt|tmp|var)/)")
+
+
+def _generated_lock_violations(root: Path) -> list[tuple[str, int, str]]:
+    """Absolute paths recorded inside a committed lock file.
+
+    Five locks carried ``C:/v/pins/work/<name>.in`` for the nine days they were public and
+    this scanner reported OK throughout, because every content rule above asks about a HOME
+    directory and a build scratch root is not one. The path still describes a directory
+    layout on the machine that generated the file, published in the repository — the class
+    the kit's own M-002 rule forbids in a shareable artifact.
+
+    Scoped to these files rather than expressed as a global token, and the difference is the
+    whole point: a repository-wide rule for drive-letter paths reported 26 violations, and
+    every one of them was legitimate. The tests are full of synthetic Windows paths because
+    redacting them is what the kit does, and the sample-report README shows one to document
+    the redaction. A lock file is different in kind: it is generated, nobody writes prose in
+    it, and it has no reason to name any absolute path at all.
+    """
+
+    directory = root / _LOCK_DIRECTORY
+    if not directory.is_dir():
+        return []
+    violations: list[tuple[str, int, str]] = []
+    for lock in sorted(directory.glob("*.txt")):
+        rel = lock.relative_to(root).as_posix()
+        try:
+            text = lock.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for i, line in enumerate(text.splitlines(), start=1):
+            if _ABSOLUTE_PATH.search(line):
+                violations.append((rel, i, line.strip()[:160]))
+    return violations
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path.cwd(), help="Repository root (default: cwd).")
@@ -195,6 +277,18 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     total_violations = 0
+
+    # Filename check first: a forbidden file is a violation whatever its content.
+    for f in sorted(files):
+        if f.name in FORBIDDEN_TRACKED_FILENAMES:
+            rel = f.relative_to(root).as_posix()
+            print(f"[hygiene] {rel}  [forbidden-tracked-filename]  agent instruction file must not be public")
+            total_violations += 1
+
+    for rel, lineno, excerpt in _generated_lock_violations(root):
+        print(f"[hygiene] {rel}:{lineno}  [absolute-path-in-generated-lock]  {excerpt}")
+        total_violations += 1
+
     for f in sorted(files):
         rel = f.relative_to(root).as_posix()
         violations = _scan_file(f, forbidden=forbidden, relative_for_allowlist=rel)

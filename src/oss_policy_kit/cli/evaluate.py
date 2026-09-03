@@ -13,6 +13,7 @@ from oss_policy_kit.cli.common import (
     app,
     enable_debug_logging,
     execute_evaluate,
+    markup_safe,
     stderr_console,
 )
 from oss_policy_kit.cli.help_text import (
@@ -27,6 +28,32 @@ from oss_policy_kit.cli.help_text import (
 )
 from oss_policy_kit.cli.profiles import _print_profiles_table
 from oss_policy_kit.domain.errors import LoadError
+
+
+def _flag_was_provided(ctx: Context, name: str) -> bool:
+    """Return True when the user passed CLI option *name* (not the typer default).
+
+    Uses Click's parameter-source provenance so an explicit flag can be told apart
+    from its default even when the value coincides (``--fail-on none`` vs. omission).
+    Any non-``DEFAULT`` source (command line, env var, prompt) counts as provided so
+    the project config only fills genuinely-unset options (X5-03). Falls back to
+    ``False`` (= "let the config decide") if provenance is unavailable, which is the
+    behavior the user expects when they did not type the flag.
+
+    The source is compared by enum ``name`` rather than by importing a
+    ``ParameterSource`` class: Typer vendors its own Click (``typer._click``), so a
+    ``ParameterSource`` imported from top-level ``click`` can be a *different* class
+    than the one the runtime returns, making ``!=`` always true. The ``.name`` string
+    is stable across both.
+    """
+
+    try:
+        source = ctx.get_parameter_source(name)
+    except Exception:  # noqa: BLE001 - provenance is best-effort; never crash the CLI
+        return False
+    if source is None:
+        return False
+    return getattr(source, "name", "") != "DEFAULT"
 
 
 @app.callback(invoke_without_command=True)
@@ -112,7 +139,12 @@ def cli_root(
         False,
         "--summary-only",
         "-so",
-        help="Print only the summary on stdout.",
+        help=(
+            "Print only the summary on stdout. Also silences the stderr file-write confirmations, "
+            "and under --format json the operational-warning summary, so '--format json --summary-only' "
+            "stays parseable JSON even with stderr merged into stdout (--verbose/--debug still write "
+            "there). Drop --summary-only to see them."
+        ),
         rich_help_panel=OPT_PANEL_OUTPUT,
     ),
     fail_on: str = typer.Option(
@@ -131,13 +163,22 @@ def cli_root(
         False,
         "--verbose",
         "-v",
-        help="Print per-control evaluation lines to stdout (dim), pipe-friendly.",
+        help=(
+            "Print per-control evaluation lines (dim), pipe-friendly. Human mode writes them "
+            "to stdout; under --format json they go to stderr so stdout stays parseable JSON."
+        ),
         rich_help_panel=OPT_PANEL_DIAGNOSTICS,
     ),
     report_json_contract: str = typer.Option(
         "2.0",
         "--report-json-contract",
-        help=("evaluation-report.json contract: 2.0 (default), 1.0, 0.3, or 0.2. '0.1' was removed in v5."),
+        help=(
+            "evaluation-report.json contract: only '2.0' is valid since v9.0.0 (ADR-043). "
+            "The value is normalized before checking (case-insensitive, surrounding whitespace "
+            "trimmed, an optional leading 'v' dropped), so '2.0', 'V2.0', and ' v2.0 ' are all "
+            "accepted as 2.0. Any value that does not normalize to '2.0' (incl. the removed "
+            "0.1/0.2/0.3/1.0) exits 2."
+        ),
         case_sensitive=False,
         rich_help_panel=OPT_PANEL_OUTPUT,
     ),
@@ -189,6 +230,15 @@ def cli_root(
         ),
         rich_help_panel=OPT_PANEL_EVIDENCE,
     ),
+    with_findings_summary: bool = typer.Option(
+        False,
+        "--with-findings-summary",
+        help=(
+            "Embed an additive extensions.findings_summary block (correlated scanner-finding "
+            "counts), computed in-process from this same run. Never changes control states, "
+            "summary, digest, or exit codes."
+        ),
+    ),
     debug: bool = typer.Option(
         False,
         "--debug",
@@ -216,7 +266,7 @@ def cli_root(
         try:
             _print_profiles_table(detailed=True, compact_layout=False)
         except LoadError as exc:
-            stderr_console().print(f"[red]Error:[/red] {exc.message}")
+            stderr_console().print(f"[red]Error:[/red] {markup_safe(exc.message)}")
             raise typer.Exit(code=2) from exc
         raise typer.Exit(0)
     if ctx.invoked_subcommand is not None:
@@ -239,16 +289,25 @@ def cli_root(
             verbose=verbose,
             sarif_output=sarif_output,
             quiet=quiet,
-            report_json_contract=report_json_contract.strip().lower().removeprefix("v"),
+            # Passed through verbatim: ``report_json_schema_url`` owns the single
+            # normalization pass. Pre-normalizing here made it run twice, so 'vv2.0'
+            # was accepted despite the documented single optional leading 'v', and the
+            # rejection message quoted a value the user never typed.
+            report_json_contract=report_json_contract,
             use_insights_evidence=use_insights_evidence,
             applicability_engine=applicability_engine,
             enable_attested=enable_attested,
+            with_findings_summary=with_findings_summary,
+            fail_on_provided=_flag_was_provided(ctx, "fail_on"),
+            output_dir_provided=_flag_was_provided(ctx, "output_dir"),
+            report_json_contract_provided=_flag_was_provided(ctx, "report_json_contract"),
         )
     )
 
 
 @app.command("evaluate", epilog=EVALUATE_EPILOG, rich_help_panel=CMD_PANEL_EVALUATE)
 def evaluate_cmd(
+    ctx: Context,
     target_pos: str | None = typer.Argument(
         default=None,
         help="Repository root. Prefer --target/-t if the path contains spaces.",
@@ -316,7 +375,12 @@ def evaluate_cmd(
         False,
         "--summary-only",
         "-so",
-        help="Print only the summary on stdout.",
+        help=(
+            "Print only the summary on stdout. Also silences the stderr file-write confirmations, "
+            "and under --format json the operational-warning summary, so '--format json --summary-only' "
+            "stays parseable JSON even with stderr merged into stdout (--verbose/--debug still write "
+            "there). Drop --summary-only to see them."
+        ),
         rich_help_panel=OPT_PANEL_OUTPUT,
     ),
     fail_on: str = typer.Option(
@@ -335,13 +399,22 @@ def evaluate_cmd(
         False,
         "--verbose",
         "-v",
-        help="Print per-control evaluation lines to stdout (dim); json mode unchanged.",
+        help=(
+            "Print per-control evaluation lines (dim), pipe-friendly. Human mode writes them "
+            "to stdout; under --format json they go to stderr so stdout stays parseable JSON."
+        ),
         rich_help_panel=OPT_PANEL_DIAGNOSTICS,
     ),
     report_json_contract: str = typer.Option(
         "2.0",
         "--report-json-contract",
-        help=("evaluation-report.json contract: 2.0 (default), 1.0, 0.3, or 0.2. '0.1' was removed in v5."),
+        help=(
+            "evaluation-report.json contract: only '2.0' is valid since v9.0.0 (ADR-043). "
+            "The value is normalized before checking (case-insensitive, surrounding whitespace "
+            "trimmed, an optional leading 'v' dropped), so '2.0', 'V2.0', and ' v2.0 ' are all "
+            "accepted as 2.0. Any value that does not normalize to '2.0' (incl. the removed "
+            "0.1/0.2/0.3/1.0) exits 2."
+        ),
         case_sensitive=False,
         rich_help_panel=OPT_PANEL_OUTPUT,
     ),
@@ -405,6 +478,15 @@ def evaluate_cmd(
         ),
         rich_help_panel=OPT_PANEL_EVIDENCE,
     ),
+    with_findings_summary: bool = typer.Option(
+        False,
+        "--with-findings-summary",
+        help=(
+            "Embed an additive extensions.findings_summary block (correlated scanner-finding "
+            "counts), computed in-process from this same run. Never changes control states, "
+            "summary, digest, or exit codes."
+        ),
+    ),
 ) -> None:
     """Evaluate a local repository clone against a bundled profile.
 
@@ -436,11 +518,19 @@ def evaluate_cmd(
             fail_on=fail_on,
             verbose=verbose,
             quiet=quiet,
-            report_json_contract=report_json_contract.strip().lower().removeprefix("v"),
+            # Passed through verbatim: ``report_json_schema_url`` owns the single
+            # normalization pass. Pre-normalizing here made it run twice, so 'vv2.0'
+            # was accepted despite the documented single optional leading 'v', and the
+            # rejection message quoted a value the user never typed.
+            report_json_contract=report_json_contract,
             sarif_output=sarif_output,
             include_absolute_path=include_absolute_path,
             use_insights_evidence=use_insights_evidence,
             applicability_engine=applicability_engine,
             enable_attested=enable_attested,
+            with_findings_summary=with_findings_summary,
+            fail_on_provided=_flag_was_provided(ctx, "fail_on"),
+            output_dir_provided=_flag_was_provided(ctx, "output_dir"),
+            report_json_contract_provided=_flag_was_provided(ctx, "report_json_contract"),
         )
     )

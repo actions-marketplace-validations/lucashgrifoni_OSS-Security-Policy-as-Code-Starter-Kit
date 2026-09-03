@@ -16,6 +16,28 @@ updates:
       prefix: "deps"
       include: "scope"
 
+  # The hashed locks the container image installs from. A second pip entry is required:
+  # the entry above has `directory: "/"`, which reaches pyproject.toml and nothing else,
+  # so the locks added for the image would have sat unwatched -- the same shape of gap as
+  # the rolling base-image tag documented in the Dockerfile, where coverage looked real
+  # and was not. A bump here changes what ships in the image, so it carries the same
+  # labels as the runtime dependencies it mirrors.
+  - package-ecosystem: "pip"
+    directory: "/.github/requirements"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "America/Sao_Paulo"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "python"
+      - "security"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+
   - package-ecosystem: "npm"
     directory: "/gitpage"
     schedule:
@@ -47,6 +69,14 @@ updates:
     commit-message:
       prefix: "ci"
       include: "scope"
+    # The CodeQL sub-actions (init / autobuild / analyze / upload-sarif) must share one
+    # version. Delivered one per pull request, each bump left the others behind and the
+    # CodeQL jobs failed on every one of them -- #201, #202 and #203 in one week, none
+    # mergeable alone, consolidated by hand like the cycle before. One group, one PR.
+    groups:
+      codeql-action:
+        patterns:
+          - "github/codeql-action/*"
     ignore:
       - dependency-name: "*"
         update-types:

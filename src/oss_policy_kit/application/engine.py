@@ -8,11 +8,13 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from rich.markup import escape as _markup_escape
+
 import oss_policy_kit
 from oss_policy_kit.adapters.scorecard_json import ScorecardBundle
 from oss_policy_kit.application.applicability import resolve_applicability
 from oss_policy_kit.application.clock import report_generated_at
-from oss_policy_kit.application.evaluators import EVALUATOR_REGISTRY, EvalContext
+from oss_policy_kit.application.evaluators import EVALUATOR_REGISTRY, PLUGIN_CONTROL_IDS, EvalContext
 from oss_policy_kit.application.evidence_placeholders import has_placeholder_values
 from oss_policy_kit.application.insights_evidence import InsightsEvidence
 from oss_policy_kit.application.loader import ControlSpec, ProfileSpec
@@ -21,6 +23,7 @@ from oss_policy_kit.domain.errors import LoadError
 from oss_policy_kit.domain.models import (
     ControlResult,
     ControlStatus,
+    EvalOutcome,
     ExecutionReport,
     LiveCollectionMetadata,
     WaiverRecord,
@@ -54,8 +57,8 @@ def _has_real_evidence(evidence_dir: Path) -> bool:
         return False
     for path in sorted(evidence_dir.glob("*.json")):
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+            data = json.loads(path.read_text(encoding="utf-8-sig"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
             continue
         if not has_placeholder_values(data):
             return True
@@ -83,10 +86,6 @@ def _hard_gate_evidence_warning(profile_id: str, repo_root: Path) -> str | None:
     )
 
 
-REPORT_JSON_SCHEMA_URL_V0_1 = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/0.1"
-REPORT_JSON_SCHEMA_URL_V0_2 = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/0.2"
-REPORT_JSON_SCHEMA_URL_V0_3 = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/0.3"
-REPORT_JSON_SCHEMA_URL_V1_0 = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/1.0"
 REPORT_JSON_SCHEMA_URL_V2_0 = "https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/2.0"
 
 
@@ -98,22 +97,34 @@ REPORT_JSON_SCHEMA_URL_V2_0 = "https://github.com/lucashgrifoni/OSS-Security-Pol
 REPORTS_V2_STATUS_MAP: dict[str, tuple[str, str | None]] = {
     "pass": ("PASS", None),
     "fail": ("FAIL", None),
-    "degraded": ("FAIL", None),  # consumers also read per-control 'degraded' flag
+    # Kept so a v5.x report still maps, but `ControlStatus` has had no `degraded` member
+    # since the 2.0 flip: no evaluator produces it and nothing writes a per-control
+    # `degraded` flag. `--fail-on degraded` is a separate, still-live policy value.
+    "degraded": ("FAIL", None),
     "manual-review-required": ("UNKNOWN", "manual-review-required"),
     "not-applicable": ("NOT_APPLICABLE", None),
     "skipped": ("UNKNOWN", "skipped-by-flag"),
     "error": ("UNKNOWN", "evaluator-error"),
     "attested": ("ATTESTED", None),  # ADR-028: verified-attestation pass (in-toto+cosign); distinct from PASS
     "self-attested": ("SELF_ATTESTED", None),  # ADR-033: opt-in Insights self-reported evidence
+    "waived": ("UNKNOWN", "waived"),  # parity with reporting.REPORTS_V2_STATUS_MAP (v9.0.3 drift fix)
+    # Both were ControlStatus members with no entry here, so they fell through to the
+    # "we do not recognise this" fallback below and reached adopters as
+    # `unmapped-source-status` -- a discriminator documented nowhere. NOT_EVALUATED is
+    # returned by evaluators across five modules, notably OSS-SCORECARD-001 when no
+    # Scorecard JSON is supplied, so the fallback was reachable on an ordinary run.
+    "not-evaluated": ("UNKNOWN", "not-evaluated"),
+    "not-observable": ("UNKNOWN", "not-observable-in-clone"),
 }
 
 
 def map_status_to_reports_v2(status: str) -> tuple[str, str | None]:
-    """Map a v5.x status string to the (state, reason) pair of reports/2.0.
+    """Map an internal status string to the (state, reason) pair of reports/2.0.
 
-    See docs/reports-contract-v2.0.md for the full mapping table and the
-    deprecation timeline (reports/1.0 remains the default through v6.x; v7.0.0 is
-    the earliest candidate for a default switch).
+    See docs/reports-contract-v2.0.md for the full mapping table. Since v9.0.0
+    (ADR-043) ``reports/2.0`` is the only report contract; this map is the single
+    source of truth for the state vocabulary and must stay in sync with
+    ``reporting.REPORTS_V2_STATUS_MAP``.
     """
     key = status.strip().lower()
     if key in REPORTS_V2_STATUS_MAP:
@@ -121,30 +132,57 @@ def map_status_to_reports_v2(status: str) -> tuple[str, str | None]:
     return ("UNKNOWN", "unmapped-source-status")
 
 
+#: The report contracts that really existed and were really removed in v9.0.0 (ADR-043),
+#: in both the bare and ``reports/``-prefixed spellings a user might type.
+#:
+#: Only these may be told they "were removed": ``--report-json-contract 3.0`` or ``two``
+#: or ``2.0.0`` never named a contract of this kit, and sending that user to a migration
+#: guide for a version they never used is a false statement about the kit's own history.
+_REMOVED_REPORT_JSON_CONTRACTS = frozenset(
+    {
+        "0.1",
+        "0.2",
+        "0.3",
+        "1.0",
+        "reports/0.1",
+        "reports/0.2",
+        "reports/0.3",
+        "reports/1.0",
+    }
+)
+
+
 def report_json_schema_url(contract: str) -> str:
     """Return the full ``schema_version`` URL for an evaluation JSON report contract.
 
-    v5.0.0 default: ``1.0``. Selectable: ``1.0``, ``0.3``, ``0.2``. Removed: ``0.1``.
-    v6.0.0 (PR-16, V6-05): ``2.0`` selectable, opt-in.
-    v7.0.0 (ADR-027, BREAKING): ``2.0`` is now the **default** (empty contract maps to
-    ``2.0``); ``1.0`` remains explicitly selectable for one minor cycle, then deprecates.
+    v9.0.0 (ADR-043, BREAKING): ``reports/2.0`` is the **only** contract. The legacy
+    selectable contracts (``0.1``/``0.2``/``0.3``/``1.0``) were removed; only ``2.0``
+    is accepted and any other value — including an empty or whitespace-only value —
+    is a hard error (no silent fallback to the default).
+
+    Rejection is uniform; the *explanation* is not. A removed contract gets the
+    migration pointer; anything else is simply not a contract this kit ever wrote.
     """
 
     c = contract.strip().lower().removeprefix("v")
-    if c in {"", "2.0"}:
+    if c == "2.0":
         return REPORT_JSON_SCHEMA_URL_V2_0
-    if c == "1.0":
-        return REPORT_JSON_SCHEMA_URL_V1_0
-    if c == "0.3":
-        return REPORT_JSON_SCHEMA_URL_V0_3
-    if c == "0.2":
-        return REPORT_JSON_SCHEMA_URL_V0_2
-    if c == "0.1":
+    if c == "":
         raise LoadError(
-            "Report JSON contract '0.1' was removed in v5.0.0. Use '1.0' (default), '2.0', '0.3', or '0.2'. "
-            "See docs/v5.0.0-migration-guide.md."
+            "Report JSON contract is empty; 'reports/2.0' is the only contract in v9.0.0 (ADR-043). "
+            "Drop --report-json-contract (2.0 is the default) or pass '2.0'. "
+            "See docs/v9.0.0-migration-guide.md."
         )
-    raise LoadError(f"Unknown report JSON contract {contract!r}; expected '1.0', '2.0', '0.3', or '0.2'.")
+    if c in _REMOVED_REPORT_JSON_CONTRACTS:
+        raise LoadError(
+            f"Report JSON contract {contract!r} was removed in v9.0.0 (ADR-043); 'reports/2.0' is the only "
+            "contract. Drop --report-json-contract (2.0 is the default) or pass '2.0'. "
+            "See docs/v9.0.0-migration-guide.md."
+        )
+    raise LoadError(
+        f"Report JSON contract {contract!r} is not a recognised contract; 'reports/2.0' is the only "
+        "contract this kit writes. Drop --report-json-contract (2.0 is the default) or pass '2.0'."
+    )
 
 
 def _apply_waiver(
@@ -281,6 +319,122 @@ def _not_applicable_result(cid: str, spec: ControlSpec, profile: ProfileSpec, re
     )
 
 
+def _resolve_inapplicable(
+    cid: str,
+    ctx: EvalContext,
+    profile: ProfileSpec,
+    spec: ControlSpec,
+) -> ControlResult | None:
+    """Return the NOT_APPLICABLE result when *spec*'s precondition is unmet, else None."""
+
+    if spec.applicability is None:
+        return None
+    applicable, na_reason = resolve_applicability(spec.applicability, ctx.repo_root)
+    if applicable:
+        return None
+    if ctx.verbose_emit is not None:
+        ctx.verbose_emit(
+            f"[dim]→ {_markup_escape(cid)} ({_markup_escape(spec.title)}) — not applicable (precondition unmet)[/dim]"
+        )
+    return _not_applicable_result(cid, spec, profile, na_reason or "Not applicable.")
+
+
+def _emit_verbose_outcome(ctx: EvalContext, outcome: EvalOutcome) -> None:
+    """Echo one evaluator's verdict on the verbose channel, truncated and escaped."""
+
+    if ctx.verbose_emit is None:
+        return
+    reason_one = outcome.reason.replace("\n", " ").strip()
+    if len(reason_one) > 220:
+        reason_one = reason_one[:217].rstrip() + "..."
+    # Truncate first, escape second, so the cut never lands inside a ``\[`` we added.
+    ctx.verbose_emit(f"[dim]  Result: {_markup_escape(outcome.status.value)} — {_markup_escape(reason_one)}[/dim]")
+
+
+#: A third-party message is echoed into a report; bound it the way driver names are bounded.
+_MAX_PLUGIN_ERROR_CHARS = 200
+
+
+def _outcome_from_plugin(cid: str, evaluator: Callable[[EvalContext], EvalOutcome], ctx: EvalContext) -> EvalOutcome:
+    """Run a third-party evaluator without letting it end the run.
+
+    The loader already holds this line -- ``one broken plugin must not break the kit`` sits
+    beside its ``except Exception`` -- but only for the IMPORT. Nothing guarded the call, so a
+    plugin that imported cleanly and raised while evaluating took the whole run down.
+
+    Measured: a plugin raising on one control of ``github-level-1`` exited 3, wrote NO report,
+    and printed the plugin's own message as ``Unexpected error``. Exit 3 is what
+    docs/cli-reference.md reserves for a defect in this kit, so the kit took the blame for
+    third-party code and the operator lost the other thirteen verdicts with it.
+
+    The control becomes ``manual-review-required`` instead, which is what this project already
+    says about anything it could not establish: the plugin did not answer, so there is no
+    answer to report. Every other control still runs and the report is still written.
+
+    Deliberately NOT applied to built-ins. A built-in evaluator that raises IS a defect in this
+    kit, and exit 3 is the honest thing for it to do. Swallowing that would hide the real
+    thing this guard is imitating.
+    """
+
+    try:
+        outcome = evaluator(ctx)
+    except Exception as exc:  # noqa: BLE001 - a third-party evaluator must not end the run
+        detail = f"{type(exc).__name__}: {exc}"[:_MAX_PLUGIN_ERROR_CHARS]
+        logger.warning("plugin evaluator for %s raised: %s", cid, detail)
+        return _plugin_did_not_answer(cid, f"raised while evaluating ({detail})")
+
+    # The second way a plugin fails to answer. The guard above covers an evaluator that
+    # RAISES; one that RETURNS something the kit cannot use reached `ControlResult` and blew
+    # up there instead -- outside this guard, as exit 3 with no report, blaming the kit.
+    # Measured: `confidence=42` -> "'int' object has no attribute 'strip'"; `reason=None` ->
+    # "'NoneType' object has no attribute 'isprintable'". Identical in v10.0.17, so this is
+    # the guard finishing the job it started rather than a regression being repaired.
+    problem = _malformed_outcome(outcome)
+    if problem is None:
+        return outcome
+    logger.warning("plugin evaluator for %s returned a malformed outcome: %s", cid, problem)
+    return _plugin_did_not_answer(cid, f"returned a malformed outcome ({problem})")
+
+
+def _malformed_outcome(outcome: object) -> str | None:
+    """Why *outcome* cannot be turned into a ``ControlResult``, or ``None`` when it can.
+
+    Checks exactly the fields the kit reads afterwards, with the type each reader assumes.
+    Anything extra a plugin attaches is its own business.
+    """
+
+    if not isinstance(outcome, EvalOutcome):
+        return f"expected EvalOutcome, got {type(outcome).__name__}"
+    if not isinstance(outcome.status, ControlStatus):
+        return f"status is {type(outcome.status).__name__}, not ControlStatus"
+    for attribute in ("reason", "remediation", "confidence"):
+        value = getattr(outcome, attribute)
+        if not isinstance(value, str):
+            return f"{attribute} is {type(value).__name__}, not str"
+    sources = outcome.evidence_sources
+    if not isinstance(sources, list) or not all(isinstance(s, str) for s in sources):
+        return "evidence_sources is not a list of str"
+    return None
+
+
+def _plugin_did_not_answer(cid: str, what_happened: str) -> EvalOutcome:
+    """The one outcome for a plugin that produced no usable answer, whichever way it failed."""
+
+    return EvalOutcome(
+        status=ControlStatus.MANUAL_REVIEW_REQUIRED,
+        reason=(
+            f"The third-party evaluator registered for '{cid}' {what_happened}, so this "
+            "control was not assessed. The rest of the run is unaffected."
+        ),
+        remediation=(
+            f"Report the failure to whoever ships the '{cid}' evaluator, or remove that "
+            "plugin and re-run to get a result for this control."
+        ),
+        evidence_sources=[],
+        confidence="low",
+    )
+
+
 def _evaluate_control(
     cid: str,
     ctx: EvalContext,
@@ -296,24 +450,28 @@ def _evaluate_control(
     When *applicability_engine* is enabled (ADR-028, opt-in) and the control declares a
     precondition, an unmet precondition resolves to ``NOT_APPLICABLE`` consistently and the
     evaluator is not run. Default off → unchanged behavior.
+
+    ``verbose_emit`` receives Rich markup, so every value interpolated into one of those
+    lines is escaped: a reason naming ``[bold]unsafe.yml`` otherwise reached the operator
+    as ``unsafe.yml``, silently, while the JSON report held the real name.
     """
 
     if cid not in catalog:
         raise LoadError(f"Profile references unknown control '{cid}'")
     spec = catalog[cid]
-    if applicability_engine and spec.applicability is not None:
-        applicable, na_reason = resolve_applicability(spec.applicability, ctx.repo_root)
-        if not applicable:
-            if ctx.verbose_emit is not None:
-                ctx.verbose_emit(f"[dim]→ {cid} ({spec.title}) — not applicable (precondition unmet)[/dim]")
-            return _not_applicable_result(cid, spec, profile, na_reason or "Not applicable.")
+    if applicability_engine:
+        inapplicable = _resolve_inapplicable(cid, ctx, profile, spec)
+        if inapplicable is not None:
+            return inapplicable
     evaluator = EVALUATOR_REGISTRY.get(cid)
     if evaluator is None:
         raise LoadError(f"No evaluator implemented for control '{cid}'")
     if ctx.verbose_emit is not None:
-        ctx.verbose_emit(f"[dim]→ {cid} ({spec.title})[/dim]")
+        ctx.verbose_emit(f"[dim]→ {_markup_escape(cid)} ({_markup_escape(spec.title)})[/dim]")
     logger.debug("evaluating %s (%s)", cid, spec.title)
-    outcome = evaluator(ctx)
+    # A built-in is called directly on purpose: if it raises, that is a defect in this kit
+    # and exit 3 is the honest answer. Only a third-party evaluator is caught.
+    outcome = _outcome_from_plugin(cid, evaluator, ctx) if cid in PLUGIN_CONTROL_IDS else evaluator(ctx)
     operational_warnings.extend(outcome.operational_warnings)
     logger.debug(
         "%s -> %s [%s] sources=%d%s",
@@ -323,11 +481,7 @@ def _evaluate_control(
         len(outcome.evidence_sources),
         f" reason={outcome.reason.splitlines()[0]!r}" if outcome.status.value != "pass" and outcome.reason else "",
     )
-    if ctx.verbose_emit is not None:
-        reason_one = outcome.reason.replace("\n", " ").strip()
-        if len(reason_one) > 220:
-            reason_one = reason_one[:217].rstrip() + "..."
-        ctx.verbose_emit(f"[dim]  Result: {outcome.status.value} — {reason_one}[/dim]")
+    _emit_verbose_outcome(ctx, outcome)
     final_status, applied_waiver = _apply_waiver(outcome.status, waivers.get(cid))
     return ControlResult(
         control_id=cid,
@@ -360,12 +514,9 @@ def evaluate_repository(
     *,
     external_waiver_path: str | None = None,
     verbose_emit: Callable[[str], None] | None = None,
-    # Programmatic default is kept at "0.3" for ExecutionReport callers that
-    # were written against the v4.x report shape. The CLI, ``oss-policy-kit.yaml``
-    # config loader, and ``init`` template all default to "1.0" — pass
-    # ``report_json_contract="1.0"`` explicitly when invoking this engine
-    # function from new code paths.
-    report_json_contract: str = "0.3",
+    # v9.0.0 (ADR-043): ``reports/2.0`` is the only contract; the programmatic default
+    # matches the CLI / config / init default. Any other value is a hard error.
+    report_json_contract: str = "2.0",
     live_collection: LiveCollectionMetadata | None = None,
     insights_evidence: InsightsEvidence | None = None,
     applicability_engine: bool = False,

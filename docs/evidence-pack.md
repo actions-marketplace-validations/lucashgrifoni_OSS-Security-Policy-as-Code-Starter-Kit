@@ -51,7 +51,7 @@ Controls **AZ-ARTSBOM-058**, **AZ-ARTPRV-059**, **AWS-SBOMART-058**, and **AWS-P
 
 ## Dry-run security contract
 
-`python -m oss_policy_kit collect-evidence --platform {github|azure|aws} --dry-run` is safe to run in public CI logs and transcripts. It contracts itself to printing only:
+`python -m oss_policy_kit collect-evidence --platform {github|gitlab|azure|aws} --dry-run` is safe to run in public CI logs and transcripts. It contracts itself to printing only:
 
 - the resolved target and output directory
 - the repository slug, when available
@@ -68,7 +68,7 @@ If you run the command without `--dry-run`, the real collectors authenticate aga
 
 Use this when you only need schema-aligned JSON templates for manual editing before evaluation.
 
-**`org-mfa-posture.json` is cross-platform.** `scaffold-evidence --platform {github|aws|azure}` always emits `org-mfa-posture.json` in addition to the platform-specific files. This is intentional: the underlying control (**ORG-MFA-001**) tracks an organization-level posture that is not tied to a single SCM/CI platform, so the scaffold bundle includes it regardless of which `--platform` you passed. It is safe to leave the file as `self-attested` until you populate it with real organization data.
+**`org-mfa-posture.json` is cross-platform.** `scaffold-evidence --platform {github|gitlab|aws|azure}` always emits `org-mfa-posture.json` in addition to the platform-specific files. This is intentional: the underlying control (**ORG-MFA-001**) tracks an organization-level posture that is not tied to a single SCM/CI platform, so the scaffold bundle includes it regardless of which `--platform` you passed. It is safe to leave the file as `self-attested` until you populate it with real organization data.
 
 ## How To Use This File
 

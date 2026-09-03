@@ -94,11 +94,32 @@ def test_cel_matches_golden(tmp_path: Path) -> None:
 
 
 def test_render_is_deterministic() -> None:
+    """Rendering the same profile twice must produce the same policy text.
+
+    The failure this guards is a renderer that iterates something unordered or reaches
+    for a clock or a uuid: the emitted Rego/CEL would then differ between runs, and an
+    adopter diffing two exports of an unchanged profile would see phantom churn.
+
+    Reloading the catalog and profile for the second render is deliberate. Comparing two
+    renders of the *same* in-memory objects would still pass if ordering came from those
+    objects' identity rather than from their content.
+    """
     root = bundled_kit_root()
     catalog = load_catalog(root / "controls" / "catalog.yaml")
     prof = load_profile_by_id(root, _PROFILE)
-    assert ep._render_rego(prof, catalog) == ep._render_rego(prof, catalog)
-    assert ep._render_cel(prof, catalog) == ep._render_cel(prof, catalog)
+
+    rego_first = ep._render_rego(prof, catalog)
+    cel_first = ep._render_cel(prof, catalog)
+
+    catalog_reloaded = load_catalog(root / "controls" / "catalog.yaml")
+    prof_reloaded = load_profile_by_id(root, _PROFILE)
+
+    assert rego_first == ep._render_rego(prof_reloaded, catalog_reloaded), (
+        "Rego output changed for an unchanged profile loaded a second time"
+    )
+    assert cel_first == ep._render_cel(prof_reloaded, catalog_reloaded), (
+        "CEL output changed for an unchanged profile loaded a second time"
+    )
 
 
 # --- CLI surface ------------------------------------------------------------

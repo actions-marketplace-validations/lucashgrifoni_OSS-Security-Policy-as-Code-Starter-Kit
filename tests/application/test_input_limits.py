@@ -24,7 +24,9 @@ def test_oversize_reason_under_and_over(tmp_path: Path) -> None:
     p.write_text("x" * 100, encoding="utf-8")
     assert il.oversize_reason(p, 1000, label="Evidence") is None
     msg = il.oversize_reason(p, 10, label="Evidence")
-    assert msg is not None and "exceeding" in msg and "Evidence" in msg
+    assert msg is not None
+    assert "exceeding" in msg
+    assert "Evidence" in msg
 
 
 def test_oversize_reason_missing_file(tmp_path: Path) -> None:
@@ -57,8 +59,10 @@ def test_validate_json_evidence_oversize_returns_error(tmp_path: Path, monkeypat
     ev = tmp_path / "evidence.json"
     ev.write_text(json.dumps({"schema_version": "x", "padding": "y" * 100}), encoding="utf-8")
     data, error, ph = ec.validate_json_evidence(ev, schema_loader=lambda: {}, evidence_name="Test")
-    assert data is None and ph == []
-    assert error is not None and "exceeding" in error
+    assert data is None
+    assert ph == []
+    assert error is not None
+    assert "exceeding" in error
 
 
 def test_org_mfa_oversize_evidence_degrades_to_manual(tmp_path: Path, monkeypatch) -> None:
@@ -99,7 +103,9 @@ def test_load_sarif_runs_oversize(tmp_path: Path, monkeypatch) -> None:
     sf = tmp_path / "x.sarif.json"
     sf.write_text(json.dumps({"version": "2.1.0", "runs": []}), encoding="utf-8")
     runs, err = _shared._load_sarif_runs(sf)
-    assert runs is None and err is not None and "exceeding" in err
+    assert runs is None
+    assert err is not None
+    assert "exceeding" in err
 
 
 # --------------------------------------------------------------------------- #
@@ -137,4 +143,5 @@ def test_emit_vex_sarif_oversize(tmp_path: Path, monkeypatch) -> None:
         encoding="utf-8",
     )
     _ids, _refs, err = ev._extract_sarif_data(sf)
-    assert err is not None and "exceeding" in err
+    assert err is not None
+    assert "exceeding" in err

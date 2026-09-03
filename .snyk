@@ -1,0 +1,17 @@
+# Snyk (https://snyk.io) policy file.
+#
+# `snyk code test` runs as a HARD GATE in Security CI (security-ci-cd.yml). This
+# file suppresses a REVIEWED FALSE POSITIVE so the gate stays meaningful — a real
+# finding still breaks the build — without flagging a non-issue. Each ignore
+# records who/why and expires so it is re-reviewed, not forgotten.
+version: v1.25.0
+ignore:
+  python/NoHardcodedPasswords:
+    - 'src/oss_policy_kit/cli/export_evidence.py':
+        reason: >-
+          False positive. The flagged "dictionary keys" are reports/2.0 control
+          STATE enum values ("PASS" / "pass"), mapped to Gemara evaluation-log
+          result strings in _GEMARA_STATE_MAP / _GEMARA_STATUS_MAP. They are
+          control states, not credentials — no secret or password is present.
+        expires: 2027-12-31T00:00:00.000Z
+patch: {}

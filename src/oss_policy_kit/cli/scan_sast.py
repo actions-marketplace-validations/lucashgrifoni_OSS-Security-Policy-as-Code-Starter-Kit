@@ -26,10 +26,14 @@ import typer
 from oss_policy_kit.adapters.local_paths import resolve_existing_dir
 from oss_policy_kit.cli.common import (
     app,
+    display_path,
+    exit_for_unexpected,
+    markup_safe,
     stderr_console,
     write_stdout_text,
 )
 from oss_policy_kit.cli.help_text import CMD_PANEL_SCAN
+from oss_policy_kit.cli.scan_errors import exit_for_unwritable_evidence
 from oss_policy_kit.domain.errors import InvalidInputError, OssPolicyKitError
 from oss_policy_kit.infrastructure.scanners.semgrep_adapter import (
     DEFAULT_RULESETS,
@@ -98,8 +102,12 @@ def scan_sast_cmd(
         evidence_path = write_evidence(payload, repo_root=repo, filename=EVIDENCE_FILENAME)
 
         if outcome.status == "error":
+            # Name the containing directory, not just the file: `write_evidence` always
+            # writes under `.oss-policy-kit/evidence/`, a dot-directory the operator has
+            # no reason to guess. Kept repo-relative so no host path reaches stderr.
             stderr_console().print(
-                f"[red]Semgrep failed:[/red] see diagnostics in {evidence_path.name}.",
+                f"[red]Semgrep failed:[/red] see diagnostics in "
+                f".oss-policy-kit/evidence/{evidence_path.name} (relative to --target).",
             )
             raise typer.Exit(code=2)
 
@@ -112,7 +120,7 @@ def scan_sast_cmd(
                 f"scan-sast: {outcome.status} -- "
                 f"findings={len(outcome.findings)} "
                 f"rulesets={','.join(outcome.rulesets)} "
-                f"-> {evidence_path}\n",
+                f"-> {display_path(evidence_path, root=repo)}\n",
             )
             if outcome.status == "not_available":
                 stderr_console().print(
@@ -126,13 +134,11 @@ def scan_sast_cmd(
                 )
 
     except OssPolicyKitError as exc:
-        stderr_console().print(f"[red]Error:[/red] {exc.message}")
+        stderr_console().print(f"[red]Error:[/red] {markup_safe(exc.message)}")
         raise typer.Exit(code=2) from exc
     except typer.Exit:
         raise
     except OSError as exc:
-        stderr_console().print(f"[red]Error:[/red] {exc}")
-        raise typer.Exit(code=2) from exc
+        exit_for_unwritable_evidence(exc)
     except Exception as exc:  # noqa: BLE001 - last-resort user message
-        stderr_console().print(f"[red]Unexpected error:[/red] {exc}")
-        raise typer.Exit(code=3) from exc
+        exit_for_unexpected(exc)

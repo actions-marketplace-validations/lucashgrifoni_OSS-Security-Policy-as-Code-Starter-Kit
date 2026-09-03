@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "oss-policy-kit"
-version = "8.0.0"
+version = "10.0.19"
 description = "Open source starter kit for adopting OSS security baselines via policy packs, templates, evidence, and remediation."
 readme = "README.md"
 license = "Apache-2.0"
@@ -17,11 +17,18 @@ classifiers = [
   "Intended Audience :: Developers",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Topic :: Security",
 ]
 dependencies = [
   "typer>=0.12.5",
-  "click>=8.1.8,<8.5",
+  # The ceiling is the next MAJOR, not the next minor. It used to be `<8.5`, a bound that
+  # was never chosen: Dependabot walked it forward one minor at a time (`<8.4` -> `<8.5`,
+  # #12) and nobody wrote down what a newer click broke, because nothing did -- the full
+  # CLI suite passes on 8.5.0, and typer 0.27 declares no click constraint of its own.
+  # A ceiling on a runtime dependency is a promise that the version past it breaks
+  # something; without a named breakage the honest ceiling is the semver major.
+  "click>=8.1.8,<9",
   "pyyaml>=6.0.1",
   "jsonschema>=4.20",
 ]
@@ -37,7 +44,7 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=4.1",
     "hypothesis>=6.0,<7",
-    "ruff==0.15.16",  # pinned: ruff format output changes between versions; keep CI and local identical
+    "ruff==0.16.5",  # pinned: ruff format output changes between versions; keep CI and local identical
   "mypy>=1.11",
   "bandit>=1.7.9",
   "pip-audit>=2.7",
@@ -76,8 +83,17 @@ where = ["src"]
 
 # Policy payloads only (YAML/JSON). Do not use `data/**/*`: it also picks up
 # `__pycache__/*.pyc` under `data/schema/` when present locally.
+# `py.typed` (PEP 561) must ship too: the package exposes a typed extension contract
+# (`domain/plugin_contract.py`, the `oss_policy_kit.evaluators` entry-point group), and
+# without this marker a plugin author's type checker treats the whole package as untyped.
+#
+# `data/**/*.yml` is NOT redundant with `*.yaml`: the workflow templates `init
+# --with-workflow` writes are `.yml`, and leaving that extension out shipped a wheel
+# with no templates at all. The documented quickstart then exited 2 with "Workflow
+# template not found" on every install, while the test suite stayed green because it
+# runs from the repo root, where the source-tree fallback exists.
 [tool.setuptools.package-data]
-oss_policy_kit = ["data/**/*.yaml", "data/**/*.json"]
+oss_policy_kit = ["py.typed", "data/**/*.yaml", "data/**/*.yml", "data/**/*.json"]
 
 [tool.setuptools.exclude-package-data]
 oss_policy_kit = [
@@ -125,8 +141,11 @@ max-complexity = 12
 "src/oss_policy_kit/cli/emit_vex.py" = ["B008"]
 "src/oss_policy_kit/cli/emit_insights.py" = ["B008"]
 "src/oss_policy_kit/cli/ingest_insights.py" = ["B008"]
+"src/oss_policy_kit/cli/ingest_scorecard.py" = ["B008"]
+"src/oss_policy_kit/cli/correlate_findings.py" = ["B008"]
 "src/oss_policy_kit/cli/export_evidence.py" = ["B008"]
 "src/oss_policy_kit/cli/export_policy.py" = ["B008"]
+"src/oss_policy_kit/cli/diff_catalogs.py" = ["B008"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -149,13 +168,30 @@ branch = true
 [tool.coverage.report]
 show_missing = true
 skip_covered = false
-# Conservative floor: measured ~92% across the full suite (unit + property). The floor
-# sits a few points below that to absorb Hypothesis-seed variance and Windows/Linux
-# branch differences (CI measures on Linux). Raise as coverage grows; never lower it to
-# accommodate a regression.
-fail_under = 88
+# 100 is the measured state, not an aspiration: every statement and every branch in src/ is
+# exercised. The floor sits there so a new uncovered line fails the run that introduced it,
+# which is the only moment covering it is cheap. Restate it in
+# .github/workflows/github-ci-cd.yml too -- CI passes --cov-fail-under on the command line,
+# so changing only one leaves the gate at the old value.
+#
+# What the last points cost, and why they were still worth taking. The earlier note here
+# argued for staying below 100, because two audited cases (the release-hardening fallbacks in
+# profile_hints, the emptied PROFILE_DIRECTORY_ALIASES) were unreachable by construction and
+# the four tests that "covered" one of them asserted `isinstance(result, list)` on a state the
+# caller cannot produce -- executing the line while checking nothing. That danger is real and
+# the answer is not a lower floor: it is to prove unreachability rather than assert it, then
+# delete the code or mark it. Fourteen branches survive that way, each carrying
+# `# pragma: no cover` (or `no branch`, where only one arm is dead) and the reason beside it.
+# The push to 100 also found two live defects, so the last points bought more than a number.
+#
+# Never lower this to accommodate a regression.
+fail_under = 100
 exclude_lines = [
   "pragma: no cover",
   "if TYPE_CHECKING:",
   "raise NotImplementedError",
+  # A bare `...` is the body of a Protocol method or an abstract stub. It is
+  # unexecutable by construction -- nothing ever calls the declaration itself --
+  # so counting it as a missed line reports untestable syntax as untested code.
+  "^\\s*\\.\\.\\.$",
 ]

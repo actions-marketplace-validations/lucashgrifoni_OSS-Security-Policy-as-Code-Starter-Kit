@@ -149,38 +149,71 @@ Use `--keep-venv` only when debugging.
 
 ## CI validation
 
-The package workflow in `.github/workflows/github-ci-cd.yml` is expected to:
+`Package` in `.github/workflows/github-ci-cd.yml` runs on every push and pull request and:
 
-1. clean build artifacts
-2. run `python -m build`
-3. run `python scripts/twine_check_dist.py` (twine with explicit artifact paths)
-4. generate a CycloneDX SBOM
-5. smoke-install the wheel and run CLI help commands
+1. cleans build artifacts
+2. runs `python -m build`
+3. runs `python scripts/twine_check_dist.py` (twine with explicit artifact paths)
+4. generates a CycloneDX SBOM
+5. installs the built wheel into a clean environment with `--no-deps`, so the wheel's
+   own dependency metadata is what gets exercised, and runs the CLI help commands
 
-This workflow validates artifacts. It does not publish to PyPI.
-PyPI publication is an active channel for consumers, but the upload step is handled
-outside this default CI validation workflow set.
+It validates artifacts and publishes nothing. Publication is a separate workflow that
+runs only on a tag push (see the release flow below).
 
 ## Versioning and changelog discipline
 
-Before tagging a release:
+Versions are not edited by hand. [release-please](https://github.com/googleapis/release-please)
+reads the Conventional Commit subjects merged to `master` since the previous tag, decides
+the bump (`fix` = patch, `feat` = minor, `feat!` or a `BREAKING CHANGE` footer = major) and
+keeps ONE open pull request titled `chore(master): release X.Y.Z` that carries:
 
-1. align version in `pyproject.toml` and `src/oss_policy_kit/__init__.py`
-2. update user-facing docs if install or compatibility guidance changed
-3. move `CHANGELOG.md` from `Unreleased` into a dated release section
-4. clean `dist/`, `build/`, and `.consumer-smoke-venv/` before running packaging validation
+- the version in `pyproject.toml`, `src/oss_policy_kit/__init__.py` and the docs listed
+  under `extra-files` in `.github/release-please-config.json`
+- the `CHANGELOG.md` section, grouped by the `changelog-sections` in that file
+  (`feat` under Highlights, `fix` under Fixes, `perf` and `refactor` under Improvements,
+  `docs` / `build` / `ci` under Notes)
 
-### `v4.0.0` tag note
+What that means for a commit: the subject is the changelog line, so write it for the
+reader of the changelog. An unbalanced parenthesis in a commit body makes release-please
+drop the commit from the changelog silently while the run stays green.
 
-The `4.0.0` release is consolidated in `pyproject.toml` and `CHANGELOG.md`, but creating and pushing the `v4.0.0` git tag is a **manual maintainer action** and is intentionally **not** part of the docs/UX round that introduced this subsection. The suggested command is:
+## Release flow
 
-```bash
-git tag -a v4.0.0 -m "oss-policy-kit 4.0.0"
-# or, if the repo policy requires signed tags
-git tag -s v4.0.0 -m "oss-policy-kit 4.0.0"
-```
+The whole flow, in the order it actually happens. Steps 3, 5 and 6 are the maintainer's;
+everything else is a workflow.
 
-Push the tag separately once the maintainer has reviewed the consolidated history.
+1. Merge the release pull request. Its merge commit is `chore(master): release X.Y.Z`.
+2. release-please runs on that merge and creates a **draft** GitHub Release named
+   `vX.Y.Z`. `draft: true` in its config means the git tag is NOT created: a draft
+   release names a tag that does not yet exist.
+3. Create the tag on the merge commit and push it. Tags are signed:
+
+   ```bash
+   git tag -s vX.Y.Z -m "oss-policy-kit X.Y.Z" <merge-commit-sha>
+   git push origin vX.Y.Z
+   ```
+
+4. The tag push starts three workflows. `publish-pypi.yml` builds from the tag and
+   publishes through Trusted Publishing with attestations. `publish-container.yml`
+   builds the multi-architecture image from the same checkout and pushes it to GHCR,
+   signed with cosign. `release.yml` renders the release notes from the commits between
+   the previous tag and this one, updates the draft, and closes the transient
+   release-please PR described below.
+5. Publish the draft release once the notes read correctly. `release.yml` never
+   publishes: a person reads the summary line first.
+6. Validate the published artifacts from a clean environment, not from the working
+   tree: `pip install oss-policy-kit==X.Y.Z` in a fresh virtualenv, pull the GHCR image
+   by digest, and run the consumer smoke above against both.
+
+### The transient major-bump pull request
+
+Minutes after step 1, a second release PR titled with the NEXT MAJOR (`release 11.0.0`
+right after `10.0.18`) appears. It is not a signal that a major is due. release-please
+runs on the merge commit before the tag exists, its last-release lookup finds nothing,
+and it computes a bump from the whole history, breaking changes from earlier majors
+included. Since v10.0.19 `release.yml` closes that PR on the tag push and records the
+reason on it. If it is still open after step 4, close it; do not merge it.
 
 ## Private Maintainer Notes
 

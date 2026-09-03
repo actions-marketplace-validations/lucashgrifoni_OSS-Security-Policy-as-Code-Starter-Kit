@@ -13,16 +13,18 @@ Mirrors ``evaluators_iac.py`` exactly: each evaluator is a thin reader of
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from oss_policy_kit.application._evidence_rules import (
+    absent_technology_outcome,
     files_scanned_list,
     rule_finding_count,
     sample_finding_files,
+    unread_sources_note,
 )
+from oss_policy_kit.application.evaluators_common import read_scanner_evidence
 from oss_policy_kit.domain.models import ControlStatus, EvalOutcome
 
 _EVIDENCE_FILENAME = "k8s-baseline.json"
@@ -43,25 +45,11 @@ def _load_evidence(repo_root: Path) -> tuple[dict[str, Any] | None, EvalOutcome 
             evidence_sources=[],
             confidence="medium",
         )
-    try:
-        data = json.loads(evidence.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        return None, EvalOutcome(
-            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
-            reason=f"Could not parse Kubernetes evidence file: {exc}",
-            remediation="Re-run `oss-policy-kit scan-k8s` to regenerate the evidence file.",
-            evidence_sources=[str(evidence.resolve())],
-            confidence="low",
-        )
-    schema = str(data.get("schema_version", ""))
-    if not schema.startswith(_SCHEMA_PREFIX):
-        return None, EvalOutcome(
-            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
-            reason=f"Unexpected schema_version in {evidence.name}: {schema!r}. Expected prefix {_SCHEMA_PREFIX!r}.",
-            remediation="Regenerate via `oss-policy-kit scan-k8s` to align with the current contract.",
-            evidence_sources=[str(evidence.resolve())],
-            confidence="low",
-        )
+    data = read_scanner_evidence(
+        evidence, label="Kubernetes", regenerate_cmd="oss-policy-kit scan-k8s", schema_prefix=_SCHEMA_PREFIX
+    )
+    if isinstance(data, EvalOutcome):
+        return None, data
     status = str(data.get("status", "unknown")).lower()
     if status in {"timeout", "error"}:
         return None, EvalOutcome(
@@ -86,6 +74,9 @@ def _make_k8s_evaluator(rule_id: str, summary: str) -> Callable[[Any], EvalOutco
         sources = [str(evidence_path.resolve())]
         files_scanned = files_scanned_list(data)
         if not files_scanned:
+            blocked = absent_technology_outcome(data, technology="Kubernetes", sources=sources)
+            if blocked is not None:
+                return blocked
             return EvalOutcome(
                 status=ControlStatus.NOT_APPLICABLE,
                 reason=("No Kubernetes manifests detected in repository; control is not applicable."),
@@ -97,7 +88,10 @@ def _make_k8s_evaluator(rule_id: str, summary: str) -> Callable[[Any], EvalOutco
         if count == 0:
             return EvalOutcome(
                 status=ControlStatus.PASS,
-                reason=f"No {rule_id} findings detected across {len(files_scanned)} scanned Kubernetes manifest(s).",
+                reason=(
+                    f"No {rule_id} findings detected across {len(files_scanned)} scanned Kubernetes manifest(s)."
+                    f"{unread_sources_note(data)}"
+                ),
                 remediation="Re-scan after manifest changes to keep evidence fresh.",
                 evidence_sources=sources,
                 confidence="high",
@@ -109,7 +103,7 @@ def _make_k8s_evaluator(rule_id: str, summary: str) -> Callable[[Any], EvalOutco
             reason=f"{rule_id} ({summary}) raised {count} finding(s) on the scanned Kubernetes manifests.{files_hint}",
             remediation=(
                 "Review evaluation-report.md for details and remediate the listed manifests, "
-                "or document an explicit waiver in waivers.yaml with owner, reason, and expires_on."
+                "or document an explicit waiver in waivers.yaml with owner, justification, and expires_at."
             ),
             evidence_sources=sources,
             confidence="high",

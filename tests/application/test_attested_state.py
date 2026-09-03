@@ -1,21 +1,20 @@
-"""ADR-028 PR1: the ATTESTED domain state is wired end-to-end but emitted by nobody yet.
+"""ADR-028 PR1: the ATTESTED domain state is wired end-to-end.
 
-Proves that ``ControlStatus.ATTESTED`` (added in PR1) scores as passing on its own
-summary line, maps to a gate role, is accepted by the reports/1.0 JSON schema, maps to
-the reports/2.0 ``ATTESTED`` state, and renders — while no bundled evaluator produces it,
-so existing outputs are unchanged (zero score inflation; decision D2).
+Proves that ``ControlStatus.ATTESTED`` scores as passing on its own summary line,
+maps to a gate role, is accepted by the reports/2.0 JSON schema (the only contract
+since v9.0.0, ADR-043), maps to the reports/2.0 ``ATTESTED`` state, and renders —
+with zero score inflation (decision D2).
 """
 
 from __future__ import annotations
 
 import json
 
-from tests.conftest import EXAMPLE_HARDENED
+from tests.conftest import EXAMPLE_HARDENED, ROOT
 from typer.testing import CliRunner
 
 from oss_policy_kit.application import engine
 from oss_policy_kit.application.evidence_projection import gate_role_for
-from oss_policy_kit.application.reporting import compute_summary_by_gate_role
 from oss_policy_kit.cli import terminal_ui
 from oss_policy_kit.cli.main import app
 from oss_policy_kit.domain.models import ControlResult, ControlStatus, ExecutionReport
@@ -76,12 +75,6 @@ def test_attested_gate_role_is_passed_observation() -> None:
     assert gate_role_for(ControlStatus.ATTESTED) == "passed_observation"
 
 
-def test_attested_rolls_into_passed_observation_summary() -> None:
-    out = compute_summary_by_gate_role({"pass": 2, "attested": 3, "fail": 1})
-    assert out["passed_observation"] == 5
-    assert out["ci_blocking_fail"] == 1
-
-
 def test_attested_maps_to_reports_v2_state() -> None:
     assert engine.map_status_to_reports_v2("attested") == ("ATTESTED", None)
 
@@ -91,35 +84,42 @@ def test_attested_maps_to_reports_v2_state() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def _find_status_enum(node: object) -> list[str] | None:
-    """Recursively locate the per-control status enum in the JSON schema."""
-    if isinstance(node, dict):
-        enum = node.get("enum")
-        if isinstance(enum, list) and "pass" in enum and "fail" in enum and "self-attested" in enum:
-            return enum
-        for v in node.values():
-            found = _find_status_enum(v)
-            if found is not None:
-                return found
-    elif isinstance(node, list):
-        for v in node:
-            found = _find_status_enum(v)
-            if found is not None:
-                return found
-    return None
+_REPORTS_2_0_SCHEMA_PATH = ROOT / "src" / "oss_policy_kit" / "data" / "schema" / "reports" / "2.0.json"
 
 
-def test_reports_v1_schema_accepts_attested() -> None:
-    from oss_policy_kit.application.evaluators_common import load_packaged_schema
+def test_reports_2_0_schema_accepts_attested_and_self_attested() -> None:
+    """The reports/2.0 state enum carries both attestation-derived states (v9.0.3).
 
-    schema = load_packaged_schema("evaluation-report-v1.schema.json")
-    enum = _find_status_enum(schema)
-    assert enum is not None and "attested" in enum
+    ATTESTED (ADR-028, verified attestation) and SELF_ATTESTED (ADR-033,
+    self-reported evidence) must both be valid control states AND valid
+    summary_by_status keys — real azure/aws evidence-backed reports emit
+    SELF_ATTESTED, so the published schema has to accept it.
+    """
+    schema = json.loads(_REPORTS_2_0_SCHEMA_PATH.read_text(encoding="utf-8"))
+    state_enum = schema["properties"]["controls"]["items"]["properties"]["state"]["enum"]
+    assert "ATTESTED" in state_enum
+    assert "SELF_ATTESTED" in state_enum
+    summary_pattern = next(iter(schema["properties"]["summary_by_status"]["patternProperties"]))
+    assert "ATTESTED" in summary_pattern
+    assert "SELF_ATTESTED" in summary_pattern
+
+
+def test_status_maps_agree_between_engine_and_reporting() -> None:
+    """engine.REPORTS_V2_STATUS_MAP and reporting.REPORTS_V2_STATUS_MAP must not drift.
+
+    v9.0.3 regression: the engine copy was missing 'waived' (a waived control mapped
+    to the generic 'unmapped-source-status' reason instead of 'waived').
+    """
+    from oss_policy_kit.application import reporting
+
+    assert engine.REPORTS_V2_STATUS_MAP == reporting.REPORTS_V2_STATUS_MAP
+    assert engine.map_status_to_reports_v2("waived") == ("UNKNOWN", "waived")
+    assert engine.map_status_to_reports_v2("self-attested") == ("SELF_ATTESTED", None)
 
 
 def test_attested_control_renders_without_crash() -> None:
     report = ExecutionReport(
-        schema_version="reports/1.0",
+        schema_version="reports/2.0",
         generated_at="2026-06-08T00:00:00Z",
         kit_version="test",
         target_path="/tmp/repo",

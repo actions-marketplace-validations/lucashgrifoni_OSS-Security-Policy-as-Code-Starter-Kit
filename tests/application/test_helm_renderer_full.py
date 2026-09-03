@@ -141,7 +141,8 @@ def test_render_one_chart_timeout(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
 
     monkeypatch.setattr(hr.subprocess, "run", _to)
     hr._render_one_chart(chart.resolve(), repo, tmp_root, "/usr/bin/helm", 60, outcome)
-    assert outcome.render_errors and "timed out" in outcome.render_errors[0]["error"]
+    assert outcome.render_errors
+    assert "timed out" in outcome.render_errors[0]["error"]
 
 
 def test_render_one_chart_oserror(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

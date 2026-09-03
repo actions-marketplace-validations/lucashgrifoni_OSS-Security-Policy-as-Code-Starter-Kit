@@ -10,6 +10,8 @@ from oss_policy_kit.adapters.local_paths import resolve_existing_dir
 from oss_policy_kit.application.batch_evaluate import run_batch_evaluation
 from oss_policy_kit.cli.common import (
     app,
+    exit_for_unexpected,
+    markup_safe,
     stderr_console,
     warn_if_batch_skipped_directories,
 )
@@ -79,6 +81,17 @@ def evaluate_many_cmd(
         "-q",
         help="Suppress incremental stderr progress lines; keep final batch summary writes.",
     ),
+    include_absolute_path: bool = typer.Option(
+        False,
+        "--include-absolute-path",
+        help=(
+            "Keep full absolute paths in the batch reports (target_root, per-run target_path, "
+            "report artifact paths, skipped-directory paths). Default is privacy-by-default: "
+            "every path is sanitized to a basename so shared batch artifacts do not leak the "
+            "auditor's home directory or username. Use only when downstream tooling expects "
+            "absolute paths."
+        ),
+    ),
 ) -> None:
     """Evaluate many repository clones under one parent directory (monorepo / multi-app root)."""
 
@@ -96,7 +109,11 @@ def evaluate_many_cmd(
             cons = stderr_console()
 
             def progress_cb(repo_name: str, current: int, total: int) -> None:
-                cons.print(f"[dim]  [{current}/{total}][/dim] {repo_name}")
+                # The directory name is the operator's, not ours: a child called
+                # ``[bold]repo-a`` reached the console as ``repo-a``. The consolidated
+                # ``evaluation-batch.json`` records it correctly, but the progress stream
+                # is the only place anyone watches during a long batch.
+                cons.print(f"[dim]  [{current}/{total}][/dim] {markup_safe(repo_name)}")
 
         batch = run_batch_evaluation(
             target_root=root,
@@ -108,18 +125,31 @@ def evaluate_many_cmd(
             fail_on=policy,
             skip_non_repos=skip_non_repos,
             progress_callback=progress_cb,
+            include_absolute_path=include_absolute_path,
         )
-        stderr_console().print(f"[green]Wrote[/green] {batch.batch_json.resolve()}")
-        stderr_console().print(f"[green]Wrote[/green] {batch.batch_md.resolve()}")
+        stderr_console().print(f"[green]Wrote[/green] {markup_safe(batch.batch_json.resolve())}")
+        stderr_console().print(f"[green]Wrote[/green] {markup_safe(batch.batch_md.resolve())}")
         if not quiet:
             warn_if_batch_skipped_directories(batch.batch_json)
+        if batch.failed_count:
+            # A repository the batch was asked to evaluate and could not is an incomplete
+            # run, not a policy outcome, so it exits 2 rather than 1 -- and it is checked
+            # BEFORE the gate, because reporting a gate verdict computed over the targets
+            # that happened to succeed is the failure this replaces. `evaluate-many`
+            # previously printed "CI gate: PASSED" over zero runs when every repository
+            # had failed.
+            noun = "repository" if batch.failed_count == 1 else "repositories"
+            stderr_console().print(
+                f"[red]Error:[/red] {batch.failed_count} {noun} could not be evaluated; "
+                "the batch is incomplete. See failed_directories in the batch report."
+            )
+            raise typer.Exit(code=2)
         if batch.gate_violated:
             raise typer.Exit(code=1)
     except OssPolicyKitError as exc:
-        stderr_console().print(f"[red]Error:[/red] {exc.message}")
+        stderr_console().print(f"[red]Error:[/red] {markup_safe(exc.message)}")
         raise typer.Exit(code=2) from exc
     except typer.Exit:
         raise
     except Exception as exc:  # noqa: BLE001
-        stderr_console().print(f"[red]Unexpected error:[/red] {exc}")
-        raise typer.Exit(code=3) from exc
+        exit_for_unexpected(exc)

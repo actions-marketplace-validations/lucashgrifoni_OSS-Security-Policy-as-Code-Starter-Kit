@@ -27,12 +27,26 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from oss_policy_kit.application.evaluators_common import strip_dockerfile_comments
 from oss_policy_kit.domain.models import ControlStatus, EvalOutcome
 
-_DOCKER_FROM_RE = re.compile(r"^[ \t]*FROM[ \t]+([^\n]+)$", re.MULTILINE | re.IGNORECASE)
+# The leading run is possessive. ``FROM`` cannot begin with a space or a tab, so every
+# shorter length the greedy form backtracks into fails for the same reason the longest one
+# did. Consuming it once and never giving it back is provably backtrack-free and yields an
+# identical match set (differentially tested over 200k random inputs, zero divergence).
+# Note this is a shape fix, not a measured one: CPython's engine anchors on the ``FROM``
+# literal, so the greedy form still measured linear on an adversarial input -- possessive
+# was ~1.6x faster, not asymptotically better. Kept because it cannot degrade, not because
+# a blowup was reproduced.
+_DOCKER_FROM_RE = re.compile(r"^[ \t]*+FROM[ \t]+([^\n]+)$", re.MULTILINE | re.IGNORECASE)
 _HEALTHCHECK_RE = re.compile(r"^\s*HEALTHCHECK\b", re.MULTILINE | re.IGNORECASE)
+# The repetition is bounded rather than open-ended. ``[^|\n]+`` cannot match the ``|`` that
+# has to follow it, so on a long RUN line with no pipe the engine walks the whole tail, fails,
+# and retries from the next start position -- quadratic in the line length, on a Dockerfile
+# the caller chose to scan. 400 characters is far past any real `curl ... | bash`, and past it
+# the match is not worth the scan.
 _CURL_BASH_RE = re.compile(
-    r"(curl|wget)[^|\n]+\|\s*(bash|sh|zsh|ksh)\b",
+    r"(curl|wget)[^|\n]{1,400}\|\s*(bash|sh|zsh|ksh)\b",
     re.IGNORECASE,
 )
 _APT_INSTALL_RE = re.compile(
@@ -157,7 +171,10 @@ def eval_cont_runtime_003(ctx: Any) -> EvalOutcome:
         return _na_no_dockerfile()
     offenders: list[Path] = []
     for df in dockerfiles:
-        if _CURL_BASH_RE.search(_read_text(df)):
+        # `strip_dockerfile_comments` already existed for exactly this and was not applied
+        # here, so a `# curl … | sh` line explaining what NOT to do failed the control. A
+        # commented-out instruction does not run, and this control is about what runs.
+        if _CURL_BASH_RE.search(strip_dockerfile_comments(_read_text(df))):
             offenders.append(df)
     if not offenders:
         return EvalOutcome(
@@ -365,7 +382,7 @@ def eval_cont_sign_001(ctx: Any) -> EvalOutcome:
         if wd.is_dir():
             for ext in ("*.yml", "*.yaml"):
                 with contextlib.suppress(OSError):
-                    candidates.extend(p for p in wd.rglob(ext) if p.is_file())
+                    candidates.extend(sorted(p for p in wd.rglob(ext) if p.is_file()))
         elif wd.is_file():
             candidates.append(wd)
     for path in candidates[:60]:

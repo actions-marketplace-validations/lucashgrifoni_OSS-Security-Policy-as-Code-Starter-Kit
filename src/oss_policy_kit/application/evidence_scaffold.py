@@ -15,6 +15,8 @@ from typing import Any
 from oss_policy_kit.domain.errors import InvalidInputError
 from oss_policy_kit.domain.models import utc_today
 
+_PLACEHOLDER_REPO = "org/repo"
+
 
 def scaffold_attested_date_yyyy_mm_dd(*, today: date | None = None) -> str:
     """Return the attestation date stamp used in scaffold templates (UTC calendar day)."""
@@ -43,7 +45,7 @@ def _github_templates(attested_at: str) -> dict[str, dict[str, Any]]:
             "schema_version": "github-rulesets/v1",
             "attested_at": attested_at,
             "attested_by": "REPLACE_ME_GITHUB_HANDLE",
-            "repository": "org/repo",
+            "repository": _PLACEHOLDER_REPO,
             "posture": {
                 "require_pull_request": True,
                 "require_status_checks": True,
@@ -70,7 +72,7 @@ def _github_templates(attested_at: str) -> dict[str, dict[str, Any]]:
             "schema_version": "github-secret-scanning/v1",
             "attested_at": attested_at,
             "attested_by": "REPLACE_ME_GITHUB_HANDLE",
-            "repository": "org/repo",
+            "repository": _PLACEHOLDER_REPO,
             "posture": {
                 "secret_scanning_enabled": True,
                 "push_protection_enabled": True,
@@ -82,7 +84,7 @@ def _github_templates(attested_at: str) -> dict[str, dict[str, Any]]:
             "schema_version": "github-release-immutability/v1",
             "attested_at": attested_at,
             "attested_by": "REPLACE_ME_GITHUB_HANDLE",
-            "repository": "org/repo",
+            "repository": _PLACEHOLDER_REPO,
             "posture": {
                 "immutable_releases_enabled": True,
                 "release_attestation_present": True,

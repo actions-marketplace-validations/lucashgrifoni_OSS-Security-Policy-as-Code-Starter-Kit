@@ -2,50 +2,83 @@
 
 from __future__ import annotations
 
+import importlib.resources as ir
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-GITHUB_EVIDENCE_FILENAMES: frozenset[str] = frozenset(
+# --- Which evidence filenames the kit itself writes and reads ----------------
+#
+# The invariant this section exists to hold: every filename `scaffold-evidence`
+# writes, `collect-evidence` writes, `scan-*` writes, or an evaluator reads must
+# be RECOGNIZED here. When it is not, `recommend-profile` tells the adopter the
+# file "will be ignored by evaluate" and offers to remove it -- destructive
+# advice about evidence the kit produced itself. v10.0.6 fixed exactly one such
+# filename by appending a string (sast-semgrep.json) and left two more broken
+# (github-actions-policy.json, github-release-immutability.json), which is why
+# the set is now DERIVED instead of hand-listed.
+#
+# Source of truth: one `evidence-<name>.schema.json` ships per bundled evidence
+# document, and every writer/reader of `<name>.json` validates against it. A new
+# evidence document therefore becomes recognized the moment its schema is added,
+# with no second list to remember.
+_EVIDENCE_SCHEMA_PACKAGE = "oss_policy_kit.data.schema"
+_EVIDENCE_SCHEMA_PREFIX = "evidence-"
+_EVIDENCE_SCHEMA_SUFFIX = ".schema.json"
+
+
+def schema_backed_evidence_filenames() -> frozenset[str]:
+    """Return ``{"<name>.json", ...}`` for every bundled ``evidence-<name>.schema.json``."""
+
+    try:
+        entries = list(ir.files(_EVIDENCE_SCHEMA_PACKAGE).iterdir())
+    except (OSError, ModuleNotFoundError, TypeError, ValueError):
+        # An unusual packaging layout must degrade to the static floor below,
+        # never to "every evidence file the kit wrote is unrecognized".
+        return frozenset()
+    return frozenset(
+        f"{e.name[len(_EVIDENCE_SCHEMA_PREFIX) : -len(_EVIDENCE_SCHEMA_SUFFIX)]}.json"
+        for e in entries
+        if e.name.startswith(_EVIDENCE_SCHEMA_PREFIX) and e.name.endswith(_EVIDENCE_SCHEMA_SUFFIX)
+    )
+
+
+#: Evidence documents an evaluator reads that ship NO bundled JSON Schema: third-party
+#: formats the kit ingests as-is, or documents checked structurally. Filenames that do
+#: have a schema must never be added here -- they are discovered automatically.
+UNSCHEMAED_EVIDENCE_FILENAMES: frozenset[str] = frozenset(
+    {
+        "scorecard.json",  # OpenSSF Scorecard result (OSPS conformance fallback)
+        "scorecard-osps.json",  # `scorecard --format=osps` conformance output
+        "llm-release-integrity.json",  # LLM-218A-PS-001
+        "mcp-tool-descriptions.json",  # MCP-TOOL-HASH-001
+    }
+)
+
+#: Last-resort floor for the case where the bundled schema directory cannot be
+#: enumerated. Every entry here is also schema-backed, so on a normal install this
+#: set is fully redundant with the derivation above; it only keeps a broken
+#: packaging layout from regressing to destructive "remove them" advice.
+_EVIDENCE_FILENAME_FLOOR: frozenset[str] = frozenset(
     {
         "branch-protection.json",
         "github-rulesets.json",
         "github-environment-protection.json",
         "github-secret-scanning.json",
         "github-provenance-artifact.json",
+        "github-actions-policy.json",
+        "github-release-immutability.json",
         "org-mfa-posture.json",
         "runner-groups.json",
-    }
-)
-GITLAB_EVIDENCE_FILENAMES: frozenset[str] = frozenset(
-    {
-        # GitLab-distinctive evidence. branch-protection.json and org-mfa-posture.json
-        # are platform-agnostic (also emitted by the GitHub/GitLab collectors) and stay
-        # classified under the GitHub bucket to preserve historical partition behavior.
         "gitlab-mr-rules.json",
-    }
-)
-AZURE_EVIDENCE_FILENAMES: frozenset[str] = frozenset(
-    {
         "azure-branch-policies.json",
         "azure-pipeline-governance.json",
         "azure-sbom-artifact.json",
         "azure-provenance-artifact.json",
-    }
-)
-AWS_EVIDENCE_FILENAMES: frozenset[str] = frozenset(
-    {
         "aws-codebuild-project.json",
         "aws-codepipeline.json",
         "aws-sbom-artifact.json",
         "aws-provenance-artifact.json",
-    }
-)
-# Platform-agnostic evidence filenames bundled with the kit. These are consumed
-# by controls that apply across GitHub/Azure/AWS (governance, IaC, K8s, etc.).
-# Keep this set in sync with the schemas in src/oss_policy_kit/data/schema/.
-GENERIC_EVIDENCE_FILENAMES: frozenset[str] = frozenset(
-    {
         "audit-log-streaming.json",
         "disclosure-policy.json",
         "k8s-baseline.json",
@@ -54,8 +87,60 @@ GENERIC_EVIDENCE_FILENAMES: frozenset[str] = frozenset(
         "iac-bicep.json",
         "iac-cfn.json",
         "iac-pulumi.json",
+        "sast-semgrep.json",
     }
 )
+
+#: A recognized filename is routed to a platform bucket by its prefix; that is the
+#: same naming rule the collectors and scaffold templates already follow.
+_PLATFORM_FILENAME_PREFIXES: tuple[tuple[str, str], ...] = (
+    ("github", "github-"),
+    ("gitlab", "gitlab-"),
+    ("azure", "azure-"),
+    ("aws", "aws-"),
+)
+
+#: Recognized filenames with no platform prefix that still belong to a platform
+#: bucket. branch-protection.json and org-mfa-posture.json are platform-agnostic
+#: (the GitLab collector emits them too) and stay under GitHub to preserve the
+#: historical partition behavior.
+_GITHUB_BUCKET_EXTRA: frozenset[str] = frozenset(
+    {
+        "branch-protection.json",
+        "org-mfa-posture.json",
+        "runner-groups.json",
+    }
+)
+
+
+def _evidence_bucket(name: str) -> str:
+    """Return the platform bucket (``github``/``gitlab``/``azure``/``aws``/``generic``)."""
+
+    if name in _GITHUB_BUCKET_EXTRA:
+        return "github"
+    for platform, prefix in _PLATFORM_FILENAME_PREFIXES:
+        if name.startswith(prefix):
+            return platform
+    return "generic"
+
+
+def recognized_evidence_filenames() -> frozenset[str]:
+    """Every evidence filename the kit writes or reads under ``.oss-policy-kit/evidence/``."""
+
+    return schema_backed_evidence_filenames() | _EVIDENCE_FILENAME_FLOOR | UNSCHEMAED_EVIDENCE_FILENAMES
+
+
+def _evidence_bucket_names(platform: str) -> frozenset[str]:
+    return frozenset(n for n in recognized_evidence_filenames() if _evidence_bucket(n) == platform)
+
+
+GITHUB_EVIDENCE_FILENAMES: frozenset[str] = _evidence_bucket_names("github")
+GITLAB_EVIDENCE_FILENAMES: frozenset[str] = _evidence_bucket_names("gitlab")
+AZURE_EVIDENCE_FILENAMES: frozenset[str] = _evidence_bucket_names("azure")
+AWS_EVIDENCE_FILENAMES: frozenset[str] = _evidence_bucket_names("aws")
+#: Platform-agnostic evidence consumed by controls that apply everywhere
+#: (governance, IaC, K8s, SAST, AI). Recognized, but not a platform signal.
+GENERIC_EVIDENCE_FILENAMES: frozenset[str] = _evidence_bucket_names("generic")
 
 
 # M-003 (v6.0.0, ADR-008): schema_version becomes an absolute URL.
@@ -127,7 +212,9 @@ def _azure_pipeline_paths(repo_root: Path) -> list[Path]:
     paths: list[Path] = []
     for pattern in patterns:
         for p in sorted(repo_root.glob(pattern)):
-            if p not in seen:
+            # The six globs above are mutually exclusive, so the duplicate arm is not
+            # reachable today; the guard is what keeps that true if one is widened.
+            if p not in seen:  # pragma: no branch
                 seen.add(p)
                 paths.append(p)
     return paths
@@ -178,6 +265,9 @@ def _append_signal(signals: list[dict[str, str]], sig_id: str, detail: str) -> N
     signals.append({"id": sig_id, "detail": detail})
 
 
+_CONTAINER_SIGNAL_ID = "container_docker"
+
+
 def _detect_container_stack(repo_root: Path, found: list[dict[str, str]]) -> bool:
     """Append a container signal when a Dockerfile/compose is present; return prefer-L2 flag."""
 
@@ -188,75 +278,245 @@ def _detect_container_stack(repo_root: Path, found: list[dict[str, str]]) -> boo
     ):
         _append_signal(
             found,
-            "container_docker",
+            _CONTAINER_SIGNAL_ID,
             "Container workload detected via Dockerfile or docker-compose.",
         )
         return True
     return False
 
 
-def _detect_node_stack(repo_root: Path, found: list[dict[str, str]], notes: list[str]) -> str | None:
-    """Append Node.js signals/notes; return the primary stack label or None."""
+# How strongly a marker file says "this repository *is* this stack". A manifest that
+# declares the project outranks one that is as often a sidecar: a bare package.json
+# belongs to a docs site or a tooling folder at least as often as to the project
+# itself, which is how a Python repository used to be reported as "your Node.js
+# project". A committed lockfile is what proves the tree is really installed as Node.
+_STACK_WEIGHT_DECLARES_PROJECT = 3
+_STACK_WEIGHT_MAY_BE_SIDECAR = 2
+
+#: Stack display labels, named once. Repeating them meant a typo in any single copy
+#: would split one stack into two the ranking treats as unrelated, with nothing failing.
+_LABEL_PYTHON = "Python"
+_LABEL_NODE = "Node.js"
+_LABEL_GO = "Go"
+_LABEL_JAVA_MAVEN = "Java/Maven"
+_LABEL_JAVA_GRADLE = "Java/Kotlin (Gradle)"
+_LABEL_RUST = "Rust"
+_LABEL_DOTNET = "C#/.NET"
+
+# Stable display order for stacks tied on weight, so the rationale is deterministic.
+_STACK_LABEL_ORDER: tuple[str, ...] = (
+    _LABEL_PYTHON,
+    _LABEL_NODE,
+    _LABEL_GO,
+    _LABEL_JAVA_MAVEN,
+    _LABEL_JAVA_GRADLE,
+    _LABEL_RUST,
+    _LABEL_DOTNET,
+)
+
+_NODE_LOCKFILE_NOTE = "Add package-lock.json or yarn.lock to enable reproducible builds."
+
+#: Signal id -> the stack label it identifies. Consumers that must pick ONE stack
+#: (``init`` writes ``detected.primary_stack``) read the FIRST such signal out of
+#: ``signals_detected``, so this mapping plus :func:`_stack_evidence_order` is what
+#: makes "first" and "strongest" the same thing.
+_STACK_SIGNAL_LABELS: dict[str, str] = {
+    "node_js": _LABEL_NODE,
+    "python_pyproject": _LABEL_PYTHON,
+    "python_requirements": _LABEL_PYTHON,
+    "python_setup": _LABEL_PYTHON,
+    "go_module": _LABEL_GO,
+    "java_maven": _LABEL_JAVA_MAVEN,
+    "java_gradle": _LABEL_JAVA_GRADLE,
+    "rust_cargo": _LABEL_RUST,
+    "dotnet_csproj": _LABEL_DOTNET,
+}
+
+#: Signals that qualify a stack without identifying it; they trail their own stack.
+_STACK_QUALIFIER_SIGNALS: dict[str, str] = {"node_lockfile": _LABEL_NODE}
+
+#: Public: signal id -> human label, for consumers that need to *name* the detected stack
+#: rather than rank it. Composed from the two definitions above so there is one place to edit.
+#:
+#: `_STACK_SIGNAL_LABELS` deliberately excludes the container signal, which `_rank_stack_signals`
+#: handles separately as packaging rather than a language. A caller that only wants a label still
+#: needs it, and `init_planner` used to carry its own copy of this dict to get one -- which had
+#: already drifted: it knew `container_docker` while this module knew `node_lockfile`, so the two
+#: answers disagreed depending on which one you asked.
+STACK_LABEL_BY_SIGNAL_ID: dict[str, str] = {
+    **_STACK_SIGNAL_LABELS,
+    _CONTAINER_SIGNAL_ID: "Container (Docker)",
+}
+
+
+def _detect_node_stack(
+    repo_root: Path, found: list[dict[str, str]], weights: dict[str, int] | None = None
+) -> str | None:
+    """Append Node.js signals; return the stack label or None. Records its weight in *weights*."""
 
     if not (repo_root / "package.json").is_file():
         return None
-    _append_signal(found, "node_js", "Node.js project detected via package.json")
-    if any((repo_root / name).is_file() for name in ("package-lock.json", "yarn.lock", "pnpm-lock.yaml")):
+    has_lockfile = any((repo_root / name).is_file() for name in ("package-lock.json", "yarn.lock", "pnpm-lock.yaml"))
+    _append_signal(
+        found,
+        "node_js",
+        (
+            "Node.js project detected via package.json"
+            if has_lockfile
+            else "package.json found without a lockfile (may be a tooling or docs sidecar rather than the project)"
+        ),
+    )
+    if has_lockfile:
         _append_signal(found, "node_lockfile", "Node lockfile present (reproducible installs).")
-    else:
-        notes.append("Add package-lock.json or yarn.lock to enable reproducible builds.")
-    return "Node.js"
+    if weights is not None:
+        weights[_LABEL_NODE] = _STACK_WEIGHT_DECLARES_PROJECT if has_lockfile else _STACK_WEIGHT_MAY_BE_SIDECAR
+    return _LABEL_NODE
 
 
-def _detect_python_stack(repo_root: Path, found: list[dict[str, str]], notes: list[str]) -> str | None:
-    """Append Python signals/notes; return the primary stack label or None."""
+def _append_pyproject_tooling_notes(pyproject: Path, notes: list[str]) -> None:
+    """Note the quality tooling declared in *pyproject*, if it can be read at all.
+
+    An unreadable file yields no notes rather than an error: the stack was already
+    identified by the file's existence, and the notes are advisory.
+    """
+
+    try:
+        body = pyproject.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return
+    lowered = body.lower()
+    if "[tool.ruff]" in body or "[tool.ruff." in body or "ruff>" in lowered:
+        notes.append("Ruff is configured under pyproject.toml - align CI quality gates with the same rules.")
+    if "[tool.mypy]" in body or "python -m mypy" in lowered:
+        notes.append("Mypy is referenced - keep static type checks in CI for stronger supply-chain posture.")
+
+
+def _detect_python_stack(
+    repo_root: Path,
+    found: list[dict[str, str]],
+    notes: list[str],
+    weights: dict[str, int] | None = None,
+) -> str | None:
+    """Append Python signals/notes; return the stack label or None. Records its weight in *weights*."""
 
     if (repo_root / "pyproject.toml").is_file():
         _append_signal(found, "python_pyproject", "Python project detected via pyproject.toml")
-        try:
-            body = (repo_root / "pyproject.toml").read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            body = ""
-        bl = body.lower()
-        if "[tool.ruff]" in body or "[tool.ruff." in body or "ruff>" in bl:
-            notes.append("Ruff is configured under pyproject.toml - align CI quality gates with the same rules.")
-        if "[tool.mypy]" in body or "python -m mypy" in bl:
-            notes.append("Mypy is referenced - keep static type checks in CI for stronger supply-chain posture.")
-        return "Python"
+        if weights is not None:
+            weights[_LABEL_PYTHON] = _STACK_WEIGHT_DECLARES_PROJECT
+        _append_pyproject_tooling_notes(repo_root / "pyproject.toml", notes)
+        return _LABEL_PYTHON
     if (repo_root / "requirements.txt").is_file():
         _append_signal(found, "python_requirements", "Python project detected via requirements.txt")
-        return "Python"
+        if weights is not None:
+            # Pinned dependencies alone; the file is often vendored beside another stack.
+            weights[_LABEL_PYTHON] = _STACK_WEIGHT_MAY_BE_SIDECAR
+        return _LABEL_PYTHON
     if (repo_root / "setup.py").is_file() or (repo_root / "setup.cfg").is_file():
         _append_signal(found, "python_setup", "Python project detected via setup.py/setup.cfg")
-        return "Python"
+        if weights is not None:
+            weights[_LABEL_PYTHON] = _STACK_WEIGHT_DECLARES_PROJECT
+        return _LABEL_PYTHON
     return None
 
 
 # (marker filenames, primary label, signal id, signal detail) for single-file stacks.
 _SIMPLE_STACK_MARKERS: tuple[tuple[tuple[str, ...], str, str, str], ...] = (
-    (("go.mod",), "Go", "go_module", "Go module detected via go.mod"),
-    (("pom.xml",), "Java/Maven", "java_maven", "Java/Maven project detected via pom.xml"),
+    (("go.mod",), _LABEL_GO, "go_module", "Go module detected via go.mod"),
+    (("pom.xml",), _LABEL_JAVA_MAVEN, "java_maven", "Java/Maven project detected via pom.xml"),
     (
         ("build.gradle", "build.gradle.kts"),
-        "Java/Kotlin (Gradle)",
+        _LABEL_JAVA_GRADLE,
         "java_gradle",
         "Java/Kotlin project detected via build.gradle",
     ),
-    (("Cargo.toml",), "Rust", "rust_cargo", "Rust project detected via Cargo.toml"),
+    (("Cargo.toml",), _LABEL_RUST, "rust_cargo", "Rust project detected via Cargo.toml"),
 )
 
 
-def _detect_simple_stacks(repo_root: Path, found: list[dict[str, str]], primary: str | None) -> str | None:
+def _detect_simple_stacks(
+    repo_root: Path,
+    found: list[dict[str, str]],
+    primary: str | None,
+    weights: dict[str, int] | None = None,
+) -> str | None:
     """Append signals for single-file language markers; return the first primary label seen."""
 
     for markers, label, sig_id, detail in _SIMPLE_STACK_MARKERS:
         if any((repo_root / m).is_file() for m in markers):
             primary = primary or label
             _append_signal(found, sig_id, detail)
+            if weights is not None:
+                weights[label] = _STACK_WEIGHT_DECLARES_PROJECT
     if list(repo_root.glob("*.csproj")) or list(repo_root.glob("*.sln")):
-        primary = primary or "C#/.NET"
+        primary = primary or _LABEL_DOTNET
         _append_signal(found, "dotnet_csproj", "C#/.NET project detected via .csproj or .sln")
+        if weights is not None:
+            weights[_LABEL_DOTNET] = _STACK_WEIGHT_DECLARES_PROJECT
     return primary
+
+
+def _rank_stack_labels(weights: dict[str, int]) -> list[str]:
+    """Every detected stack, strongest evidence first, ties in stable display order."""
+
+    def sort_key(label: str) -> tuple[int, int, str]:
+        order = _STACK_LABEL_ORDER.index(label) if label in _STACK_LABEL_ORDER else len(_STACK_LABEL_ORDER)
+        return (-weights[label], order, label)
+
+    return sorted(weights, key=sort_key)
+
+
+def _primary_stacks(weights: dict[str, int]) -> list[str]:
+    """Return every stack tied for the strongest signal, in a stable display order."""
+
+    ranked = _rank_stack_labels(weights)
+    if not ranked:
+        return []
+    strongest = weights[ranked[0]]
+    return [label for label in ranked if weights[label] == strongest]
+
+
+def _stack_evidence_order(found: list[dict[str, str]], weights: dict[str, int]) -> list[dict[str, str]]:
+    """Re-emit stack signals strongest-evidence-first, keeping every other signal in place.
+
+    ``signals_detected`` is the only ranking a consumer sees, and a consumer that
+    must name ONE stack takes the first entry that maps to one. Detection order
+    used to decide that: the Node detector ran first, so a Python repository with
+    a sidecar ``package.json`` was announced as a Node.js project even though the
+    weighting had already ranked Python above it.
+    """
+
+    rank = {label: position for position, label in enumerate(_rank_stack_labels(weights))}
+    unranked = len(rank)
+
+    def sort_key(item: tuple[int, dict[str, str]]) -> tuple[int, int, int, int]:
+        index, signal = item
+        sid = signal["id"]
+        if sid == _CONTAINER_SIGNAL_ID:
+            # Packaging, not language: keeps its historical lead position.
+            return (0, 0, 0, index)
+        label = _STACK_SIGNAL_LABELS.get(sid)
+        if label is not None:
+            return (1, rank.get(label, unranked), 0, index)
+        qualified = _STACK_QUALIFIER_SIGNALS.get(sid)
+        if qualified is not None:
+            return (1, rank.get(qualified, unranked), 1, index)
+        return (2, 0, 0, index)
+
+    return [signal for _index, signal in sorted(enumerate(found), key=sort_key)]
+
+
+def _multi_stack_note(ranked: list[str]) -> list[str]:
+    """Note naming every detected stack in rank order (empty for 0/1 stack)."""
+
+    if len(ranked) <= 1:
+        return []
+    return [
+        (
+            f"Multiple language stacks detected (ranked by evidence strength: {', '.join(ranked)}). "
+            "A single primary stack is recorded for convenience; it does not mean the other "
+            "stacks were ignored."
+        )
+    ]
 
 
 def _collect_tech_stack_signals(
@@ -266,11 +526,23 @@ def _collect_tech_stack_signals(
 
     found: list[dict[str, str]] = []
     notes: list[str] = []
+    weights: dict[str, int] = {}
     prefer_l2 = _detect_container_stack(repo_root, found)
-    primary = _detect_node_stack(repo_root, found, notes)
-    primary = primary or _detect_python_stack(repo_root, found, notes)
-    primary = _detect_simple_stacks(repo_root, found, primary)
-    return found, notes, prefer_l2, primary
+    _detect_node_stack(repo_root, found, weights)
+    # Every detector runs: first-match-wins used to short-circuit the rest, so a repo
+    # with both markers lost the weaker-listed stack from signals_detected entirely.
+    _detect_python_stack(repo_root, found, notes, weights)
+    _detect_simple_stacks(repo_root, found, None, weights)
+
+    found = _stack_evidence_order(found, weights)
+    primary_stacks = _primary_stacks(weights)
+    signal_ids = {s["id"] for s in found}
+    if _LABEL_NODE in primary_stacks and "node_lockfile" not in signal_ids:
+        # Only advise a lockfile when Node is what the repository actually is; on a
+        # sidecar package.json this reads as advice for somebody else's project.
+        notes.append(_NODE_LOCKFILE_NOTE)
+    notes.extend(_multi_stack_note(_rank_stack_labels(weights)))
+    return found, notes, prefer_l2, " / ".join(primary_stacks) or None
 
 
 def _platform_order(
@@ -389,16 +661,10 @@ def _append_gh_release_hardening(
     *,
     can_rh2: bool,
     can_rh1: bool,
-    wf_paths: list[Path],
-    github_ev: list[Path],
 ) -> None:
     """Append the GitHub release-hardening-2/-1 suggestion when its signals are present."""
 
     if can_rh2:
-        gh_keys = ("github_actions_workflows", "github_evidence_json_files")
-        bo = [x for x in gh_keys if _bo_hit(x, wf_paths, github_ev)]
-        if not bo:
-            bo = ["github_actions_workflows"] if wf_paths else ["github_evidence_json_files"]
         out.append(
             (
                 300,
@@ -408,7 +674,7 @@ def _append_gh_release_hardening(
                     "present; evaluate declared release posture with github-release-hardening-2 "
                     "(verify evidence JSONs are filled, not templates)."
                 ),
-                _normalize_based_on(bo, wf_paths, github_ev),
+                ["github_actions_workflows", "github_evidence_json_files"],
             )
         )
     elif can_rh1:
@@ -453,7 +719,7 @@ def _suggestions_github(
                 ["github_actions_workflows"],
             )
         )
-    _append_gh_release_hardening(out, can_rh2=can_rh2, can_rh1=can_rh1, wf_paths=wf_paths, github_ev=github_ev)
+    _append_gh_release_hardening(out, can_rh2=can_rh2, can_rh1=can_rh1)
     if wf_paths and github_ev:
         tier = "github-level-2" if len(wf_paths) >= 2 else "github-level-1"
         out.append(
@@ -512,10 +778,6 @@ def _suggestions_gitlab(
     can_rh2 = bool(gl_paths) and bool(gitlab_ev)
     can_rh1 = empty_evidence_dir and bool(gl_paths) and not gitlab_ev
     if can_rh2:
-        gl_keys = ("gitlab_ci_yaml", "gitlab_evidence_json_files")
-        bo = [x for x in gl_keys if _bo_hit_gl(x, gl_paths, gitlab_ev)]
-        if not bo:
-            bo = ["gitlab_ci_yaml"] if gl_paths else ["gitlab_evidence_json_files"]
         out.append(
             (
                 300,
@@ -525,7 +787,7 @@ def _suggestions_gitlab(
                     "evaluate declared release posture with gitlab-release-hardening-2 "
                     "(verify evidence JSONs are filled, not templates)."
                 ),
-                _normalize_based_on_gl(bo, gl_paths, gitlab_ev),
+                ["gitlab_ci_yaml", "gitlab_evidence_json_files"],
             )
         )
     elif can_rh1:
@@ -584,10 +846,6 @@ def _suggestions_azure(
     can_rh2 = bool(az_paths) and bool(azure_ev)
     can_rh1 = empty_evidence_dir and bool(az_paths) and not azure_ev
     if can_rh2:
-        az_keys = ("azure_pipelines_yaml", "azure_evidence_json_files")
-        bo = [x for x in az_keys if _bo_hit_az(x, az_paths, azure_ev)]
-        if not bo:
-            bo = ["azure_pipelines_yaml"] if az_paths else ["azure_evidence_json_files"]
         out.append(
             (
                 300,
@@ -597,7 +855,7 @@ def _suggestions_azure(
                     "present; evaluate declared release posture with azure-release-hardening-2 "
                     "(verify evidence JSONs are filled, not templates)."
                 ),
-                _normalize_based_on_az(bo, az_paths, azure_ev),
+                ["azure_pipelines_yaml", "azure_evidence_json_files"],
             )
         )
     elif can_rh1:
@@ -657,10 +915,6 @@ def _suggestions_aws(
     can_rh2 = bool(buildspec) and bool(aws_ev)
     can_rh1 = empty_evidence_dir and bool(buildspec) and not aws_ev
     if can_rh2:
-        aws_keys = ("aws_codebuild_buildspec", "aws_evidence_json_files")
-        bo = [x for x in aws_keys if _bo_hit_aws(x, buildspec, aws_ev)]
-        if not bo:
-            bo = ["aws_codebuild_buildspec"] if buildspec else ["aws_evidence_json_files"]
         out.append(
             (
                 300,
@@ -670,7 +924,7 @@ def _suggestions_aws(
                     "evaluate declared release posture with aws-release-hardening-2 "
                     "(verify evidence JSONs are filled, not templates)."
                 ),
-                _normalize_based_on_aws(bo, buildspec, aws_ev),
+                ["aws_codebuild_buildspec", "aws_evidence_json_files"],
             )
         )
     elif can_rh1:
@@ -764,74 +1018,6 @@ def _suggestions_for_platform(
         az_paths=az_paths,
         empty_evidence_dir=empty_evidence_dir,
     )
-
-
-def _bo_hit(name: str, wf_paths: list[Path], github_ev: list[Path]) -> bool:
-    if name == "github_actions_workflows":
-        return bool(wf_paths)
-    if name == "github_evidence_json_files":
-        return bool(github_ev)
-    return False
-
-
-def _normalize_based_on(bo: list[str], wf_paths: list[Path], github_ev: list[Path]) -> list[str]:
-    out = list(bo)
-    if "github_actions_workflows" not in out and wf_paths:
-        out.insert(0, "github_actions_workflows")
-    if "github_evidence_json_files" not in out and github_ev:
-        out.append("github_evidence_json_files")
-    return out
-
-
-def _bo_hit_gl(name: str, gl_paths: list[Path], gitlab_ev: list[Path]) -> bool:
-    if name == "gitlab_ci_yaml":
-        return bool(gl_paths)
-    if name == "gitlab_evidence_json_files":
-        return bool(gitlab_ev)
-    return False
-
-
-def _normalize_based_on_gl(bo: list[str], gl_paths: list[Path], gitlab_ev: list[Path]) -> list[str]:
-    out = list(bo)
-    if "gitlab_ci_yaml" not in out and gl_paths:
-        out.insert(0, "gitlab_ci_yaml")
-    if "gitlab_evidence_json_files" not in out and gitlab_ev:
-        out.append("gitlab_evidence_json_files")
-    return out
-
-
-def _bo_hit_az(name: str, az_paths: list[Path], azure_ev: list[Path]) -> bool:
-    if name == "azure_pipelines_yaml":
-        return bool(az_paths)
-    if name == "azure_evidence_json_files":
-        return bool(azure_ev)
-    return False
-
-
-def _normalize_based_on_az(bo: list[str], az_paths: list[Path], azure_ev: list[Path]) -> list[str]:
-    out = list(bo)
-    if "azure_pipelines_yaml" not in out and az_paths:
-        out.insert(0, "azure_pipelines_yaml")
-    if "azure_evidence_json_files" not in out and azure_ev:
-        out.append("azure_evidence_json_files")
-    return out
-
-
-def _bo_hit_aws(name: str, buildspec: bool, aws_ev: list[Path]) -> bool:
-    if name == "aws_codebuild_buildspec":
-        return buildspec
-    if name == "aws_evidence_json_files":
-        return bool(aws_ev)
-    return False
-
-
-def _normalize_based_on_aws(bo: list[str], buildspec: bool, aws_ev: list[Path]) -> list[str]:
-    out = list(bo)
-    if "aws_codebuild_buildspec" not in out and buildspec:
-        out.insert(0, "aws_codebuild_buildspec")
-    if "aws_evidence_json_files" not in out and aws_ev:
-        out.append("aws_evidence_json_files")
-    return out
 
 
 def _merge_platform_suggestions(

@@ -55,9 +55,10 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write # create / update GitHub Releases
+      pull-requests: write # close the transient release PR (see the last step)
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -65,17 +66,23 @@ jobs:
             api.github.com:443
 
       - name: Checkout (full history for tag diff)
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Resolve tag and version
         id: meta
+        # The dispatch input reaches the shell through the environment, never through
+        # template expansion into the script body: an expanded value is parsed by bash,
+        # an environment variable is not.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="${{ github.event.inputs.tag }}"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            TAG="$INPUT_TAG"
           else
             TAG="${GITHUB_REF_NAME}"
           fi
@@ -103,7 +110,8 @@ jobs:
             sed -E 's/^(feat|fix|perf|refactor|docs|build|ci|chore|test|style|revert)(\([^)]*\))?!?: ?//'
           }
 
-          hi=""; imp=""; notes=""
+          hi=""; fixes=""; imp=""; notes=""
+          n_feat=0; n_fix=0; n_imp=0; n_other=0
           while IFS= read -r s; do
             [ -z "${s}" ] && continue
             type="${s%%:*}"     # "feat", "feat(scope)", "fix(x)!", or whole subject if no colon
@@ -112,44 +120,77 @@ jobs:
             clean="$(printf '%s' "${s}" | strip)"
             case "${type}" in
               feat)
-                hi="${hi}- ${clean}"$'\n' ;;
-              fix|perf|refactor)
-                imp="${imp}- ${clean}"$'\n' ;;
+                hi="${hi}- ${clean}"$'\n'; n_feat=$((n_feat + 1)) ;;
+              fix)
+                # Its own section. Twenty fixes filed under "Improvements" is how the
+                # v10.0.18 draft arrived, and a reader scanning for "was my bug fixed"
+                # does not look there.
+                fixes="${fixes}- ${clean}"$'\n'; n_fix=$((n_fix + 1)) ;;
+              perf|refactor)
+                imp="${imp}- ${clean}"$'\n'; n_imp=$((n_imp + 1)) ;;
               *)
                 case "${s}" in
-                  "chore: release"*|"chore(release"*) : ;;  # skip release-prep noise
-                  *) notes="${notes}- ${clean}"$'\n' ;;
+                  # Release-please's own commits, and the merge of its PR.
+                  "chore: release"*|"chore(release"*|"chore(master): release"*) : ;;
+                  *) notes="${notes}- ${clean}"$'\n'; n_other=$((n_other + 1)) ;;
                 esac ;;
             esac
-          done < <(git log --no-merges --pretty=format:'%s' "${RANGE}")
+          # `tformat:` and not `format:`. The two differ by one byte of output: `format:`
+          # is a SEPARATOR, so it emits no newline after the final commit, and the
+          # `while read` above therefore never runs its body for that line. Every release
+          # published before this was fixed silently lost the oldest commit in its range --
+          # for v10.0.15 that was the change the release was named after.
+          done < <(git log --no-merges --pretty=tformat:'%s' "${RANGE}")
 
-          [ -z "${hi}" ]    && hi="- _No feature-level changes in this release._"$'\n'
-          [ -z "${imp}" ]   && imp="- _No fixes or performance changes in this release._"$'\n'
-          [ -z "${notes}" ] && notes="- _No additional notes._"$'\n'
+          # The opening sentence is derived from what the range holds, so it is true
+          # without editing. The previous template printed a literal "(refine this line
+          # before publishing)" -- four releases in a row had it rewritten by hand, and a
+          # placeholder is one forgotten edit away from being published as-is.
+          plural() { [ "$1" -eq 1 ] && printf '%s' "$2" || printf '%s' "$3"; }
+          parts=()
+          [ "${n_feat}" -gt 0 ]  && parts+=("${n_feat} $(plural "${n_feat}" feature features)")
+          [ "${n_fix}" -gt 0 ]   && parts+=("${n_fix} $(plural "${n_fix}" fix fixes)")
+          [ "${n_imp}" -gt 0 ]   && parts+=("${n_imp} $(plural "${n_imp}" improvement improvements)")
+          [ "${n_other}" -gt 0 ] && parts+=("${n_other} other $(plural "${n_other}" change changes)")
+          if [ "${#parts[@]}" -eq 0 ]; then
+            summary="No user-facing changes since ${PREV:-the previous release}."
+          else
+            summary="$(IFS=,; printf '%s' "${parts[*]}" | sed 's/,/, /g') since ${PREV:-the previous release}."
+          fi
 
           {
             echo "## ${PROJECT} v${VERSION}"
             echo
-            echo "This release is the v${VERSION} release of the ${PROJECT} (refine this line before publishing)."
+            echo "${summary}"
             echo
             echo "---"
             echo
             echo "## Highlights"
             echo
-            printf '%s' "${hi}"
+            if [ -n "${hi}" ]; then printf '%s' "${hi}"; else echo "- _No feature-level changes in this release._"; fi
+            echo
+            echo "---"
+            echo
+            echo "## Fixes"
+            echo
+            if [ -n "${fixes}" ]; then printf '%s' "${fixes}"; else echo "- _No fixes in this release._"; fi
             echo
             echo "---"
             echo
             echo "## Improvements"
             echo
-            printf '%s' "${imp}"
+            if [ -n "${imp}" ]; then printf '%s' "${imp}"; else echo "- _No performance or refactoring changes in this release._"; fi
             echo
-            echo "---"
-            echo
-            echo "## Notes"
-            echo
-            printf '%s' "${notes}"
-            echo
+            # Notes only when there is something to note; an empty section is a
+            # sentence that says nothing under a heading that promised something.
+            if [ -n "${notes}" ]; then
+              echo "---"
+              echo
+              echo "## Notes"
+              echo
+              printf '%s' "${notes}"
+              echo
+            fi
             echo "---"
             echo
             echo "**License:** Apache-2.0."
@@ -178,3 +219,37 @@ jobs:
             gh release create "${TAG}" --draft --verify-tag --title "${TITLE}" --notes-file release-notes.md
             echo "Created DRAFT release ${TAG}. Review the summary line and publish when ready."
           fi
+
+      - name: Close the transient release PR that release-please opens on the merge commit
+        # Every release since v9 produced a second release PR titled with the NEXT MAJOR
+        # ("release 11.0.0" minutes after 10.0.18 merged), and closing it by hand was a
+        # step in the release procedure for eight releases. Mechanism, as far as it can
+        # be established without a release to experiment on: release-please runs on the
+        # merge commit, and at that moment the tag its draft release names does not
+        # exist yet, so its last-release lookup finds nothing and it re-reads the whole
+        # history -- breaking changes from v9 and v10 included -- and proposes a major.
+        # The tag arrives minutes later and the next push to master closes the PR by
+        # itself. This step does that closing here, on the tag push, with the reason
+        # recorded on the PR. It closes ONLY an open release-please PR whose proposed
+        # major exceeds the tag just published: a genuine major bump is never proposed
+        # by the run that follows a release, because it would come from a `feat!` merged
+        # AFTER this tag, and that PR is opened by a later run.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          set -euo pipefail
+          this_major="${TAG#v}"
+          this_major="${this_major%%.*}"
+          gh pr list --state open --label 'autorelease: pending' --json number,title \
+            --jq '.[] | "\(.number)\t\(.title)"' \
+          | while IFS=$'\t' read -r number title; do
+              proposed="$(printf '%s' "${title}" | sed -nE 's/.*release ([0-9]+)\.[0-9]+\.[0-9]+.*/\1/p')"
+              [ -n "${proposed}" ] || continue
+              if [ "${proposed}" -gt "${this_major}" ]; then
+                gh pr close "${number}" --comment "Closed by the release workflow for ${TAG}. This PR was opened by the release-please run on the merge commit, before the ${TAG} tag existed, and proposes a major bump computed from the whole history rather than from the commits since ${TAG}. If a major release is intended, the next push to master opens the correct PR."
+                echo "Closed transient release PR #${number}: ${title}"
+              else
+                echo "Leaving PR #${number} open: ${title}"
+              fi
+            done

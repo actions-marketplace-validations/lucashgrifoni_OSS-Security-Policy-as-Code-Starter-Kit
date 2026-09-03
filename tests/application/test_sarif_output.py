@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 
 from oss_policy_kit.application.sarif_writer import (
@@ -15,6 +14,7 @@ from oss_policy_kit.domain.models import (
     ControlStatus,
     ExecutionReport,
     LiveCollectionMetadata,
+    utc_now,
 )
 
 
@@ -49,7 +49,7 @@ def _report(results: list[ControlResult]) -> ExecutionReport:
         summary[r.status.value] = summary.get(r.status.value, 0) + 1
     return ExecutionReport(
         schema_version="https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/reports/1.0",
-        generated_at=datetime.now(UTC).isoformat(),
+        generated_at=utc_now().isoformat(),
         kit_version="5.0.0-test",
         target_path=str(Path.cwd()),
         profile_id="github-level-1",
@@ -65,7 +65,8 @@ def test_sarif_version_and_schema() -> None:
     sarif = build_sarif(_report([_result(cid="GOV-SEC-001", status=ControlStatus.FAIL)]))
     assert sarif["version"] == SARIF_VERSION == "2.1.0"
     assert sarif["$schema"].startswith("https://")
-    assert "runs" in sarif and isinstance(sarif["runs"], list)
+    assert "runs" in sarif
+    assert isinstance(sarif["runs"], list)
     assert len(sarif["runs"]) == 1
 
 

@@ -12,7 +12,7 @@ be a regression.
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 from oss_policy_kit.application.evidence_placeholders import (
@@ -20,7 +20,7 @@ from oss_policy_kit.application.evidence_placeholders import (
     is_placeholder_digest,
 )
 from oss_policy_kit.application.evidence_projection import project_evidence
-from oss_policy_kit.domain.models import ControlResult, ControlStatus
+from oss_policy_kit.domain.models import ControlResult, ControlStatus, utc_now
 
 
 def _result(
@@ -114,7 +114,7 @@ def test_azure_live_evidence_fresh_projects_to_verified() -> None:
             method="live",
             sources=[".oss-policy-kit/evidence/azure-branch-policies.json"],
             extra={
-                "collected_at": datetime.now(UTC).isoformat(),
+                "collected_at": utc_now().isoformat(),
                 "attested_by": "azure-devops-api-collection",
             },
         )
@@ -126,7 +126,7 @@ def test_azure_live_evidence_fresh_projects_to_verified() -> None:
 
 
 def test_azure_live_evidence_stale_drops_to_declared() -> None:
-    old = datetime.now(UTC) - timedelta(days=180)
+    old = utc_now() - timedelta(days=180)
     ev = project_evidence(
         _result(
             cid="AZ-PLAT-035",
@@ -146,7 +146,7 @@ def test_aws_live_evidence_fresh_projects_to_verified() -> None:
             method="live",
             sources=[".oss-policy-kit/evidence/aws-codepipeline.json"],
             extra={
-                "collected_at": datetime.now(UTC).isoformat(),
+                "collected_at": utc_now().isoformat(),
                 "attested_by": "aws-codepipeline-api-collection",
             },
         )
@@ -163,7 +163,7 @@ def test_aws_manual_evidence_caps_at_declared_self_attested() -> None:
             cid="AWS-CB-045",
             method="manual",
             sources=[".oss-policy-kit/evidence/aws-codebuild-project.json"],
-            extra={"collected_at": datetime.now(UTC).isoformat()},
+            extra={"collected_at": utc_now().isoformat()},
         )
     )
     assert ev["source_type"] == "user_supplied"
@@ -213,7 +213,7 @@ def test_v1_payload_emits_evidence_for_azure_aws_controls() -> None:
 
     from oss_policy_kit.application.engine import evaluate_repository
     from oss_policy_kit.application.loader import bundled_kit_root, load_catalog, load_profile_by_id
-    from oss_policy_kit.application.reporting import report_to_dict_v1
+    from oss_policy_kit.application.reporting import report_to_dict_v2_0
 
     root = bundled_kit_root()
     catalog = load_catalog(root / "controls" / "catalog.yaml")
@@ -226,10 +226,10 @@ def test_v1_payload_emits_evidence_for_azure_aws_controls() -> None:
         scorecard=None,
         external_waiver_path=None,
         verbose_emit=None,
-        report_json_contract="1.0",
+        report_json_contract="2.0",
     )
-    payload = report_to_dict_v1(report)
-    az_results = [r for r in payload["results"] if r["control_id"].startswith("AZ-")]
+    payload = report_to_dict_v2_0(report)
+    az_results = [r for r in payload["controls"] if r["id"].startswith("AZ-")]
     assert az_results, "expected azure-level-1 to include AZ-* controls"
     for r in az_results:
         assert isinstance(r["evidence"], dict)

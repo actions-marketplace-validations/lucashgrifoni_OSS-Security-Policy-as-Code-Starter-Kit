@@ -50,12 +50,18 @@ def test_gh_plat_024_not_evaluated_without_file(tmp_path: Path) -> None:
     assert "github-rulesets.json" in out.reason
 
 
-def test_gh_plat_024_fail_on_schema_violation(tmp_path: Path) -> None:
+def test_gh_plat_024_asks_for_review_on_schema_violation(tmp_path: Path) -> None:
+    """ADR-045: unreadable evidence is `manual-review-required`, not `fail`.
+
+    The kit did not find the rulesets weak; it failed to read the file that would say. The reason
+    names the schema so the operator knows which document to regenerate.
+    """
+
     ev = tmp_path / ".oss-policy-kit" / "evidence"
     ev.mkdir(parents=True)
     (ev / "github-rulesets.json").write_text(json.dumps({"schema_version": "wrong"}), encoding="utf-8")
     out = eval_gh_plat_024(_ctx(tmp_path))
-    assert out.status == ControlStatus.FAIL
+    assert out.status == ControlStatus.MANUAL_REVIEW_REQUIRED
     assert "schema" in out.reason.lower()
 
 

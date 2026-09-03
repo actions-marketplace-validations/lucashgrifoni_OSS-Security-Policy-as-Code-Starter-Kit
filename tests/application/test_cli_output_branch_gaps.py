@@ -73,7 +73,8 @@ def test_print_stdout_summary_human_external_waiver(monkeypatch, capsys) -> None
     rep = _report([_cr("A", ControlStatus.FAIL)], summary={"fail": 1}, external_waiver="waivers/ext.yaml")
     co.print_stdout_summary(rep, output_format="human")
     out = capsys.readouterr().out
-    assert "Waiver note" in out and "ext.yaml" in out
+    assert "Waiver note" in out
+    assert "ext.yaml" in out
 
 
 def test_print_stdout_summary_human_external_waiver_long_path(monkeypatch, capsys) -> None:

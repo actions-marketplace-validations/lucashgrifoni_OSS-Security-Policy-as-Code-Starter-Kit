@@ -23,6 +23,7 @@ from typing import Any
 import yaml
 
 from oss_policy_kit.application.loader import (
+    ControlSpec,
     bundled_kit_root,
     load_catalog,
     load_profile_by_id,
@@ -135,6 +136,59 @@ def _load_raw(path: Path) -> dict[str, Any]:
     return raw
 
 
+def _collect_signals(
+    raw: dict[str, Any],
+    path: Path,
+    catalog: dict[str, ControlSpec],
+    profile_id: str,
+    profile_control_ids: set[str],
+    criterion_ids: set[str],
+) -> dict[str, list[ControlSignal]]:
+    """Map each criterion id to the controls that signal it, in mapping-file order.
+
+    Every referenced control has to exist in the catalog, belong to the declared
+    profile, and appear at most once; every referenced criterion has to be declared.
+    A map that fails any of those is structurally inconsistent, not partially usable.
+    """
+
+    signals: dict[str, list[ControlSignal]] = {cid: [] for cid in criterion_ids}
+    seen_controls: set[str] = set()
+    for entry in raw.get("mappings") or []:
+        control = str(entry["control"])
+        if control in seen_controls:
+            raise LoadError(f"OSPS coverage map at {path}: duplicate mapping for control {control}.")
+        seen_controls.add(control)
+        if control not in catalog:
+            raise LoadError(f"OSPS coverage map at {path}: control {control} is not in the catalog.")
+        if control not in profile_control_ids:
+            raise LoadError(f"OSPS coverage map at {path}: control {control} is not in the {profile_id} profile.")
+        assurance = catalog[control].assurance
+        for crit in entry.get("criteria") or []:
+            crit_id = str(crit)
+            if crit_id not in criterion_ids:
+                raise LoadError(
+                    f"OSPS coverage map at {path}: control {control} references unknown criterion {crit_id}."
+                )
+            signals[crit_id].append(ControlSignal(control_id=control, assurance=assurance))
+    return signals
+
+
+def _collect_aggregate_controls(
+    raw: dict[str, Any],
+    path: Path,
+    catalog: dict[str, ControlSpec],
+) -> tuple[AggregateControl, ...]:
+    """Controls that back the map as a whole rather than any single criterion."""
+
+    out = []
+    for entry in raw.get("aggregate_controls") or []:
+        control = str(entry["control"])
+        if control not in catalog:
+            raise LoadError(f"OSPS coverage map at {path}: aggregate control {control} is not in the catalog.")
+        out.append(AggregateControl(control_id=control, note=str(entry.get("note", ""))))
+    return tuple(out)
+
+
 def load_osps_coverage(root: Path | None = None) -> OspsCoverage:
     """Load + validate + compute OSPS coverage from the bundled data file.
 
@@ -159,25 +213,7 @@ def load_osps_coverage(root: Path | None = None) -> OspsCoverage:
         raise LoadError(f"OSPS coverage map at {path} has duplicate criterion ids.")
 
     # criterion id -> ordered list of signalling controls (mapping file order).
-    signals: dict[str, list[ControlSignal]] = {cid: [] for cid in criterion_ids}
-    seen_controls: set[str] = set()
-    for entry in raw.get("mappings") or []:
-        control = str(entry["control"])
-        if control in seen_controls:
-            raise LoadError(f"OSPS coverage map at {path}: duplicate mapping for control {control}.")
-        seen_controls.add(control)
-        if control not in catalog:
-            raise LoadError(f"OSPS coverage map at {path}: control {control} is not in the catalog.")
-        if control not in profile_control_ids:
-            raise LoadError(f"OSPS coverage map at {path}: control {control} is not in the {profile_id} profile.")
-        assurance = catalog[control].assurance
-        for crit in entry.get("criteria") or []:
-            crit_id = str(crit)
-            if crit_id not in criterion_ids:
-                raise LoadError(
-                    f"OSPS coverage map at {path}: control {control} references unknown criterion {crit_id}."
-                )
-            signals[crit_id].append(ControlSignal(control_id=control, assurance=assurance))
+    signals = _collect_signals(raw, path, catalog, profile_id, profile_control_ids, criterion_ids)
 
     criteria = tuple(
         CriterionCoverage(
@@ -199,12 +235,7 @@ def load_osps_coverage(root: Path | None = None) -> OspsCoverage:
         for level in LEVELS
     )
 
-    aggregate_controls = []
-    for entry in raw.get("aggregate_controls") or []:
-        control = str(entry["control"])
-        if control not in catalog:
-            raise LoadError(f"OSPS coverage map at {path}: aggregate control {control} is not in the catalog.")
-        aggregate_controls.append(AggregateControl(control_id=control, note=str(entry.get("note", ""))))
+    aggregate_controls = _collect_aggregate_controls(raw, path, catalog)
 
     return OspsCoverage(
         version=str(raw.get("version", "")),
@@ -214,5 +245,5 @@ def load_osps_coverage(root: Path | None = None) -> OspsCoverage:
         disclaimer=str(raw.get("disclaimer", "")).strip(),
         criteria=criteria,
         levels=levels,
-        aggregate_controls=tuple(aggregate_controls),
+        aggregate_controls=aggregate_controls,
     )

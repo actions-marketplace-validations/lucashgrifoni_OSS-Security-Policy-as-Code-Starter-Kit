@@ -133,7 +133,8 @@ def test_emit_plugin_load_warnings_with_errors(
     )
     common._emit_plugin_load_warnings()
     err = capsys.readouterr().err
-    assert "acme_ev" in err and "import-error" in err
+    assert "acme_ev" in err
+    assert "import-error" in err
 
 
 def test_emit_plugin_load_warnings_no_errors(

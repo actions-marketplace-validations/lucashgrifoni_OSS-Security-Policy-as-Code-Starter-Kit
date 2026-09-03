@@ -2,9 +2,13 @@
 # Marketplace action.
 #
 # Drop this file under .github/workflows/ in any repository where you want
-# to evaluate the bundled baseline on every pull request. Replace the
-# `@vX.Y.Z` pin with the latest release tag (or pin by SHA for stricter
-# supply-chain guarantees).
+# to evaluate the bundled baseline on every pull request.
+#
+# Every `uses:` below is pinned to an immutable commit SHA, with the release
+# tag recorded in the trailing comment. That is the same discipline the kit's
+# own `CI-PIN-008` control enforces, so this file passes the baseline it runs.
+# To move to a newer release, resolve the new tag to its SHA and update both
+# the pin and the comment (Dependabot does this for you).
 
 name: oss-policy-kit baseline
 
@@ -22,18 +26,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 1
 
       - name: Run oss-policy-kit baseline
         id: oss-policy
-        # Pin to an exact released tag (e.g. @v7.2.0) for reproducibility, or
-        # to the commit SHA of the release tag for maximum assurance. The tag
-        # pin is the documented adopter convention, so the unpinned-SHA
-        # scanner note is suppressed on the next line.
-        # kics-scan ignore-line
-        uses: lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit@v7.2.0
+        # Pinned to the commit SHA of the v10.0.15 release tag. A bare `@v10.0.15` tag would
+        # still resolve, but tags are mutable — and `CI-PIN-008` in the `github-level-1`
+        # profile this job runs would flag it, so the template would fail the very
+        # baseline it evaluates.
+        #
+        # v10.0.14 or later matters here: before that release a SHA pin fell through to an empty
+        # version and the action installed an UNPINNED wheel, so this line taught the
+        # opposite of what its comment claimed.
+        uses: lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit@f2e4992f755d83cd7666e2bd288e0e8b4bcaa7f5 # v10.0.15
         with:
           target: '.'
           # Omit `profile` to read it from oss-policy-kit.yaml at the repo root.
@@ -45,7 +52,7 @@ jobs:
 
       - name: Upload reports
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: oss-policy-kit-reports
           path: |
@@ -60,7 +67,7 @@ jobs:
       #
       # - name: Upload SARIF
       #   if: ${{ always() && steps.oss-policy.outputs.sarif != '' }}
-      #   uses: github/codeql-action/upload-sarif@v3
+      #   uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
       #   with:
       #     sarif_file: ${{ steps.oss-policy.outputs.sarif }}
       #     category: oss-policy-kit

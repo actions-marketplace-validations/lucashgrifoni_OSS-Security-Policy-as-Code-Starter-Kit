@@ -17,15 +17,12 @@ from oss_policy_kit.application.evaluators._shared import (
     _aws_codepipeline_schema,
     _aws_provenance_artifact_schema,
     _aws_sbom_artifact_schema,
-    _digest_invalid_not_evaluated,
-    _digest_placeholder_manual_review,
+    _digest_gate_outcome,
     _evidence_is_api_backed,
     _evidence_placeholder_outcome,
-    _is_valid_sha256_digest,
     _provenance_artifact_digest_strings,
     _sbom_artifact_digest_strings,
     _validate_json_evidence,
-    is_placeholder_digest,
 )
 
 _KIT_DIR = ".oss-policy-kit"
@@ -416,7 +413,13 @@ def eval_aws_cb_045(ctx: EvalContext) -> EvalOutcome:
 
 
 def _aws_pipeiam_evidence_outcome(evidence: Path) -> EvalOutcome | None:
-    """PASS/SELF_ATTESTED/placeholder outcome from CodePipeline evidence, or None to fall through."""
+    """Outcome from CodePipeline evidence, or None when the file has nothing to say about the role.
+
+    None is reserved for the two states the caller can still speak to from committed exports:
+    the file is absent, or it is readable and simply does not attest the service role. A file
+    that cannot be read is neither -- it is a fact about the evidence, reported here so the
+    operator learns the same thing AWS-CP-044 tells them about the very same file.
+    """
 
     if not evidence.is_file():
         return None
@@ -425,11 +428,21 @@ def _aws_pipeiam_evidence_outcome(evidence: Path) -> EvalOutcome | None:
         schema_loader=_aws_codepipeline_schema,
         evidence_name="AWS CodePipeline",
     )
-    if error or data is None:
-        return None
+    if error:
+        # ADR-045: unreadable evidence is manual-review-required. Falling through to the
+        # caller instead reported a file that is right there as missing, and pointed the
+        # operator at collect-evidence when what needs fixing is the document on disk.
+        return EvalOutcome(
+            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
+            reason=error,
+            remediation="Regenerate evidence using reports/schema/evidence-aws-codepipeline.schema.json.",
+            evidence_sources=[str(evidence.resolve())],
+            confidence="low",
+        )
     blocked = _evidence_placeholder_outcome(evidence, ph)
     if blocked is not None:
         return blocked
+    assert data is not None
     iam = data.get("iam")
     if not (isinstance(iam, dict) and iam.get("pipeline_service_role_arn_configured") is True):
         return None
@@ -452,6 +465,14 @@ def _aws_pipeiam_evidence_outcome(evidence: Path) -> EvalOutcome | None:
     )
 
 
+#: Both tails below reach the same conclusion -- nothing attests the role -- and differ only in
+#: what the repository does contain. Sharing the opening keeps the conditional half conditional.
+_NO_PIPELINE_ROLE_EVIDENCE = (
+    "AWS-PIPEIAM-056: No platform evidence attests the CodePipeline service role "
+    "(.oss-policy-kit/evidence/aws-codepipeline.json)"
+)
+
+
 def eval_aws_pipeiam_056(ctx: EvalContext) -> EvalOutcome:
     """AWS-PIPEIAM-056: CodePipeline service role / IAM execution boundary for the pipeline."""
 
@@ -463,10 +484,8 @@ def eval_aws_pipeiam_056(ctx: EvalContext) -> EvalOutcome:
         return EvalOutcome(
             status=ControlStatus.MANUAL_REVIEW_REQUIRED,
             reason=(
-                "AWS-PIPEIAM-056: No evidence file found at the expected path. "
-                "A keyword signal was detected in the pipeline YAML, but this cannot "
-                "prove platform-level posture. Collect evidence via the platform collector "
-                "or attest the configuration manually."
+                f"{_NO_PIPELINE_ROLE_EVIDENCE}. A committed pipeline export declares a `roleArn`, but a "
+                "committed file records what was exported, not the role the live pipeline runs under."
             ),
             remediation=(
                 "Run collect-evidence for AWS or add API-backed pipeline/build JSON under .oss-policy-kit/evidence/."
@@ -476,12 +495,7 @@ def eval_aws_pipeiam_056(ctx: EvalContext) -> EvalOutcome:
         )
     return EvalOutcome(
         status=ControlStatus.MANUAL_REVIEW_REQUIRED,
-        reason=(
-            "AWS-PIPEIAM-056: No evidence file found at the expected path. "
-            "A keyword signal was detected in the pipeline YAML, but this cannot "
-            "prove platform-level posture. Collect evidence via the platform collector "
-            "or attest the configuration manually."
-        ),
+        reason=f"{_NO_PIPELINE_ROLE_EVIDENCE}, and no committed pipeline export declares a `roleArn`.",
         remediation=(
             "Run collect-evidence with AWS_CODEPIPELINE_NAME set, or commit a GetPipeline export that includes "
             "`pipeline.roleArn` alongside stages or artifact stores."
@@ -491,21 +505,42 @@ def eval_aws_pipeiam_056(ctx: EvalContext) -> EvalOutcome:
     )
 
 
+#: Same shape as `_NO_PIPELINE_ROLE_EVIDENCE` above: one opening for the state both tails share,
+#: so the half that depends on the repository stays the only half that varies.
+_NO_BUILD_IDENTITY_EVIDENCE = (
+    "AWS-CBIDENT-057: No evidence file found at the expected path (.oss-policy-kit/evidence/aws-codebuild-project.json)"
+)
+
+
+def _aws_cbident_missing_evidence_reason(buildspecs: list[Path]) -> str:
+    """The sentence for an absent evidence file, conditioned on what the repository does hold.
+
+    The old wording claimed a keyword signal in the pipeline YAML on every path through this
+    branch, including repositories holding no buildspec at all. A buildspec is worth naming,
+    since it is the only AWS build file the kit reads -- but only where one was found, and only
+    for what it is: build commands, never the project record that names the execution role.
+    """
+
+    if buildspecs:
+        return (
+            f"{_NO_BUILD_IDENTITY_EVIDENCE}. A buildspec is present in the supported paths, but a "
+            "buildspec records build commands, not the CodeBuild project configuration that names "
+            "the service role and its environment variables."
+        )
+    return f"{_NO_BUILD_IDENTITY_EVIDENCE}, and no buildspec is present in the supported paths."
+
+
 def eval_aws_cbident_057(ctx: EvalContext) -> EvalOutcome:
     """AWS-CBIDENT-057: CodeBuild execution identity boundary (service role vs plaintext env credentials)."""
 
     evidence = ctx.repo_root / _KIT_DIR / "evidence" / "aws-codebuild-project.json"
     if not evidence.is_file():
+        buildspecs = ctx.aws_ci.buildspec_paths
         return EvalOutcome(
             status=ControlStatus.MANUAL_REVIEW_REQUIRED,
-            reason=(
-                "AWS-CBIDENT-057: No evidence file found at the expected path. "
-                "A keyword signal was detected in the pipeline YAML, but this cannot "
-                "prove platform-level posture. Collect evidence via the platform collector "
-                "or attest the configuration manually."
-            ),
+            reason=_aws_cbident_missing_evidence_reason(buildspecs),
             remediation="Collect CodeBuild project evidence or scaffold and attest identity fields explicitly.",
-            evidence_sources=[],
+            evidence_sources=[str(p.resolve()) for p in buildspecs],
             confidence="low",
         )
     data, error, ph = _validate_json_evidence(
@@ -595,11 +630,9 @@ def eval_aws_sbomart_058(ctx: EvalContext) -> EvalOutcome:
     if blocked is not None:
         return blocked
     assert data is not None
-    for d in _sbom_artifact_digest_strings(data):
-        if is_placeholder_digest(d):
-            return _digest_placeholder_manual_review(evidence)
-        if not _is_valid_sha256_digest(d):
-            return _digest_invalid_not_evaluated(evidence)
+    unusable_digest = _digest_gate_outcome(evidence, _sbom_artifact_digest_strings(data))
+    if unusable_digest is not None:
+        return unusable_digest
     posture = data["posture"]
     assert isinstance(posture, dict)
     required = ("sbom_covers_release_artifact", "sbom_digest_recorded", "artifact_digest_recorded")
@@ -663,11 +696,9 @@ def eval_aws_provart_059(ctx: EvalContext) -> EvalOutcome:
     if blocked is not None:
         return blocked
     assert data is not None
-    for d in _provenance_artifact_digest_strings(data):
-        if is_placeholder_digest(d):
-            return _digest_placeholder_manual_review(evidence)
-        if not _is_valid_sha256_digest(d):
-            return _digest_invalid_not_evaluated(evidence)
+    unusable_digest = _digest_gate_outcome(evidence, _provenance_artifact_digest_strings(data))
+    if unusable_digest is not None:
+        return unusable_digest
     posture = data["posture"]
     assert isinstance(posture, dict)
     required = ("attestation_covers_release_artifact", "attestation_digest_recorded", "artifact_digest_recorded")

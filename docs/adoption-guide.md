@@ -56,7 +56,7 @@ Templates under [`templates/workflows/`](../templates/workflows/) install `oss-p
 
 When you wire `evaluate --format json`, stdout contains **only** the compact JSON summary; confirmations about where Markdown/JSON reports were written appear on **stderr**, which keeps JSON parsing reliable in orchestration tools.
 
-To start `release-hardening-*` evidence files without hand-authoring JSON from scratch, run `scaffold-evidence --target <repo> --platform github|azure|aws`, then edit the generated `.oss-policy-kit/evidence/*.json` until they reflect real platform posture. Re-running without `--force` **skips** existing files so manual edits are preserved; use `--force` only when you intend to replace templates.
+To start `release-hardening-*` evidence files without hand-authoring JSON from scratch, run `scaffold-evidence --target <repo> --platform github|gitlab|azure|aws`, then edit the generated `.oss-policy-kit/evidence/*.json` until they reflect real platform posture. Re-running without `--force` **skips** existing files so manual edits are preserved; use `--force` only when you intend to replace templates.
 
 **v3+ preference (GitHub):** with `GITHUB_TOKEN` and `pip install 'oss-policy-kit[github]'`, use `collect-evidence --target <repo> --platform github` to generate the same evidence files directly from the API (see `docs/evidence-pack.md`).
 

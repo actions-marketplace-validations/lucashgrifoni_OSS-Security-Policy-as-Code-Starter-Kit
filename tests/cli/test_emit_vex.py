@@ -75,7 +75,8 @@ def test_extract_vuln_ids_rejects_malformed_json(tmp_path: Path) -> None:
     p.write_text("{ not json", encoding="utf-8")
     ids, err = _extract_vuln_ids_from_sarif(p)
     assert ids == []
-    assert err and ("parse" in err.lower() or "json" in err.lower())
+    assert err
+    assert "parse" in err.lower() or "json" in err.lower()
 
 
 def test_extract_vuln_ids_rejects_missing_runs(tmp_path: Path) -> None:
@@ -143,7 +144,7 @@ def test_emit_vex_writes_to_output_file(tmp_path: Path) -> None:
     sarif = _write_sarif(tmp_path, {"runs": [{"tool": {"driver": {"rules": [{"id": "CVE-2024-1"}]}}, "results": []}]})
     out = tmp_path / "vex.cyclonedx.json"
     proc = _run_cli(["emit-vex", "--osv-sarif", str(sarif), "--output", str(out)])
-    assert proc.returncode == 0
+    assert proc.returncode == 0, proc.stderr + proc.stdout
     assert out.is_file()
     doc = json.loads(out.read_text(encoding="utf-8"))
     assert doc["specVersion"] == "1.6"
@@ -152,20 +153,20 @@ def test_emit_vex_writes_to_output_file(tmp_path: Path) -> None:
 
 def test_emit_vex_returns_exit_2_when_sarif_missing(tmp_path: Path) -> None:
     proc = _run_cli(["emit-vex", "--osv-sarif", str(tmp_path / "missing.sarif.json")])
-    assert proc.returncode == 2
+    assert proc.returncode == 2, proc.stderr + proc.stdout
 
 
 def test_emit_vex_returns_exit_2_when_sarif_malformed(tmp_path: Path) -> None:
     bad = tmp_path / "broken.sarif.json"
     bad.write_text("{ not json", encoding="utf-8")
     proc = _run_cli(["emit-vex", "--osv-sarif", str(bad)])
-    assert proc.returncode == 2
+    assert proc.returncode == 2, proc.stderr + proc.stdout
 
 
 def test_emit_vex_empty_sarif_returns_valid_document_with_no_vulns(tmp_path: Path) -> None:
     sarif = _write_sarif(tmp_path, {"runs": [{"tool": {"driver": {"rules": []}}, "results": []}]})
     proc = _run_cli(["emit-vex", "--osv-sarif", str(sarif)])
-    assert proc.returncode == 0
+    assert proc.returncode == 0, proc.stderr + proc.stdout
     doc = json.loads(proc.stdout)
     assert doc["vulnerabilities"] == []
     assert doc["specVersion"] == "1.6"
@@ -204,7 +205,7 @@ def test_emit_vex_v02_applies_vulnerability_id_waiver(tmp_path: Path) -> None:
         ],
     )
     proc = _run_cli(["emit-vex", "--osv-sarif", str(sarif), "--waivers", str(waivers)])
-    assert proc.returncode == 0
+    assert proc.returncode == 0, proc.stderr + proc.stdout
     doc = json.loads(proc.stdout)
     by_id = {v["id"]: v for v in doc["vulnerabilities"]}
     assert by_id["CVE-2024-1"]["analysis"]["state"] == "not_affected"
@@ -228,7 +229,7 @@ def test_emit_vex_v02_ignores_control_id_only_waivers(tmp_path: Path) -> None:
         ],
     )
     proc = _run_cli(["emit-vex", "--osv-sarif", str(sarif), "--waivers", str(waivers)])
-    assert proc.returncode == 0
+    assert proc.returncode == 0, proc.stderr + proc.stdout
     doc = json.loads(proc.stdout)
     assert doc["vulnerabilities"][0]["analysis"]["state"] == "in_triage"
 
@@ -247,7 +248,7 @@ def test_emit_vex_v02_drops_invalid_vex_justification(tmp_path: Path) -> None:
         ],
     )
     proc = _run_cli(["emit-vex", "--osv-sarif", str(sarif), "--waivers", str(waivers)])
-    assert proc.returncode == 0
+    assert proc.returncode == 0, proc.stderr + proc.stdout
     doc = json.loads(proc.stdout)
     v = doc["vulnerabilities"][0]
     # State still becomes not_affected (waiver is otherwise valid);
@@ -281,7 +282,7 @@ def test_emit_vex_v02_include_references_embeds_helpuri(tmp_path: Path) -> None:
         },
     )
     proc = _run_cli(["emit-vex", "--osv-sarif", str(sarif), "--include-references"])
-    assert proc.returncode == 0
+    assert proc.returncode == 0, proc.stderr + proc.stdout
     doc = json.loads(proc.stdout)
     v = doc["vulnerabilities"][0]
     assert v["advisories"] == [{"url": "https://osv.dev/vulnerability/GHSA-zzzz"}]
@@ -306,7 +307,7 @@ def test_emit_vex_v02_omits_advisories_when_flag_off(tmp_path: Path) -> None:
         },
     )
     proc = _run_cli(["emit-vex", "--osv-sarif", str(sarif)])
-    assert proc.returncode == 0
+    assert proc.returncode == 0, proc.stderr + proc.stdout
     doc = json.loads(proc.stdout)
     assert "advisories" not in doc["vulnerabilities"][0]
 
@@ -325,7 +326,7 @@ def test_emit_vex_v02_expired_waiver_is_ignored(tmp_path: Path) -> None:
         ],
     )
     proc = _run_cli(["emit-vex", "--osv-sarif", str(sarif), "--waivers", str(waivers)])
-    assert proc.returncode == 0
+    assert proc.returncode == 0, proc.stderr + proc.stdout
     doc = json.loads(proc.stdout)
     assert doc["vulnerabilities"][0]["analysis"]["state"] == "in_triage"
 
@@ -349,7 +350,7 @@ def test_emit_vex_warns_when_waiver_id_does_not_match_sarif(tmp_path: Path) -> N
     )
     out = tmp_path / "vex.json"
     proc = _run_cli(["emit-vex", "--osv-sarif", str(sarif), "--waivers", str(waivers), "--output", str(out)])
-    assert proc.returncode == 0
+    assert proc.returncode == 0, proc.stderr + proc.stdout
     assert "did not match" in proc.stderr.lower()
     assert "CVE-2024-TYPO" in proc.stderr
     assert "GHSA-aaaa-bbbb-cccc" in proc.stderr

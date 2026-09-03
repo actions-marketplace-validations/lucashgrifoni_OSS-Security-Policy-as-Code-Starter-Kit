@@ -23,15 +23,16 @@ from __future__ import annotations
 import json as _json
 from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
-from importlib.metadata import PackageNotFoundError
-from importlib.metadata import version as _pkg_version
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from oss_policy_kit.application.clock import report_generated_at
+from oss_policy_kit.application.reporting import _sanitize_target_path_for_payload
 from oss_policy_kit.infrastructure.fs_walk import walk_matching_files
+from oss_policy_kit.infrastructure.scan_deadline import TIMEOUT_DIAGNOSTIC, ScanDeadline
+from oss_policy_kit.infrastructure.source_text import decode_source
 
 _S3_BUCKET_TYPE = "AWS::S3::Bucket"
 
@@ -79,22 +80,28 @@ class CfnScanOutcome:
     findings: list[CfnFinding] = field(default_factory=list)
     scanned_at: str = ""
     diagnostics: str = ""
+    files_read: int = 0
 
 
 def _kit_version() -> str:
+    """The version this scanner stamps into its evidence.
+
+    The source constant is authoritative on purpose: a stale installed distribution must
+    never relabel evidence it did not produce. Looking the installed version up and then
+    discarding it whenever it differs is the same as not looking it up at all, so the
+    lookup is gone -- both former branches returned this exact value.
+    """
+
     from oss_policy_kit import __version__ as _src_version
 
-    try:
-        installed = _pkg_version("oss-policy-kit")
-    except PackageNotFoundError:  # pragma: no cover - dev-only fallback
-        return _src_version
-    if installed != _src_version:
-        return _src_version
-    return installed
+    return _src_version
 
 
 def _utc_iso() -> str:
-    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    # Route through the report clock so SOURCE_DATE_EPOCH pins the timestamp for
+    # reproducible-build environments and the test suite (X7-03). Keep the ``Z``
+    # suffix so the on-disk shape stays byte-identical to prior releases.
+    return report_generated_at().replace("+00:00", "Z")
 
 
 def _normalize_target(repo_root: Path, p: Path) -> str:
@@ -124,9 +131,12 @@ def _intrinsic_constructor(tag: str) -> Callable[[yaml.SafeLoader, yaml.Node], A
             return {tag: loader.construct_scalar(node)}
         if isinstance(node, yaml.SequenceNode):
             return {tag: loader.construct_sequence(node, deep=True)}
-        if isinstance(node, yaml.MappingNode):
+        if isinstance(node, yaml.MappingNode):  # pragma: no branch
             return {tag: loader.construct_mapping(node, deep=True)}
-        return None
+        # Scalar, sequence and mapping are the only node kinds PyYAML composes, so
+        # this is unreachable; it keeps the constructor total rather than raising
+        # AttributeError if that ever stops being true.
+        return None  # pragma: no cover
 
     return _ctor
 
@@ -166,14 +176,48 @@ def _looks_like_cfn(doc: Any) -> bool:
     return any(isinstance(entry, dict) and isinstance(entry.get("Type"), str) for entry in resources.values())
 
 
-def _load_cfn(path: Path) -> dict[str, Any] | None:
-    """Parse one candidate file. Return the template dict, or ``None`` if not CFN."""
+class CfnParseError(Exception):
+    """A file that looks intended to be a CloudFormation template failed to parse.
 
-    text = path.read_text(encoding="utf-8", errors="replace")
+    Distinguishes a malformed CFN *candidate* (which must surface as a parse
+    error so the scan does not silently drop a real misconfig) from a file that
+    merely is not CloudFormation (a legitimate silent skip).
+    """
+
+
+def _looks_like_cfn_text(text: str) -> bool:
+    """Heuristic over raw text: does an *unparseable* file look intended as CFN?
+
+    Used only when YAML/JSON parsing fails, so the parsed shape is unavailable.
+    Requires a CloudFormation top-level marker (``AWSTemplateFormatVersion`` or a
+    ``Resources`` key) so arbitrary malformed YAML/JSON stays a silent skip.
+    """
+
+    return "AWSTemplateFormatVersion" in text or "Resources:" in text or '"Resources"' in text
+
+
+def _load_cfn(path: Path) -> dict[str, Any] | None:
+    """Parse one candidate file.
+
+    Return the template dict, or ``None`` if the file is simply not a
+    CloudFormation template (a legitimate silent skip). Raise
+    :class:`CfnParseError` if the file *looks* intended as CloudFormation but
+    failed to parse, so the caller can surface it instead of dropping it.
+    """
+
+    # Decode by BOM, not as UTF-8 only. A UTF-16 template is what PowerShell's `Out-File`
+    # writes by default and JSON parsers detect the encoding themselves (RFC 4627), so
+    # such a file is legal input, not a broken one. Reading it as UTF-8 produced mojibake
+    # that failed the `_looks_like_cfn` sniff below and left through the *not a template*
+    # door; refusing it outright instead degraded whole control families on repositories
+    # that merely contain a UTF-16 appsettings.json and no CloudFormation at all.
+    text = decode_source(path.read_bytes())
     if path.suffix.lower() == ".json":
         try:
             parsed = _json.loads(text)
-        except _json.JSONDecodeError:
+        except _json.JSONDecodeError as exc:
+            if _looks_like_cfn_text(text):
+                raise CfnParseError(f"invalid JSON: {exc}") from exc
             return None
         return parsed if _looks_like_cfn(parsed) else None
     try:
@@ -182,7 +226,9 @@ def _load_cfn(path: Path) -> dict[str, Any] | None:
         # SafeLoader semantics are preserved; yaml.load is required so the
         # custom Loader= argument can be passed (yaml.safe_load forbids it).
         parsed = yaml.load(text, Loader=_CfnSafeLoader)  # nosec B506
-    except yaml.YAMLError:
+    except yaml.YAMLError as exc:
+        if _looks_like_cfn_text(text):
+            raise CfnParseError(f"invalid YAML: {exc}") from exc
         return None
     return parsed if _looks_like_cfn(parsed) else None
 
@@ -571,40 +617,64 @@ def run_scan(
     exclude_globs: Iterable[str] | None = None,
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> CfnScanOutcome:
-    _ = timeout_seconds
+    deadline = ScanDeadline(timeout_seconds)
     files = _walk_candidate_files(repo_root, include_globs, exclude_globs)
     parsed: list[tuple[Path, dict[str, Any]]] = []
     files_scanned: list[Path] = []
     parse_errors: list[dict[str, str]] = []
+    files_read = 0
     for f in files:
+        if deadline.expired():
+            break
         try:
             tpl = _load_cfn(f)
-        except OSError as exc:
+        except (OSError, CfnParseError) as exc:
             parse_errors.append({"file": _normalize_target(repo_root, f), "error": str(exc)})
             continue
+        files_read += 1
         if tpl is None:
             continue
         files_scanned.append(f)
         parsed.append((f, tpl))
 
     findings: list[CfnFinding] = []
-    try:
-        for _rid, fn in _RULES:
-            # Rule helpers each take ``(path, parsed)`` -- but ``path`` is unused at
-            # the rule level (rules iterate over ``parsed`` themselves). We pass
-            # ``repo_root`` to honor the same signature shape as iac/scanner.py.
-            findings.extend(fn(repo_root, parsed))
-    except Exception as exc:  # noqa: BLE001 - rule engine errors must not crash the scan
+    if not deadline.expired():
+        try:
+            for _rid, fn in _RULES:
+                if deadline.expired():
+                    break
+                # Rule helpers each take ``(path, parsed)`` -- but ``path`` is unused at
+                # the rule level (rules iterate over ``parsed`` themselves). We pass
+                # ``repo_root`` to honor the same signature shape as iac/scanner.py.
+                findings.extend(fn(repo_root, parsed))
+        except Exception as exc:  # noqa: BLE001 - rule engine errors must not crash the scan
+            return CfnScanOutcome(
+                files_read=files_read,
+                status="error",
+                tool_version=_kit_version(),
+                files_scanned=[_normalize_target(repo_root, f) for f in files_scanned],
+                parse_errors=parse_errors,
+                findings=[],
+                scanned_at=_utc_iso(),
+                diagnostics=f"rule engine raised {type(exc).__name__}: {exc}",
+            )
+
+    if deadline.expired():
+        # No findings: half a rule pack over half the files is not a result, and the
+        # per-rule counts would read as "this rule found nothing" for rules never run.
         return CfnScanOutcome(
-            status="error",
+            files_read=files_read,
+            status="timeout",
             tool_version=_kit_version(),
             files_scanned=[_normalize_target(repo_root, f) for f in files_scanned],
             parse_errors=parse_errors,
             findings=[],
             scanned_at=_utc_iso(),
-            diagnostics=f"rule engine raised {type(exc).__name__}: {exc}",
+            diagnostics=TIMEOUT_DIAGNOSTIC.format(seconds=timeout_seconds),
         )
+
     return CfnScanOutcome(
+        files_read=files_read,
         status="ok",
         tool_version=_kit_version(),
         files_scanned=[_normalize_target(repo_root, f) for f in files_scanned],
@@ -625,7 +695,9 @@ def render_evidence_payload(outcome: CfnScanOutcome, *, target: Path) -> dict[st
         "tool": "oss-policy-kit-cfn-parser",
         "tool_version": outcome.tool_version,
         "status": outcome.status,
-        "target": str(target.resolve()),
+        # Privacy-by-default: emit only the basename so a commonly-committed
+        # evidence artifact never leaks an absolute path / username (X6-02, M-002).
+        "target": _sanitize_target_path_for_payload(str(target), include_absolute=False),
         "scanned_at": outcome.scanned_at,
         "attested_at": outcome.scanned_at,
         "attested_by": "oss-policy-kit scan-cfn",
@@ -637,6 +709,12 @@ def render_evidence_payload(outcome: CfnScanOutcome, *, target: Path) -> dict[st
         "findings": [asdict(f) for f in outcome.findings],
         "diagnostics": {
             "parse_errors": outcome.parse_errors,
+            # How many candidate files the scan actually READ, which is not the same as
+            # `files_scanned`: this family filters that list down to sources of the
+            # technology, so a repository with one broken file and ten fine ones that are
+            # simply not CloudFormation left it empty -- and a control read the emptiness as
+            # "nothing here was legible" and withdrew its verdict.
+            "files_read": outcome.files_read,
             "raw_message": outcome.diagnostics,
         },
     }

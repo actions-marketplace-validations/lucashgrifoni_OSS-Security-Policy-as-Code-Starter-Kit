@@ -24,7 +24,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from oss_policy_kit.application.evidence_projection import normalize_confidence, project_evidence
+from oss_policy_kit.application.evidence_projection import project_evidence
+from oss_policy_kit.application.reporting import _atomic_write_text
 from oss_policy_kit.domain.models import ControlResult, ControlStatus, ExecutionReport
 
 _SRCROOT = "%SRCROOT%"
@@ -160,7 +161,8 @@ def _result_to_sarif(result: ControlResult) -> dict[str, Any]:
         "locations": locations,
         "properties": {
             "kit_status": result.status.value,
-            "confidence": normalize_confidence(result.confidence),
+            # Already the enum -- see ControlResult.__post_init__.
+            "confidence": result.confidence,
             "assurance": result.assurance,
             "lifecycle": result.lifecycle,
             "profile": result.profile,
@@ -221,8 +223,23 @@ def build_sarif(report: ExecutionReport) -> dict[str, Any]:
 
 
 def write_sarif_report(report: ExecutionReport, path: Path) -> None:
-    """Write a SARIF 2.1.0 log file for the evaluation report."""
+    """Write a SARIF 2.1.0 log file for the evaluation report.
+
+    Published through the same temp-file-and-rename helper the JSON and Markdown reports
+    use. Writing in place truncated the destination first, so anything reading the file
+    during that window got a zero-length one: measured across a 50-writer x 6-round
+    storm, a reader parsed this file 43682 times and found invalid JSON 290 times, every
+    sampled failure ``len == 0``. The reader that matters is a CI step uploading the
+    SARIF to code scanning while another job in the same workspace re-runs ``evaluate``
+    -- it would upload an empty file, and an empty SARIF is indistinguishable from a
+    clean scan.
+
+    ``_atomic_write_text`` is private to :mod:`reporting`, and stays a single
+    implementation on purpose: it carries the sharing-conflict retry, the Windows
+    path-length fallback, and the temp-file cleanup that a second copy here would drift
+    away from.
+    """
 
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = build_sarif(report)
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    _atomic_write_text(path, json.dumps(payload, indent=2, ensure_ascii=False) + "\n")

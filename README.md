@@ -14,9 +14,23 @@ Pass/fail security policy gates for OSS repositories, with explicit assurance gr
 
 | Current release | Bundled profiles | Controls | CLI commands | Python |
 |---|---:|---:|---:|---|
-| v8.0.0 <!-- x-release-please-version --> | 56 | 221 | 20 | 3.12+ |
+| v10.0.19 <!-- x-release-please-version --> | 56 | 222 | 23 | 3.12+ |
 
 Use it when you need a local-first gate that combines repository governance, CI/CD hardening, release posture, scanner evidence, waivers, and framework-oriented reporting. It is not a vulnerability scanner, certification engine, or legal compliance guarantee.
+
+> **Status: maintenance.** v10.0.0 completed the planned end-state. Releases since have been hardening and correctness work, not new surface. Issues and questions are still answered.
+
+## Every Verdict Carries Its Assurance
+
+Most tools give a verdict. This one also records **how that verdict was reached**, so a wrong result can be argued with evidence instead of taken on faith.
+
+| Assurance | How the verdict was established | What it is worth |
+|---|---|---|
+| `deterministic` | Read directly from the clone | Highest confidence — the file either is or is not there |
+| `signal` | Heuristic inference from what is visible | Corroborating only. A signal never elevates a grade on its own |
+| `evidence-backed` | Rests on API-backed evidence you supply | Exactly as strong as the evidence behind it |
+
+A control that fires wrongly is worse than one that does not exist. False-positive reports are welcome, and the assurance label is what makes that argument precise.
 
 ## Quickstart
 
@@ -39,7 +53,8 @@ First-time tutorial: [docs/tutorial-first-pr-gate.md](docs/tutorial-first-pr-gat
 - Evaluates bundled policy profiles against a repository clone.
 - Uses optional evidence under `.oss-policy-kit/evidence/` for platform-only facts.
 - Composes signals from local files, workflows, SARIF/JSON scanner outputs, waivers, and release evidence.
-- Labels controls by assurance type: deterministic, signal, or evidence-backed.
+- Correlates composed scanner findings into one deduplicated, ranked findings/1.0 artifact (`correlate-findings`).
+- Labels controls by assurance type: deterministic, signal, or evidence-backed — see [above](#every-verdict-carries-its-assurance).
 - Supports Markdown, JSON report contracts, and optional SARIF for code-scanning workflows.
 - Keeps waivers visible with owner, reason, and expiry metadata.
 
@@ -58,6 +73,7 @@ First-time tutorial: [docs/tutorial-first-pr-gate.md](docs/tutorial-first-pr-gat
 | CI/CD posture | GitHub Actions, Azure Pipelines, AWS CodeBuild/CodePipeline, GitLab CI signals |
 | Release hardening | OIDC publishing, provenance evidence, artifact verification, source-built container flow |
 | Scanner composition | SARIF/JSON ingestion for tools such as zizmor, OSV-Scanner, Gitleaks, Scorecard, and Semgrep |
+| Finding correlation | `correlate-findings`: one normalized, deduplicated, KEV/EPSS-ranked findings/1.0 view across all composed scanners (stateless, single run) |
 | Framework mapping | OSPS, NIST SSDF, SLSA, S2C2F, OWASP CI/CD, EU CRA, EU AI Act readiness signals |
 | AI and agent security | AI agent source-side checks, MCP server security, OWASP Agentic ASI mapping |
 | Exception handling | Waiver registry with reason, owner, scope, and expiry |
@@ -79,7 +95,7 @@ Common starting points:
 | `oss-publish-readiness-1` | Release/publish readiness for OSS packages |
 | `appsec-sast-sca-1` | Compose SAST/SCA/secrets scanner evidence |
 | `osps-baseline-2026-1` | OpenSSF OSPS Baseline 2026-oriented review |
-| `cra-eu-ready-2-1` | EU CRA Article 13/14 readiness signals |
+| `cra-eu-conformance-evidence-1` | EU CRA Article 13/14 conformance-evidence signals |
 | `ai-agent-baseline-1` | Source-side checks for AI agent repositories |
 | `appsec-mcp-server-1` | MCP server security readiness |
 
@@ -88,7 +104,7 @@ Full profile guide: [docs/profiles/overview.md](docs/profiles/overview.md).
 ## GitHub Action
 
 ```yaml
-- uses: lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit@v7.2.0
+- uses: lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit@v10.0.19 # x-release-please-version
   with:
     profile: github-level-1
     fail-on: fail
@@ -98,11 +114,13 @@ Action reference: [docs/github-action.md](docs/github-action.md). Starter workfl
 
 ## Reports and Contracts
 
-By default, `evaluate` writes `reports/2.0` JSON (the default flipped from `reports/1.0` in v7.0.0 — ADR-027). `reports/1.0` stays selectable via `--report-json-contract=1.0` for one minor cycle, then deprecates. Contracts and migration:
+`evaluate` writes `reports/2.0` JSON — the **only** report contract since v9.0.0 (ADR-043). The legacy pre-2.0 contracts (`0.1`/`0.2`/`0.3`/`1.0`) were removed; `--report-json-contract` accepts only `2.0` (any other value is a clean exit-2 error, never a silent fallback). Contracts and migration:
 
-- [docs/reports-contract-v2.0.md](docs/reports-contract-v2.0.md) — current default
-- [docs/reports-contract-v1.0.md](docs/reports-contract-v1.0.md) — previous default (still selectable)
-- [docs/v7.0.0-migration-guide.md](docs/v7.0.0-migration-guide.md) — upgrading across the flip
+- [docs/reports-contract-v2.0.md](docs/reports-contract-v2.0.md) — the report contract
+- [docs/v10.0.0-migration-guide.md](docs/v10.0.0-migration-guide.md) — the v10 breaking cleanups + the new findings surface
+- [docs/findings-correlation.md](docs/findings-correlation.md) — the findings/1.0 contract and `correlate-findings`
+- [docs/v9.0.0-migration-guide.md](docs/v9.0.0-migration-guide.md) — removing pinned legacy contracts + the CRA rename
+- [docs/v7.0.0-migration-guide.md](docs/v7.0.0-migration-guide.md) — the earlier reports/2.0 default flip
 - [docs/sample-reports/](docs/sample-reports/README.md)
 
 Exit codes:
@@ -124,6 +142,7 @@ Verification commands and limits are in [docs/supply-chain-verification.md](docs
 
 | Topic | Link |
 |---|---|
+| Project wiki | [Wiki](https://github.com/lucashgrifoni/OSS-Security-Policy-as-Code-Starter-Kit/wiki) |
 | Documentation index | [docs/README.md](docs/README.md) |
 | Architecture | [docs/architecture.md](docs/architecture.md) |
 | CLI reference | [docs/cli-reference.md](docs/cli-reference.md) |
@@ -146,6 +165,15 @@ Verification commands and limits are in [docs/supply-chain-verification.md](docs
 | `examples/` | Hardened and vulnerable example repositories |
 | `tests/` | Unit, application, integration, infrastructure, and property tests |
 | `docs/` | User docs, architecture, mappings, ADRs, and release notes |
+| `reports/` | Published JSON Schemas for the report and evidence contracts |
+| `waivers/` | Waiver registry: the live file plus a documented example |
+| `pipelines/` | Azure Pipelines starter definition |
+| `scripts/` | Maintenance and generator scripts, including the public-hygiene check |
+| `gitpage/` | Source and prebuilt bundle for the GitHub Pages site |
+| `.github/` | Workflows, Dependabot config, and issue/PR templates |
+
+Only the `oss_policy_kit` package ships in the wheel. Everything else — templates, examples,
+schemas, pipelines — is consumed from this repository, so pin a tag when you copy from it.
 
 ## Contributing and Security
 

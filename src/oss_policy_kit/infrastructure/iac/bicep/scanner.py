@@ -23,13 +23,14 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
-from importlib.metadata import PackageNotFoundError
-from importlib.metadata import version as _pkg_version
 from pathlib import Path
 from typing import Any
 
+from oss_policy_kit.application.clock import report_generated_at
+from oss_policy_kit.application.reporting import _sanitize_target_path_for_payload
 from oss_policy_kit.infrastructure.fs_walk import walk_matching_files
+from oss_policy_kit.infrastructure.scan_deadline import TIMEOUT_DIAGNOSTIC, ScanDeadline
+from oss_policy_kit.infrastructure.source_text import decode_source
 
 _STORAGE_ACCOUNTS_TYPE = "Microsoft.Storage/storageAccounts"
 
@@ -82,19 +83,24 @@ class BicepScanOutcome:
 
 
 def _kit_version() -> str:
+    """The version this scanner stamps into its evidence.
+
+    The source constant is authoritative on purpose: a stale installed distribution must
+    never relabel evidence it did not produce. Looking the installed version up and then
+    discarding it whenever it differs is the same as not looking it up at all, so the
+    lookup is gone -- both former branches returned this exact value.
+    """
+
     from oss_policy_kit import __version__ as _src_version
 
-    try:
-        installed = _pkg_version("oss-policy-kit")
-    except PackageNotFoundError:  # pragma: no cover - dev-only fallback
-        return _src_version
-    if installed != _src_version:
-        return _src_version
-    return installed
+    return _src_version
 
 
 def _utc_iso() -> str:
-    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    # Route through the report clock so SOURCE_DATE_EPOCH pins the timestamp for
+    # reproducible-build environments and the test suite (X7-03). Keep the ``Z``
+    # suffix so the on-disk shape stays byte-identical to prior releases.
+    return report_generated_at().replace("+00:00", "Z")
 
 
 def _normalize_target(repo_root: Path, p: Path) -> str:
@@ -459,34 +465,57 @@ def run_scan(
     exclude_globs: Iterable[str] | None = None,
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> BicepScanOutcome:
-    _ = timeout_seconds
+    deadline = ScanDeadline(timeout_seconds)
     files = _walk_bicep_files(repo_root, include_globs, exclude_globs)
     resources: list[BicepResource] = []
     files_scanned: list[Path] = []
     parse_errors: list[dict[str, str]] = []
     for f in files:
+        if deadline.expired():
+            break
         try:
-            text = f.read_text(encoding="utf-8", errors="replace")
+            raw = f.read_bytes()
         except OSError as exc:
             parse_errors.append({"file": _normalize_target(repo_root, f), "error": str(exc)})
             continue
+        # Decode by BOM. An editor that saved this as UTF-16 produced a file a human still
+        # reads as Bicep; reading it as UTF-8 turned it into mojibake with no resources in
+        # it, which scored a clean PASS over a storage account with HTTPS-only disabled.
+        text = decode_source(raw)
         files_scanned.append(f)
         resources.extend(_parse_resources(text, f))
 
     findings: list[BicepFinding] = []
-    try:
-        for _rid, fn in _RULES:
-            findings.extend(fn(repo_root, resources))
-    except Exception as exc:  # noqa: BLE001 - rule engine errors must not crash the scan
+    if not deadline.expired():
+        try:
+            for _rid, fn in _RULES:
+                if deadline.expired():
+                    break
+                findings.extend(fn(repo_root, resources))
+        except Exception as exc:  # noqa: BLE001 - rule engine errors must not crash the scan
+            return BicepScanOutcome(
+                status="error",
+                tool_version=_kit_version(),
+                files_scanned=[_normalize_target(repo_root, f) for f in files_scanned],
+                parse_errors=parse_errors,
+                findings=[],
+                scanned_at=_utc_iso(),
+                diagnostics=f"rule engine raised {type(exc).__name__}: {exc}",
+            )
+
+    if deadline.expired():
+        # No findings: half a rule pack over half the files is not a result, and the
+        # per-rule counts would read as "this rule found nothing" for rules never run.
         return BicepScanOutcome(
-            status="error",
+            status="timeout",
             tool_version=_kit_version(),
             files_scanned=[_normalize_target(repo_root, f) for f in files_scanned],
             parse_errors=parse_errors,
             findings=[],
             scanned_at=_utc_iso(),
-            diagnostics=f"rule engine raised {type(exc).__name__}: {exc}",
+            diagnostics=TIMEOUT_DIAGNOSTIC.format(seconds=timeout_seconds),
         )
+
     return BicepScanOutcome(
         status="ok",
         tool_version=_kit_version(),
@@ -508,7 +537,9 @@ def render_evidence_payload(outcome: BicepScanOutcome, *, target: Path) -> dict[
         "tool": "oss-policy-kit-bicep-parser",
         "tool_version": outcome.tool_version,
         "status": outcome.status,
-        "target": str(target.resolve()),
+        # Privacy-by-default: emit only the basename so a commonly-committed
+        # evidence artifact never leaks an absolute path / username (X6-02, M-002).
+        "target": _sanitize_target_path_for_payload(str(target), include_absolute=False),
         "scanned_at": outcome.scanned_at,
         "attested_at": outcome.scanned_at,
         "attested_by": "oss-policy-kit scan-bicep",

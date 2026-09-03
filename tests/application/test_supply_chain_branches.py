@@ -85,9 +85,9 @@ def test_aibom_absent(tmp_path: Path) -> None:
 
 def test_is_ml_bom_marker_file(tmp_path: Path) -> None:
     p = _write(tmp_path, "x.cdx.json", '{"x": "modelCard"}')
-    assert sc._is_ml_bom_marker_file(p)
+    assert sc._is_ml_bom_marker_file(p, tmp_path)
     p2 = _write(tmp_path, "y.json", "{}")
-    assert not sc._is_ml_bom_marker_file(p2)
+    assert not sc._is_ml_bom_marker_file(p2, tmp_path)
 
 
 # --------------------------------------------------------------------------- #
@@ -126,16 +126,42 @@ def test_slsa_src_002_signature_signal_in_ruleset_dir(tmp_path: Path) -> None:
     assert sc.eval_slsa_src_002(_ctx(tmp_path / "empty")).status == ControlStatus.MANUAL_REVIEW_REQUIRED
 
 
-def test_slsa_src_003_pass(tmp_path: Path) -> None:
-    _write(
-        tmp_path, ".oss-policy-kit/evidence/branch-protection.json", json.dumps({"required_status_checks": ["build"]})
+def _branch_protection(**protections: bool) -> str:
+    """Evidence in the shape the packaged schema accepts -- flags nested, not at the root.
+
+    All five required flags are emitted, off unless a test names them; `protections` is closed
+    and lists them as required, so a block carrying only the flag under test is rejected before
+    any control reads it.
+    """
+
+    return json.dumps(
+        {
+            "schema_version": "branch-protection/v1",
+            "attested_at": "2026-06-15",
+            "attested_by": "platform-team",
+            "branch": "main",
+            "protections": {
+                "require_pull_request_reviews": False,
+                "dismiss_stale_reviews": False,
+                "require_status_checks": False,
+                "enforce_admins": False,
+                "restrict_force_push": False,
+                **protections,
+            },
+        }
     )
+
+
+def test_slsa_src_003_pass(tmp_path: Path) -> None:
+    _write(tmp_path, ".oss-policy-kit/evidence/branch-protection.json", _branch_protection(require_status_checks=True))
     assert sc.eval_slsa_src_003(_ctx(tmp_path)).status == ControlStatus.PASS
 
 
 def test_slsa_src_004_pass(tmp_path: Path) -> None:
     _write(
-        tmp_path, ".oss-policy-kit/evidence/branch-protection.json", json.dumps({"required_approving_review_count": 2})
+        tmp_path,
+        ".oss-policy-kit/evidence/branch-protection.json",
+        _branch_protection(require_pull_request_reviews=True),
     )
     assert sc.eval_slsa_src_004(_ctx(tmp_path)).status == ControlStatus.PASS
 
@@ -150,7 +176,12 @@ def _osv(tmp_path: Path, results: list[dict]) -> None:
 
 
 def test_sca_kev_pass_and_fail(tmp_path: Path) -> None:
+    # `"properties": {}` used to PASS here. It carries no `kev` field, so the scan cannot
+    # tell "enrichment ran, nothing flagged" from "no enrichment present" -- and PASS
+    # asserts the first. It is manual review now; PASS needs `kev` to be there and false.
     _osv(tmp_path, [{"ruleId": "CVE-OK", "properties": {}}])
+    assert sc.eval_sca_kev_001(_ctx(tmp_path)).status == ControlStatus.MANUAL_REVIEW_REQUIRED
+    _osv(tmp_path, [{"ruleId": "CVE-OK", "properties": {"kev": False}}])
     assert sc.eval_sca_kev_001(_ctx(tmp_path)).status == ControlStatus.PASS
     _osv(tmp_path, [{"ruleId": "CVE-KEV", "properties": {"kev": True}}])
     assert sc.eval_sca_kev_001(_ctx(tmp_path)).status == ControlStatus.FAIL

@@ -50,7 +50,7 @@ The bundled profile is **advisory** by design (`posture: advisory`, recommended 
 | `--target / -t` | `.` | Repository root to scan. |
 | `--include` | `**/*.tf` | Comma-separated glob patterns (e.g. `terraform/**/*.tf,modules/**/*.tf`). |
 | `--exclude` | (none) | Comma-separated glob patterns matched against full paths. |
-| `--timeout` | `120` | Wall-clock timeout in seconds (parser is in-process; included for symmetry). |
+| `--timeout` | `120` | Wall-clock budget for the scan, in seconds. Checked between files and between rules. |
 | `--format` | `human` | Stdout summary format: `human` (one-line) or `json` (full evidence echo). |
 
 The scan **always skips** `.git`, `.terraform`, `node_modules`, `.venv`, `venv`, `__pycache__`, `dist`, `build`, and `.oss-policy-kit` — vendored modules and caches never pollute findings.
@@ -59,6 +59,7 @@ The scan **always skips** `.git`, `.terraform`, `node_modules`, `.venv`, `venv`,
 
 - **Parser missing → not_available.** The kit imports `hcl2` lazily; without the iac extra installed, `scan-iac` exits 0 and writes evidence with `status: not_available`. Every `IAC-TF-*` evaluator then reports `manual-review-required` (does not trip `--fail-on fail`). This is by design.
 - **File parse failure → diagnostics, not crash.** A single malformed `.tf` file is recorded under `diagnostics.parse_errors` and the scan continues with the rest. The evidence still writes with `status: ok`.
+- **Budget exhausted → timeout.** A scan that runs past `--timeout` stops where it is and writes `status: timeout` with **no findings**, because half a rule pack over half the files is not a result — the per-rule counts would otherwise read as "this rule found nothing" for rules that never ran. Every `IAC-TF-*` evaluator then reports `manual-review-required`. `--timeout 0` spends the budget before any work, which is what `scan-sast` has always done.
 - **Best-effort detection.** The rule pack uses string-and-attribute matching, not full data-flow analysis. False positives are possible on dev/sandbox layouts; combine with `--exclude` globs and the kit's existing waivers (`GOV-WAIV-014`).
 - **No cloud APIs are called.** Everything runs on the clone. Cloud-side posture stays in `collect-evidence` territory.
 
@@ -79,10 +80,12 @@ Findings are control-level (one finding per resource per rule). Waive at the con
   control_id: IAC-TF-008
   reason: legacy modules pre-tagging policy; tracked in TICKET-1234
   owner: platform-team
-  expires_on: 2026-09-30
+  expires_at: 2026-09-30
 ```
 
-The waiver flips the control to `waived` in the report; the underlying findings are still visible in the evidence JSON for audit. Waivers must have an `expires_on` to keep the kit honest.
+The waiver flips the control to `waived` in the report; the underlying findings are still visible in the evidence JSON for audit. Waivers must carry an expiry to keep the kit honest.
+
+The canonical expiry key is **`expires_at`**. `expires_on` is a legacy spelling that is still accepted on both waiver surfaces, so existing files keep working — but new waivers should use `expires_at`.
 
 ## Roadmap
 

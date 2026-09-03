@@ -24,11 +24,13 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
-from importlib.metadata import PackageNotFoundError
-from importlib.metadata import version as _pkg_version
 from pathlib import Path
 from typing import Any
+
+from oss_policy_kit.application.clock import report_generated_at
+from oss_policy_kit.application.reporting import _sanitize_target_path_for_payload
+from oss_policy_kit.infrastructure.fs_walk import walk_matching_files
+from oss_policy_kit.infrastructure.scan_deadline import TIMEOUT_DIAGNOSTIC, ScanDeadline
 
 from .hcl_loader import hcl2_available
 from .tf_resource_index import TfBlock, TfResourceIndex, build_index
@@ -121,19 +123,24 @@ class IacScanOutcome:
 
 
 def _kit_version() -> str:
+    """The version this scanner stamps into its evidence.
+
+    The source constant is authoritative on purpose: a stale installed distribution must
+    never relabel evidence it did not produce. Looking the installed version up and then
+    discarding it whenever it differs is the same as not looking it up at all, so the
+    lookup is gone -- both former branches returned this exact value.
+    """
+
     from oss_policy_kit import __version__ as _src_version
 
-    try:
-        installed = _pkg_version("oss-policy-kit")
-    except PackageNotFoundError:  # pragma: no cover - dev-only fallback
-        return _src_version
-    if installed != _src_version:
-        return _src_version
-    return installed
+    return _src_version
 
 
 def _utc_iso() -> str:
-    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # Route through the report clock so SOURCE_DATE_EPOCH pins the timestamp for
+    # reproducible-build environments and the test suite (X7-03). Keep the ``Z``
+    # suffix so the on-disk shape stays byte-identical to prior releases.
+    return report_generated_at().replace("+00:00", "Z")
 
 
 def _normalize_target(repo_root: Path, path: Path) -> str:
@@ -151,20 +158,18 @@ def _walk_tf_files(
     include_globs: Iterable[str],
     exclude_globs: Iterable[str] | None,
 ) -> list[Path]:
-    """Discover ``*.tf`` files honoring ``_SKIP_DIRS`` and operator excludes."""
+    """Discover ``*.tf`` files honoring ``_SKIP_DIRS`` and operator excludes.
 
-    seen: set[Path] = set()
-    excludes = tuple(exclude_globs or ())
-    for pattern in include_globs:
-        for path in repo_root.glob(pattern):
-            if not path.is_file():
-                continue
-            if any(part in _SKIP_DIRS for part in path.parts):
-                continue
-            if any(path.match(ex) for ex in excludes):
-                continue
-            seen.add(path.resolve())
-    return sorted(seen)
+    Delegates to the shared walk, which is what the other four IaC/K8s scanners already do and
+    what its own docstring says it exists for. This walker kept its own copy, and the copy tested
+    the skip-list against the ABSOLUTE path: a repository checked out under a directory the
+    adopter happened to name ``build`` or ``venv`` scanned as if it held no Terraform at all, and
+    twelve controls then asserted that positively. The skip-list is about what lies inside the
+    repository, so it belongs on the repo-relative path.
+    """
+
+    found = walk_matching_files(repo_root, include_globs, exclude_globs, _SKIP_DIRS)
+    return sorted({p.resolve() for p in found})
 
 
 # ---------------------------------------------------------------------------
@@ -401,10 +406,25 @@ def _has_separate_s3_encryption(bucket_name: str, index: TfResourceIndex) -> boo
     return False
 
 
+def _first_declared(block: TfBlock, *keys: str) -> Any:
+    """Return the first of *keys* the block actually declares, preserving a literal ``false``.
+
+    ``a or b`` cannot be used here: the value being looked for is a boolean, so an explicit
+    ``encrypted = false`` is falsy and would be skipped in favour of the next key, arriving as
+    ``None`` and reading as "never configured" instead of "deliberately turned off".
+    """
+
+    for key in keys:
+        value = block.get(key)
+        if value is not None:
+            return value
+    return None
+
+
 def _encryption_finding(rt: str, block: TfBlock, index: TfResourceIndex, repo_root: Path) -> IacFinding | None:
     """Return an IAC-TF-004 finding for one resource block, or None when encryption looks present."""
 
-    encrypted = block.get("storage_encrypted") or block.get("encrypted") or block.get("enable_kms_encryption")
+    encrypted = _first_declared(block, "storage_encrypted", "encrypted", "enable_kms_encryption")
     sse = block.get("server_side_encryption_configuration")
     kms_key = block.get("kms_key_id") or block.get("kms_master_key_id")
     # AWS S3 modern pattern: encryption can live in a separate resource.
@@ -843,11 +863,11 @@ def run_scan(
     *,
     include_globs: Iterable[str] = DEFAULT_INCLUDE_GLOBS,
     exclude_globs: Iterable[str] | None = None,
-    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,  # accepted for API symmetry; parser is in-process
+    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> IacScanOutcome:
     """Discover ``.tf`` files, run every bundled rule, return a structured outcome."""
 
-    _ = timeout_seconds  # currently unused; kept for symmetry with scan-sast
+    deadline = ScanDeadline(timeout_seconds)
     if not hcl2_available():
         return IacScanOutcome(
             status="not_available",
@@ -858,6 +878,18 @@ def run_scan(
 
     files = _walk_tf_files(repo_root, include_globs, exclude_globs)
     if not files:
+        # Ahead of the early return, or a spent budget would leave this the one scanner
+        # that answers "no Terraform here" -- a positive claim -- instead of "timeout".
+        # The other four reach their timeout return through an empty rule pass.
+        if deadline.expired():
+            return IacScanOutcome(
+                status="timeout",
+                tool_version=_kit_version(),
+                files_scanned=[],
+                findings=[],
+                scanned_at=_utc_iso(),
+                diagnostics=TIMEOUT_DIAGNOSTIC.format(seconds=timeout_seconds),
+            )
         return IacScanOutcome(
             status="ok",
             tool_version=_kit_version(),
@@ -866,25 +898,41 @@ def run_scan(
             scanned_at=_utc_iso(),
         )
 
-    index = build_index(files)
+    index = build_index(files, deadline=deadline)
 
     parse_errors: list[dict[str, str]] = [
         {"file": _normalize_target(repo_root, p), "error": str(err)} for p, err in index.parse_errors
     ]
 
     findings: list[IacFinding] = []
-    try:
-        for _, fn in _RULES:
-            findings.extend(fn(repo_root, index))
-    except Exception as exc:  # noqa: BLE001 - one bad rule should not crash the scan
+    if not deadline.expired():
+        try:
+            for _, fn in _RULES:
+                if deadline.expired():
+                    break
+                findings.extend(fn(repo_root, index))
+        except Exception as exc:  # noqa: BLE001 - one bad rule should not crash the scan
+            return IacScanOutcome(
+                status="error",
+                tool_version=_kit_version(),
+                files_scanned=[_normalize_target(repo_root, p) for p in index.files_parsed],
+                parse_errors=parse_errors,
+                findings=[],
+                scanned_at=_utc_iso(),
+                diagnostics=f"rule engine raised {type(exc).__name__}: {exc}",
+            )
+
+    if deadline.expired():
+        # No findings: half a rule pack over half the files is not a result, and the
+        # per-rule counts would read as "this rule found nothing" for rules never run.
         return IacScanOutcome(
-            status="error",
+            status="timeout",
             tool_version=_kit_version(),
             files_scanned=[_normalize_target(repo_root, p) for p in index.files_parsed],
             parse_errors=parse_errors,
             findings=[],
             scanned_at=_utc_iso(),
-            diagnostics=f"rule engine raised {type(exc).__name__}: {exc}",
+            diagnostics=TIMEOUT_DIAGNOSTIC.format(seconds=timeout_seconds),
         )
 
     return IacScanOutcome(
@@ -911,7 +959,9 @@ def render_evidence_payload(outcome: IacScanOutcome, *, target: Path) -> dict[st
         "tool": "oss-policy-kit-tf-parser",
         "tool_version": outcome.tool_version,
         "status": outcome.status,
-        "target": str(target.resolve()),
+        # Privacy-by-default: emit only the basename so a commonly-committed
+        # evidence artifact never leaks an absolute path / username (X6-02, M-002).
+        "target": _sanitize_target_path_for_payload(str(target), include_absolute=False),
         "scanned_at": outcome.scanned_at,
         "attested_at": outcome.scanned_at,
         "attested_by": "oss-policy-kit scan-iac",

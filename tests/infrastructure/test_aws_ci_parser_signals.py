@@ -88,20 +88,23 @@ def test_codepipeline_artifact_store_only(tmp_path: Path) -> None:
     doc = {"pipeline": {"name": "p", "artifactStore": {"type": "S3"}}}
     p = _write(tmp_path, "pipelines/aws/codepipeline.json", json.dumps(doc))
     ok, msg = acp.committed_codepipeline_export_is_minimal(p)
-    assert ok and msg == ""
+    assert ok
+    assert msg == ""
 
 
 def test_codepipeline_name_only_stub_rejected(tmp_path: Path) -> None:
     p = _write(tmp_path, "pipelines/aws/codepipeline.json", json.dumps({"pipeline": {"name": "p"}}))
     ok, msg = acp.committed_codepipeline_export_is_minimal(p)
-    assert not ok and "at least one stage" in msg
+    assert not ok
+    assert "at least one stage" in msg
 
 
 def test_codepipeline_bad_root(tmp_path: Path) -> None:
     p = _write(tmp_path, "pipelines/aws/codepipeline.json", json.dumps([1, 2]))
     assert acp.load_committed_codepipeline_document(p) is None
     ok, msg = acp.committed_codepipeline_export_is_minimal(p)
-    assert not ok and "must be an object" in msg
+    assert not ok
+    assert "must be an object" in msg
 
 
 def test_codepipeline_bad_json_recorded(tmp_path: Path) -> None:
@@ -114,4 +117,5 @@ def test_codepipeline_bad_json_recorded(tmp_path: Path) -> None:
 def test_load_codepipeline_yaml(tmp_path: Path) -> None:
     p = _write(tmp_path, "pipelines/aws/codepipeline.yaml", "pipeline:\n  name: p\n  stages:\n    - name: S\n")
     doc = acp.load_committed_codepipeline_document(p)
-    assert isinstance(doc, dict) and doc["name"] == "p"
+    assert isinstance(doc, dict)
+    assert doc["name"] == "p"

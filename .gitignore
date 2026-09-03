@@ -1,6 +1,13 @@
 # Local assistant/workspace state
 .claude/
 .cursorrules
+# Agent instruction files are local operating context, never public surface.
+# CLAUDE.md was tracked by accident and is ignored here so it cannot return.
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+.aider*
+.github/copilot-instructions.md
 .vscode/
 /melhorias/
 
@@ -16,6 +23,13 @@
 
 # Python caches, virtualenvs, and build outputs
 .coverage
+# The parallel data files, which `.coverage` alone does not cover. Every run of the
+# two-step gate leaves a batch of `.coverage.<hostname>.<pid>.<random>` behind -- 183 of
+# them were sitting untracked in this working tree, each carrying the machine name in its
+# filename. They showed up in `git status`, so one `git add -A` would have committed the
+# hostname 183 times, and the public hygiene scanner walked all of them on every run
+# because it lists untracked-but-not-ignored files.
+.coverage.*
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/

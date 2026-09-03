@@ -28,26 +28,30 @@ def test_load_catalog_bad_yaml(tmp_path: Path) -> None:
 
 
 def test_load_catalog_root_not_mapping(tmp_path: Path) -> None:
+    yaml = _yaml(tmp_path, "c.yaml", "- a\n- b\n")
     with pytest.raises(LoadError, match="must be a mapping"):
-        loader.load_catalog(_yaml(tmp_path, "c.yaml", "- a\n- b\n"))
+        loader.load_catalog(yaml)
 
 
 def test_load_catalog_no_controls_list(tmp_path: Path) -> None:
+    yaml_2 = _yaml(tmp_path, "c.yaml", "other: 1\n")
     with pytest.raises(LoadError, match="must contain a 'controls' list"):
-        loader.load_catalog(_yaml(tmp_path, "c.yaml", "other: 1\n"))
+        loader.load_catalog(yaml_2)
 
 
 def test_load_catalog_invalid_assurance(tmp_path: Path) -> None:
     src = "controls:\n  - id: X-1\n    assurance: bogus\n"
+    yaml_3 = _yaml(tmp_path, "c.yaml", src)
     with pytest.raises(LoadError, match="invalid assurance"):
-        loader.load_catalog(_yaml(tmp_path, "c.yaml", src))
+        loader.load_catalog(yaml_3)
 
 
 def test_load_catalog_empty(tmp_path: Path) -> None:
     # Items present but none with a valid id -> no controls.
     src = "controls:\n  - notid: 1\n  - {}\n"
+    yaml_4 = _yaml(tmp_path, "c.yaml", src)
     with pytest.raises(LoadError, match="no controls"):
-        loader.load_catalog(_yaml(tmp_path, "c.yaml", src))
+        loader.load_catalog(yaml_4)
 
 
 def test_load_catalog_ok_weight_clamped(tmp_path: Path) -> None:
@@ -63,30 +67,35 @@ def test_load_catalog_ok_weight_clamped(tmp_path: Path) -> None:
 
 
 def test_load_profile_root_not_mapping(tmp_path: Path) -> None:
+    yaml_5 = _yaml(tmp_path, "p.yaml", "- a\n")
     with pytest.raises(LoadError, match="root must be a mapping"):
-        loader.load_profile(_yaml(tmp_path, "p.yaml", "- a\n"))
+        loader.load_profile(yaml_5)
 
 
 def test_load_profile_missing_id(tmp_path: Path) -> None:
+    yaml_6 = _yaml(tmp_path, "p.yaml", "title: X\ncontrols: [A]\n")
     with pytest.raises(LoadError, match="missing id"):
-        loader.load_profile(_yaml(tmp_path, "p.yaml", "title: X\ncontrols: [A]\n"))
+        loader.load_profile(yaml_6)
 
 
 def test_load_profile_no_controls(tmp_path: Path) -> None:
+    yaml_7 = _yaml(tmp_path, "p.yaml", "id: x\ntitle: X\n")
     with pytest.raises(LoadError, match="no controls"):
-        loader.load_profile(_yaml(tmp_path, "p.yaml", "id: x\ntitle: X\n"))
+        loader.load_profile(yaml_7)
 
 
 def test_load_profile_removed_control(tmp_path: Path) -> None:
     src = "id: x\ntitle: X\ncontrols: [SEC-AUDIT-016]\n"
+    yaml_8 = _yaml(tmp_path, "p.yaml", src)
     with pytest.raises(ProfileLoadError, match="removed in v4.0.0"):
-        loader.load_profile(_yaml(tmp_path, "p.yaml", src))
+        loader.load_profile(yaml_8)
 
 
 def test_load_profile_external_schema_missing_id(tmp_path: Path) -> None:
     src = "title: X\ncontrols: [GOV-SEC-001]\n"  # no id -> schema fail with hint
+    yaml_9 = _yaml(tmp_path, "p.yaml", src)
     with pytest.raises(ProfileLoadError, match="schema validation"):
-        loader.load_profile(_yaml(tmp_path, "p.yaml", src), validate_external_schema=True)
+        loader.load_profile(yaml_9, validate_external_schema=True)
 
 
 def test_load_profile_ok(tmp_path: Path) -> None:

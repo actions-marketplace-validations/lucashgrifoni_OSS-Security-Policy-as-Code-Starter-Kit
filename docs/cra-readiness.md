@@ -11,7 +11,7 @@ For the canonical regulatory text, see the [EU Commission's CRA page](https://di
 | Date | Obligation | Profile that maps |
 |---|---|---|
 | **2026-09-11** | Manufacturers of products with digital elements placed on the EU market must report **actively exploited vulnerabilities** to ENISA and designated national CSIRTs within **24 hours** of becoming aware. | `cra-eu-reporting-1` |
-| **2027-12-11** | Full CRA obligations apply: SBOM in machine-readable format, vulnerability handling documentation, security-by-default, conformity assessment, CE-marking. | `cra-eu-ready-1`, `cra-eu-strict-1` |
+| **2027-12-11** | Full CRA obligations apply: SBOM in machine-readable format, vulnerability handling documentation, security-by-default, conformity assessment, CE-marking. | `cra-eu-conformance-evidence-1`, `cra-eu-ready-1`, `cra-eu-strict-1` |
 
 Both deadlines apply to manufacturers placing **commercial products** on the EU market. Purely non-commercial, non-monetized OSS development is exempt; OSS incorporated into a commercial product is in scope through the manufacturer.
 
@@ -19,7 +19,9 @@ Non-compliance penalties: up to **€15M or 2.5% of global turnover**, whichever
 
 ---
 
-## What the three CRA-aligned profiles cover
+## What the CRA-aligned profiles cover
+
+> **Sequencing (ADR-029):** `cra-eu-reporting-1` targets the **2026-09-11** 24h-reporting deadline; `cra-eu-strict-1` and the canonical `cra-eu-conformance-evidence-1` target the broader **2027-12-11** full-obligations evidence. All are advisory — evidence mapped to CRA obligations, never a conformity assessment or certification.
 
 ### `cra-eu-reporting-1` — 24h reporting readiness (2026-09-11)
 
@@ -38,6 +40,10 @@ Focused exclusively on the September 2026 deadline. Bundles 11 controls covering
 ### `cra-eu-ready-1` — broader CRA preparation (advisory)
 
 Bundles 12 controls; a discovery surface for CRA preparation before September 2026. Less reporting-specific than `cra-eu-reporting-1`, more aligned with the documentation expectations of the full 2027 deadline.
+
+### `cra-eu-conformance-evidence-1` — Article 11/13/14 obligations (advisory)
+
+The canonical, stricter CRA bundle. **Renamed in v9.0.0 from `cra-eu-ready-2-1`** when it tightened from "readiness" to **conformance-evidence** (ADR-029). The old `cra-eu-ready-2-1` id was **removed in v10.0.0** and no longer resolves — evaluating with it now fails with a hard error (exit 2) that points to the canonical `cra-eu-conformance-evidence-1`. It resolved as a deprecated alias (with a warning) only during the v9.x cycle. It now also requires the obligation-evidence controls: published VDP / `security.txt` (`CISA-SBD-VDP-001`), SBOM (`BUILD-SBOM-QUAL-003`), 10-year document retention (`RELEASE-ARCHIVE-063`), incident-reporting readiness (`AUDIT-STREAM-060`), and artifact-integrity verification (`PROV-VERIFY-061`) — so a repository that passed the old readiness bundle may need more evidence to pass this one. Among its Article 13 signals, `CRA-ART13-SUPPORT-003` looks for a **declared security-update support period** (a clone-visible `Supported Versions` table or a support-window statement in `SECURITY.md`/`SUPPORT.md`; CRA Annex I). Honest assurance: signals that cannot be proven from a clone stay `signal`/`evidence-backed` and are never inflated to a pass, and **the profile maps evidence to CRA obligations — it never asserts CRA conformity or certification**.
 
 ### `cra-eu-strict-1` — full obligations alignment (2027-12-11)
 

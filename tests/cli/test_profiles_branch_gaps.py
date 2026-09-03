@@ -73,7 +73,9 @@ def test_filter_rows_invalid_family_raises() -> None:
 
 def test_assurance_mix_skips_unknown_control() -> None:
     mix = p._profile_assurance_mix(("DOES-NOT-EXIST-999",), {})
-    assert mix["deterministic"] == 0 and mix["signal"] == 0 and mix["evidence-backed"] == 0
+    assert mix["deterministic"] == 0
+    assert mix["signal"] == 0
+    assert mix["evidence-backed"] == 0
 
 
 # --------------------------------------------------------------------------- #

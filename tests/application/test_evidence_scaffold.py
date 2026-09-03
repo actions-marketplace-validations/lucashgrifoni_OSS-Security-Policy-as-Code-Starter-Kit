@@ -108,7 +108,8 @@ def test_azure_scaffold_includes_wif_proof_fields(tmp_path: Path) -> None:
         (repo / ".oss-policy-kit" / "evidence" / "azure-pipeline-governance.json").read_text(encoding="utf-8")
     )
     service_connections = payload.get("service_connections", [])
-    assert isinstance(service_connections, list) and service_connections
+    assert isinstance(service_connections, list)
+    assert service_connections
     wif = next(
         (
             item

@@ -31,6 +31,9 @@ from oss_policy_kit.application.init_writer import (
 )
 from oss_policy_kit.cli.common import (
     app,
+    display_path,
+    exit_for_unexpected,
+    markup_safe,
     stderr_console,
     write_stdout_text,
 )
@@ -62,12 +65,12 @@ def _resolve_target(raw: str, *, allow_missing: bool = False) -> Path:
         if allow_missing:
             return candidate.resolve()
         raise InvalidInputError(
-            f"--target path does not exist: {candidate}. "
+            f"--target path does not exist: {display_path(candidate)}. "
             "Pass an existing repository root, or create the directory first.",
         )
     if not candidate.is_dir():
         raise InvalidInputError(
-            f"--target must be a directory: {candidate}.",
+            f"--target must be a directory: {display_path(candidate)}.",
         )
     return candidate.resolve()
 
@@ -85,16 +88,20 @@ def _normalize_format(raw: str) -> str:
     )
 
 
-def _print_human_summary(*, plan: Any, outcome: InitOutcome, dry_run: bool) -> None:  # noqa: C901
+def _print_human_summary(*, plan: Any, outcome: InitOutcome, dry_run: bool, target_display: str | None = None) -> None:  # noqa: C901
     """Render a friendly human summary on stdout (no Rich coloring inside
     the CliRunner so tests can assert on plain strings).
 
     The summary always lists every artifact the writer touched, plus the
     next steps tailored to the chosen profile.
+
+    ``target_display`` is the ``--target`` as the operator typed it; see
+    :func:`_build_json_payload` for why the resolved ``plan.target`` never reaches a
+    user-facing line.
     """
 
     write_stdout_text("oss-policy-kit init - project bootstrap\n\n")
-    write_stdout_text(f"Target:        {plan.target}\n")
+    write_stdout_text(f"Target:        {_target_display(plan, target_display)}\n")
     write_stdout_text(f"Platform:      {plan.platform}\n")
     write_stdout_text(
         f"Primary stack: {plan.primary_stack if plan.primary_stack else '(not detected)'}\n",
@@ -137,23 +144,41 @@ def _print_init_notes_and_steps(plan: Any, outcome: InitOutcome) -> None:
             write_stdout_text(f"  - {step}\n")
 
 
+def _target_display(plan: Any, target_display: str | None) -> str:
+    """The ``--target`` as the operator typed it, or a path-free stand-in.
+
+    ``plan.target`` is resolved, because the writer needs a real directory to write into.
+    Nothing user-facing may show that: :func:`display_path` echoes a relative argument
+    unchanged and reduces an absolute one, so neither the home directory nor the OS
+    account name reaches the screen or the JSON (M-002).
+    """
+
+    return display_path(target_display if target_display is not None else plan.target)
+
+
 def _build_json_payload(
     *,
     plan: Any,
     outcome: InitOutcome,
     dry_run: bool,
+    target_display: str | None = None,
 ) -> dict[str, Any]:
     """Build the stable JSON payload returned by ``--format json``.
 
     The shape is contractual: external automation may parse it. Add fields
     via additive changes only; never remove or rename keys without bumping
     :data:`INIT_RESULT_SCHEMA_VERSION`.
+
+    ``target`` carries the value the operator typed, not the resolved path. This is the
+    output most likely to be pasted into a PR, an issue, or a CI log, and it was the last
+    field of the contract still answering ``--target .`` with a fully-qualified path
+    through the home directory, after ``actions.created`` was made relative (M-002).
     """
 
     return {
         "schema_version": INIT_RESULT_SCHEMA_VERSION,
         "dry_run": dry_run,
-        "target": str(plan.target),
+        "target": _target_display(plan, target_display),
         "detected": {
             "platform": plan.platform,
             "primary_stack": plan.primary_stack,
@@ -191,7 +216,7 @@ def init_cmd(
         None,
         "--platform",
         help=(
-            "Force the platform for the recommended profile: github | azure | aws. "
+            "Force the platform for the recommended profile: github | gitlab | azure | aws. "
             "Skip this flag to auto-detect from CI files."
         ),
         case_sensitive=False,
@@ -268,11 +293,14 @@ def init_cmd(
     existing files and reports them under ``skipped``. Use ``--dry-run`` to
     preview every action without touching the filesystem.
 
-    Honesty contract: ``oss-policy-kit.yaml`` is reserved for future
-    versions of ``evaluate`` to consume when ``--profile`` is omitted. In
-    this release the file documents intent and powers reproducibility, but
-    ``evaluate`` still requires explicit flags. The contract uses a stable
-    ``schema_version`` so the upcoming consumer can migrate safely.
+    Config consumption: ``evaluate`` reads ``oss-policy-kit.yaml`` from its
+    ``--target`` and uses it as a fallback for ``--profile``, ``--fail-on``,
+    ``--output-dir``, and ``--report-json-contract`` whenever the matching
+    flag is omitted. An explicit flag always wins; the file only fills gaps,
+    and a config-sourced ``--profile`` prints a one-line stderr note. Lookup
+    is non-recursive (no parent walk), so the file is honored only when it
+    sits directly under the target. The contract uses a stable
+    ``schema_version`` so consumers can migrate safely.
     """
 
     try:
@@ -303,8 +331,10 @@ def init_cmd(
                 dry_run=True,
             )
             recommended = preview_plan.profile
-            stderr_console().print(f"\n[cyan]Detected platform:[/cyan] {preview_plan.platform or 'unknown'}")
-            stderr_console().print(f"[cyan]Recommended profile:[/cyan] {recommended}")
+            stderr_console().print(
+                f"\n[cyan]Detected platform:[/cyan] {markup_safe(preview_plan.platform or 'unknown')}"
+            )
+            stderr_console().print(f"[cyan]Recommended profile:[/cyan] {markup_safe(recommended)}")
             response = typer.prompt(
                 "Use this profile (press Enter to accept, or type a different profile id)",
                 default=recommended,
@@ -329,27 +359,30 @@ def init_cmd(
         # before running init without --dry-run.
         if dry_run and not target_pre_existed:
             plan.notes.append(
-                f"Target directory does not exist yet: {target_path}. "
+                f"Target directory does not exist yet: {display_path(target)}. "
                 "Running init without --dry-run will require you to create it first."
             )
         outcome = execute_init_plan(plan)
 
         if fmt == "json":
-            payload = _build_json_payload(plan=plan, outcome=outcome, dry_run=dry_run)
+            payload = _build_json_payload(plan=plan, outcome=outcome, dry_run=dry_run, target_display=target)
             sys.stdout.write(
                 json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
             )
         else:
-            _print_human_summary(plan=plan, outcome=outcome, dry_run=dry_run)
+            _print_human_summary(plan=plan, outcome=outcome, dry_run=dry_run, target_display=target)
 
     except OssPolicyKitError as exc:
-        stderr_console().print(f"[red]Error:[/red] {exc.message}")
+        stderr_console().print(f"[red]Error:[/red] {markup_safe(exc.message)}")
         raise typer.Exit(code=2) from exc
     except OSError as exc:
-        stderr_console().print(f"[red]Error:[/red] {exc}")
+        # ``str(OSError)`` embeds the offending filename, so this handler answered a
+        # relative ``--target`` with the resolved path of the file it could not write --
+        # home directory and OS account name included (M-002). ``strerror`` is the
+        # reason without the path; the fallback keeps a hand-built OSError readable.
+        stderr_console().print(f"[red]Error:[/red] {markup_safe(exc.strerror or exc)}")
         raise typer.Exit(code=2) from exc
     except typer.Exit:
         raise
     except Exception as exc:  # noqa: BLE001 - last-resort user message
-        stderr_console().print(f"[red]Unexpected error:[/red] {exc}")
-        raise typer.Exit(code=3) from exc
+        exit_for_unexpected(exc)

@@ -5,6 +5,8 @@ Guards against SBOM artefacts contaminating dist/ (which causes twine check fail
 
 from __future__ import annotations
 
+import re
+import shlex
 from pathlib import Path
 
 import yaml
@@ -13,7 +15,16 @@ _WORKFLOW_PATH = Path(__file__).parents[2] / ".github" / "workflows" / "publish-
 _CONTAINER_WORKFLOW_PATH = Path(__file__).parents[2] / ".github" / "workflows" / "publish-container.yml"
 _DOCKERFILE_PATH = Path(__file__).parents[2] / "Dockerfile"
 _DOCKERIGNORE_PATH = Path(__file__).parents[2] / ".dockerignore"
-_HARDEN_RUNNER_ACTION = "step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411"
+#: Matched on identity, deliberately not on the pinned SHA. This test owns "every publish
+#: job audits egress before it touches anything"; it does not own "the action is pinned".
+#: Pinning is enforced by the kit's own ``CI-PIN-008`` control, which the Quality job runs
+#: against this repository on every push -- a stronger check than a string here, because it
+#: covers every action rather than this one.
+#:
+#: The SHA used to be baked in, which made every legitimate harden-runner bump fail this
+#: assertion: Dependabot #162 (2.20.0 -> 2.20.1) is what surfaced it. A test that blocks the
+#: upgrade it is supposed to protect is worse than no test.
+_HARDEN_RUNNER_ACTION = "step-security/harden-runner@"
 
 
 def _load_workflow() -> dict:
@@ -26,6 +37,49 @@ def _load_container_workflow() -> dict:
 
 def _build_steps(workflow: dict) -> list[dict]:
     return workflow["jobs"]["build"]["steps"]
+
+
+def _dockerfile_directives() -> list[str]:
+    """The Dockerfile's instructions with comments removed and continuations joined.
+
+    Comments are dropped before anything reads the text. Stripping them is the whole
+    point: this module previously asserted on a string that only existed in a comment.
+    """
+
+    text = _DOCKERFILE_PATH.read_text(encoding="utf-8")
+    text = re.sub(r"\\\n\s*", " ", text)
+    return [line.strip() for line in text.split("\n") if line.strip() and not line.lstrip().startswith("#")]
+
+
+def _pip_command_arguments(directive: str) -> list[str]:
+    """Non-flag arguments of every `pip install` / `pip wheel` in one directive.
+
+    Returns arguments, not raw text, so that the distribution name appearing in a LABEL
+    or in `ENTRYPOINT ["python", "-m", "oss_policy_kit"]` cannot be mistaken for an
+    install target.
+    """
+
+    if not directive.startswith("RUN "):
+        return []
+    arguments: list[str] = []
+    for fragment in re.split(r"&&|\|\||;", directive[4:]):
+        try:
+            tokens = shlex.split(fragment.strip())
+        except ValueError:  # pragma: no cover - unbalanced quotes are not a shape we ship
+            continue
+        for i, token in enumerate(tokens):
+            if Path(token).name in ("pip", "pip3") and i + 1 < len(tokens) and tokens[i + 1] in ("install", "wheel"):
+                arguments.extend(t for t in tokens[i + 2 :] if not t.startswith("-"))
+                break
+            if (
+                token == "-m"
+                and i + 2 < len(tokens)
+                and tokens[i + 1] == "pip"
+                and tokens[i + 2] in ("install", "wheel")
+            ):
+                arguments.extend(t for t in tokens[i + 3 :] if not t.startswith("-"))
+                break
+    return arguments
 
 
 def test_sbom_output_path_is_not_inside_dist() -> None:
@@ -104,14 +158,44 @@ def test_pypi_publish_jobs_enable_registry_attestations() -> None:
 
 
 def test_container_build_installs_from_source_not_pypi() -> None:
-    """Container release builds must not race PyPI package propagation."""
-    dockerfile = _DOCKERFILE_PATH.read_text(encoding="utf-8")
+    """Container release builds must not race PyPI package propagation.
+
+    This asserted `'".[all]"' in dockerfile` until 2026-09-02. The install stopped using
+    `.[all]` in 6964a78, and the only thing keeping the assertion true for the thirteen
+    commits after it was the string surviving inside a COMMENT that discussed the old
+    install. A test whose subject is "installs from source" was being satisfied by prose
+    about installing from source.
+
+    So the Dockerfile is stripped of comments first, and the assertions are about the
+    mechanism rather than about one spelling of it: the tree is copied in, the kit is
+    built from the build context, and nothing installs the published package from an
+    index. That survives a change of install style -- which is what happened -- and still
+    fails if the image starts taking the kit from PyPI.
+    """
+    directives = _dockerfile_directives()
     dockerignore = _DOCKERIGNORE_PATH.read_text(encoding="utf-8").splitlines()
 
-    # Source install (extras from the copied tree), allowing any pip flags such
-    # as --no-cache-dir. The key invariant is install-from-source, not from PyPI.
-    assert '".[all]"' in dockerfile
-    assert "oss-policy-kit[all]==" not in dockerfile
+    assert any(d.startswith("COPY src") for d in directives), (
+        "the Dockerfile no longer copies src/ into the build, so whatever it installs is "
+        f"not this tree. Directives found: {directives}"
+    )
+
+    pip_args = [arg for d in directives for arg in _pip_command_arguments(d)]
+    assert "." in pip_args, (
+        "no pip command takes the build context `.` as its target, so the kit is not being "
+        f"built from the copied tree. pip arguments found: {pip_args}"
+    )
+
+    # The distribution name, in any form pip would accept as an index lookup. Checked
+    # against pip ARGUMENTS only: the name legitimately appears in LABEL metadata and in
+    # `ENTRYPOINT ["python", "-m", "oss_policy_kit"]`, and matching raw text would either
+    # fire on those or force this test to special-case them.
+    for arg in pip_args:
+        assert not re.match(r"^oss[-_]policy[-_]kit($|[\[=<>~!])", arg), (
+            f"the image installs the published package (`{arg}`) instead of the checked-out "
+            "tree, which races PyPI propagation on a release tag."
+        )
+
     assert "src/" not in dockerignore
     assert "pyproject.toml" not in dockerignore
     assert "README.md" not in dockerignore

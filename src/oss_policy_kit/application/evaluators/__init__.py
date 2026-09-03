@@ -61,6 +61,7 @@ EVALUATOR_REGISTRY: dict[str, Callable[[EvalContext], EvalOutcome]] = {
     "CRA-ART14-CSAF-001": eval_cra_art14_csaf_001,
     "CRA-ART14-COORD-002": eval_cra_art14_coord_002,
     "CRA-PRODUCT-CLASS-001": eval_cra_product_class_001,
+    "CRA-ART13-SUPPORT-003": eval_cra_art13_support_003,
     "CISA-SBD-VDP-001": eval_cisa_sbd_vdp_001,
     "CISA-SBD-CVE-003": eval_cisa_sbd_cve_003,
     "CISA-SBD-SECRETS-005": eval_cisa_sbd_secrets_005,
@@ -269,14 +270,28 @@ _load_webhook_evaluators()
 #: silently). Surfaced on ``evaluate --verbose``; never aborts built-in evaluation.
 PLUGIN_LOAD_ERRORS: list[dict[str, str]] = []
 
+#: Control ids served by a third-party evaluator rather than a built-in one.
+#: The engine guards a raising evaluator ONLY for these: a built-in that raises is a
+#: defect in this kit and must stay loud, which is what exit 3 means.
+PLUGIN_CONTROL_IDS: set[str] = set()
+
+#: A `module:attr` entry-point target; anything past this is not one.
+_MAX_ENTRY_POINT_VALUE_CHARS = 200
+
 
 def plugin_load_errors() -> list[dict[str, str]]:
     """Return a copy of plugin load problems recorded at registry construction.
 
     Each entry: ``{"name", "kind", "detail"}`` where ``kind`` is one of
     ``discovery`` (group enumeration failed), ``load`` (entry-point import/load
-    raised), ``not-callable`` (loaded object is not callable), or
-    ``builtin-precedence`` (skipped because a built-in already owns the ID).
+    raised), ``not-callable`` (loaded object is not callable),
+    ``builtin-precedence`` (skipped because a built-in already owns the ID), or
+    ``plugin-collision`` (skipped because ANOTHER PLUGIN already claimed the ID).
+
+    The last two used to be the same row. A second plugin claiming an ID the first one
+    had just registered was reported as ``builtin-precedence`` with "a built-in control
+    already owns this ID" -- sending the operator to look for a built-in that does not
+    exist, instead of at the two plugins of theirs that collide.
     """
     return list(PLUGIN_LOAD_ERRORS)
 
@@ -292,12 +307,30 @@ def _load_external_evaluators() -> None:
     """
 
     PLUGIN_LOAD_ERRORS.clear()
+    PLUGIN_CONTROL_IDS.clear()
     try:
         eps = importlib.metadata.entry_points().select(group="oss_policy_kit.evaluators")
     except Exception as exc:  # noqa: BLE001 - best-effort discovery
         PLUGIN_LOAD_ERRORS.append({"name": "*", "kind": "discovery", "detail": f"{type(exc).__name__}: {exc}"})
         return
+    # Which entry point claimed each ID, so a second plugin claiming the same one can be
+    # told what it lost to. Checked BEFORE the registry: an ID a plugin just registered is
+    # in the registry too, and reporting that as a built-in clash is what sent operators
+    # hunting for a built-in control that does not exist.
+    claimed_by: dict[str, str] = {}
     for ep in eps:
+        if ep.name in claimed_by:
+            PLUGIN_LOAD_ERRORS.append(
+                {
+                    "name": ep.name,
+                    "kind": "plugin-collision",
+                    "detail": (
+                        f"another plugin already registered this ID ({claimed_by[ep.name]}); "
+                        "entry points load in discovery order and the first one keeps it"
+                    ),
+                }
+            )
+            continue
         if ep.name in EVALUATOR_REGISTRY:
             PLUGIN_LOAD_ERRORS.append(
                 {"name": ep.name, "kind": "builtin-precedence", "detail": "a built-in control already owns this ID"}
@@ -310,6 +343,11 @@ def _load_external_evaluators() -> None:
             continue
         if callable(func):
             EVALUATOR_REGISTRY[ep.name] = func
+            PLUGIN_CONTROL_IDS.add(ep.name)
+            # Bounded like every other third-party string the kit echoes back: this one
+            # reaches stderr through `evaluate --verbose`, and the driver name and the
+            # finding component are capped for the same reason.
+            claimed_by[ep.name] = str(ep.value)[:_MAX_ENTRY_POINT_VALUE_CHARS]
         else:
             PLUGIN_LOAD_ERRORS.append(
                 {

@@ -37,7 +37,7 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
 from oss_policy_kit.application.evidence_placeholders import has_placeholder_values
-from oss_policy_kit.application.input_limits import MAX_EVIDENCE_BYTES, oversize_reason
+from oss_policy_kit.application.input_limits import MAX_EVIDENCE_BYTES, bad_input_detail, oversize_reason
 from oss_policy_kit.domain.models import ControlStatus, EvalOutcome
 
 DIGEST_PLACEHOLDER_REASON = (
@@ -55,6 +55,90 @@ _WEAK_DIGEST_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"^(..)\1{31}$"),
     re.compile(r"^0{64}$"),
 )
+
+
+def as_mapping(value: object) -> dict[str, Any]:
+    """Return *value* if it is a mapping, else an empty one.
+
+    For walking documents an adopter supplies, where every level can be the wrong type.
+    ``(x or {}).get(...)`` looks like it does this and does not: ``or`` only substitutes when
+    *x* is falsy, so a truthy non-mapping -- a string, a number, a list -- goes straight
+    through to ``.get`` and raises ``AttributeError``. That is not an input-shaped exception,
+    so the CLI boundary correctly calls it a defect in the kit and exits 3: no report written,
+    and the adopter told to file a bug about their own file.
+
+    That is the third time this class has surfaced in one release cycle. Fixing the sites the
+    last round named did not stop it, because the next site was in a file nobody had listed.
+    A helper that reads like the broken idiom is the point: it is what someone reaches for
+    while writing the seventh one.
+    """
+
+    return value if isinstance(value, dict) else {}
+
+
+def read_scanner_evidence(
+    evidence: Path,
+    *,
+    label: str,
+    regenerate_cmd: str,
+    schema_prefix: str,
+) -> dict[str, Any] | EvalOutcome:
+    """Read one ``scan-*`` evidence file, or say why it could not be used.
+
+    Returns the parsed object when the file carries the expected ``schema_version``,
+    else the manual-review :class:`EvalOutcome` explaining what stopped it. A union
+    rather than a ``(data, outcome)`` pair on purpose: with a pair, ``data`` stays
+    ``dict | None`` for the type checker no matter what the caller tests, so every call
+    site needs an assertion to say something the code already knows. ``isinstance``
+    narrows the union exactly.
+
+    Six evaluators had this function copied out line for line, each ending in an
+    unguarded ``data.get("schema_version", "")``. A JSON root that is not an object --
+    ``[]``, a string, a number, ``null`` -- reached that ``.get`` and raised
+    ``AttributeError``, which is not input-shaped, so the CLI's classifier correctly
+    called it a defect in the kit and exited 3. It is a defect in the kit: the evidence
+    slot is one the adopter is invited to fill, plenty of scanners emit a top-level
+    array, and ADR-045 says unreadable evidence becomes manual review. Exit 3 told them
+    to file a bug about their own file, and no report was written at all.
+
+    So the reader is one function now rather than six copies. Adding a seventh scanner
+    gets the shape guard by construction instead of by remembering.
+
+    The parse failure reports ``bad_input_detail(exc)`` rather than ``str(exc)``: the
+    latter embeds the absolute filename, which put the adopter's home directory and
+    account name into a message built to be pasted into an issue (M-002).
+    """
+
+    def _review(reason: str, remediation: str) -> EvalOutcome:
+        return EvalOutcome(
+            status=ControlStatus.MANUAL_REVIEW_REQUIRED,
+            reason=reason,
+            remediation=remediation,
+            evidence_sources=[str(evidence.resolve())],
+            confidence="low",
+        )
+
+    regenerate = f"Re-run `{regenerate_cmd}` to regenerate the evidence file."
+    try:
+        data = json.loads(evidence.read_text(encoding="utf-8-sig"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        return _review(
+            f"Could not parse {label} evidence file {evidence.name}: {bad_input_detail(exc)}",
+            regenerate,
+        )
+    if not isinstance(data, dict):
+        return _review(
+            f"{evidence.name} is valid JSON but its root is a {type(data).__name__}, not an object, "
+            f"so no {label} posture can be read from it.",
+            regenerate,
+        )
+    schema = str(data.get("schema_version", ""))
+    if not schema.startswith(schema_prefix):
+        return _review(
+            f"Unexpected schema_version in {evidence.name}: {schema!r}. Expected prefix {schema_prefix!r}.",
+            f"Regenerate via `{regenerate_cmd}` to align with the current contract.",
+        )
+    return cast(dict[str, Any], data)
 
 
 def evidence_is_api_backed(data: dict[str, Any]) -> bool:
@@ -103,9 +187,14 @@ def validate_json_evidence(
     if oversize is not None:
         return None, oversize, []
     try:
-        data = json.loads(evidence.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        return None, f"{evidence_name} evidence is unreadable or invalid JSON: {exc}", []
+        data = json.loads(evidence.read_text(encoding="utf-8-sig"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        # M-002: this string is returned verbatim as the ``reason`` of eval_org_mfa_001 and
+        # every other control routed through here, and ``str(OSError)`` appends the resolved
+        # filename it was handed -- so ``{exc}`` published the adopter's home directory and OS
+        # account name. ``bad_input_detail`` says the same thing without naming where the file
+        # lives; the caller already identifies it by *evidence_name*.
+        return None, f"{evidence_name} evidence is unreadable or invalid JSON: {bad_input_detail(exc)}.", []
     if not isinstance(data, dict):
         return None, f"{evidence_name} evidence root must be a JSON object.", []
     try:
@@ -182,6 +271,54 @@ def _looks_like_dockerfile(name: str) -> bool:
     return True
 
 
+def strip_yaml_comments(text: str) -> str:
+    """Blank out YAML comments, keeping every line and column position.
+
+    For the checks that still scan CI files as TEXT. Structure is always the better answer
+    and is used where it exists, but some signals genuinely live inside ``script:`` and
+    ``run:`` bodies -- shell text that no YAML parser will break down for us. Those scans
+    must at least not read the parts of the file that do not execute.
+
+    A comment cannot change what a pipeline DOES, so a comment must not change a verdict.
+    Derived sweeping found this deciding verdicts on five platforms at once: GitHub, GitLab,
+    Azure Pipelines, AWS buildspec and Dockerfile. Two of them granted credit -- a PASS for a
+    protection that existed only in prose.
+
+    ``#`` only starts a comment when it is at the start of a line or preceded by whitespace,
+    and never inside a quoted scalar; ``image: alpine#3.19`` and ``run: echo "a # b"`` are
+    both left alone. Comment bodies are replaced with spaces rather than removed so that any
+    line and column an evaluator reports still points where it did.
+    """
+
+    out: list[str] = []
+    for line in text.splitlines(keepends=True):
+        quote: str | None = None
+        cut: int | None = None
+        for i, ch in enumerate(line):
+            if quote is not None:
+                if ch == quote:
+                    quote = None
+                continue
+            if ch in "\"'":
+                quote = ch
+                continue
+            if ch == "#" and (i == 0 or line[i - 1] in " \t"):
+                cut = i
+                break
+        if cut is None:
+            out.append(line)
+            continue
+        tail = line[cut:]
+        # `\r\n` first: it also ends with `\n`, and testing the other way round eats the `\r`.
+        newline = ""
+        if tail.endswith("\r\n"):
+            newline = "\r\n"
+        elif tail.endswith("\n"):
+            newline = "\n"
+        out.append(line[:cut] + " " * (len(tail) - len(newline)) + newline)
+    return "".join(out)
+
+
 def strip_dockerfile_comments(text: str) -> str:
     """Drop full-line ``#`` comments from a Dockerfile.
 
@@ -219,7 +356,7 @@ def _iter_accepted_dockerfiles(repo: Path) -> Iterator[Path]:
     seen: set[Path] = set()
     try:
         for pattern in ("Dockerfile*", "dockerfile*", "*.Dockerfile", "*.dockerfile"):
-            for candidate in repo.rglob(pattern):
+            for candidate in sorted(repo.rglob(pattern)):
                 if _accept_dockerfile_candidate(candidate, seen):
                     yield candidate
     except OSError:
